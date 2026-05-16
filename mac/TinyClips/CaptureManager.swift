@@ -25,6 +25,7 @@ class CaptureManager: ObservableObject {
     private var regionIndicatorPanel: RegionIndicatorPanel?
     private var pendingRecordingTarget: CaptureTarget?
     private var pendingRecordingType: CaptureType?
+    private var pendingRecordingMode: CapturePickerMode?
     private var pendingRecordingCountdownEnabled: Bool = true
     private var pendingRecordingCountdownDuration: Int = 3
     private var activeRecordingRegion: CaptureRegion?
@@ -804,6 +805,7 @@ class CaptureManager: ObservableObject {
 
         pendingRecordingTarget = nil
         pendingRecordingType = nil
+        pendingRecordingMode = nil
 
         _ = stopMouseClickMonitoring()
 
@@ -886,6 +888,7 @@ class CaptureManager: ObservableObject {
     private func showStartPanel() {
         let panel = StartRecordingPanel(
             captureType: pendingRecordingType ?? .video,
+            canReselectRegion: pendingRecordingMode == .region,
             onStart: { [weak self] systemAudio, mic, selectedMicrophoneID, mouseClicksEnabled, videoTimeLimitMinutes in
                 guard
                     let self,
@@ -895,9 +898,15 @@ class CaptureManager: ObservableObject {
 
                 let countdownEnabled = self.pendingRecordingCountdownEnabled
                 let countdownDuration = self.pendingRecordingCountdownDuration
+                let mode = self.pendingRecordingMode
+
+                if mode == .region {
+                    self.recentRegionStore.save(target.region)
+                }
 
                 self.pendingRecordingTarget = nil
                 self.pendingRecordingType = nil
+                self.pendingRecordingMode = nil
                 self.dismissStartPanel()
 
                 switch type {
@@ -924,13 +933,23 @@ class CaptureManager: ObservableObject {
                 }
             },
             onCancel: { [weak self] in
+                if self?.pendingRecordingMode == .region {
+                    self?.recentRegionStore.clear()
+                }
                 self?.pendingRecordingTarget = nil
                 self?.pendingRecordingType = nil
+                self?.pendingRecordingMode = nil
                 self?.dismissStartPanel()
                 self?.dismissRegionIndicator()
+            },
+            onReselectRegion: { [weak self] in
+                guard let self else { return }
+                Task {
+                    await self.reselectPendingRecordingRegion()
+                }
             }
         )
-        panel.show()
+        panel.show(at: recordPanelPosition)
         self.startPanel = panel
     }
 
@@ -941,6 +960,38 @@ class CaptureManager: ObservableObject {
         }
         startPanel?.dismiss()
         startPanel = nil
+    }
+
+    private func reselectPendingRecordingRegion() async {
+        guard let panel = startPanel,
+              pendingRecordingTarget != nil,
+              let type = pendingRecordingType,
+              pendingRecordingMode == .region else {
+            return
+        }
+
+        recordPanelPosition = panel.frame.origin
+        panel.dismiss()
+        startPanel = nil
+        dismissRegionIndicator()
+
+        guard let newRegion = await RegionSelector.selectRegion() else {
+            recentRegionStore.clear()
+            pendingRecordingTarget = nil
+            pendingRecordingType = nil
+            pendingRecordingMode = nil
+            showRecordingPicker(
+                for: type,
+                countdownEnabled: pendingRecordingCountdownEnabled,
+                countdownDuration: pendingRecordingCountdownDuration
+            )
+            return
+        }
+
+        pendingRecordingTarget = CaptureTarget(region: newRegion)
+        showPendingRecordingRegionIndicator()
+        panel.show(at: recordPanelPosition)
+        startPanel = panel
     }
 
     private func showStopPanel() {
@@ -1115,7 +1166,11 @@ class CaptureManager: ObservableObject {
         }
     }
 
-    private func showRecordingPicker(for type: CaptureType) {
+    private func showRecordingPicker(
+        for type: CaptureType,
+        countdownEnabled overrideCountdownEnabled: Bool? = nil,
+        countdownDuration overrideCountdownDuration: Int? = nil
+    ) {
         dismissScreenshotPicker()
         dismissRecordingPicker()
 
@@ -1123,16 +1178,21 @@ class CaptureManager: ObservableObject {
         let countdownEnabled: Bool
         let countdownDuration: Int
 
-        switch type {
-        case .video:
-            countdownEnabled = settings.videoCountdownEnabled
-            countdownDuration = settings.videoCountdownDuration
-        case .gif:
-            countdownEnabled = settings.gifCountdownEnabled
-            countdownDuration = settings.gifCountdownDuration
-        case .screenshot:
-            countdownEnabled = settings.screenshotCountdownEnabled
-            countdownDuration = settings.screenshotCountdownDuration
+        if let overrideCountdownEnabled, let overrideCountdownDuration {
+            countdownEnabled = overrideCountdownEnabled
+            countdownDuration = overrideCountdownDuration
+        } else {
+            switch type {
+            case .video:
+                countdownEnabled = settings.videoCountdownEnabled
+                countdownDuration = settings.videoCountdownDuration
+            case .gif:
+                countdownEnabled = settings.gifCountdownEnabled
+                countdownDuration = settings.gifCountdownDuration
+            case .screenshot:
+                countdownEnabled = settings.screenshotCountdownEnabled
+                countdownDuration = settings.screenshotCountdownDuration
+            }
         }
 
         let panel = CapturePickerPanel(
@@ -1176,6 +1236,9 @@ class CaptureManager: ObservableObject {
         shouldReturnToPicker: Bool
     ) async {
         guard let target = await chooseCaptureTarget(for: mode) else {
+            if mode == .region {
+                recentRegionStore.clear()
+            }
             if shouldReturnToPicker {
                 showRecordingPicker(for: type)
             }
@@ -1184,22 +1247,28 @@ class CaptureManager: ObservableObject {
 
         pendingRecordingTarget = target
         pendingRecordingType = type
+        pendingRecordingMode = mode
         pendingRecordingCountdownEnabled = countdownEnabled
         pendingRecordingCountdownDuration = countdownDuration
 
-        if mode == .region {
-            recentRegionStore.save(target.region)
-        }
-
         dismissRegionIndicator()
 
-        if mode != .screen, CaptureSettings.shared.showRegionIndicator {
-            let panel = RegionIndicatorPanel(region: target.region)
-            panel.show()
-            regionIndicatorPanel = panel
-        }
+        showPendingRecordingRegionIndicator()
 
         showStartPanel()
+    }
+
+    private func showPendingRecordingRegionIndicator() {
+        dismissRegionIndicator()
+        guard pendingRecordingMode == .region,
+              CaptureSettings.shared.showRegionIndicator,
+              let region = pendingRecordingTarget?.region else {
+            return
+        }
+
+        let panel = RegionIndicatorPanel(region: region)
+        panel.show()
+        regionIndicatorPanel = panel
     }
 
     private func chooseCaptureTarget(for mode: CapturePickerMode) async -> CaptureTarget? {

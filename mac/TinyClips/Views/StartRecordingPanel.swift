@@ -4,8 +4,17 @@ import SwiftUI
 class StartRecordingPanel: NSPanel {
     private var onStart: ((Bool, Bool, String, Bool, Int) -> Void)?
     private var onCancel: (() -> Void)?
+    private var onReselectRegion: (() -> Void)?
+    private var escapeKeyMonitor: Any?
+    private var canReselectRegion = false
 
-    convenience init(captureType: CaptureType, onStart: @escaping (Bool, Bool, String, Bool, Int) -> Void, onCancel: @escaping () -> Void) {
+    convenience init(
+        captureType: CaptureType,
+        canReselectRegion: Bool = false,
+        onStart: @escaping (Bool, Bool, String, Bool, Int) -> Void,
+        onCancel: @escaping () -> Void,
+        onReselectRegion: (() -> Void)? = nil
+    ) {
         self.init(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -14,6 +23,8 @@ class StartRecordingPanel: NSPanel {
         )
         self.onStart = onStart
         self.onCancel = onCancel
+        self.onReselectRegion = onReselectRegion
+        self.canReselectRegion = canReselectRegion
         self.isReleasedWhenClosed = false
         self.level = .floating
         self.isOpaque = false
@@ -53,16 +64,22 @@ class StartRecordingPanel: NSPanel {
             mouseClicksEnabled: defaultMouseClicksEnabled,
             selectedVideoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
             allowsMouseClickToggle: allowsMouseClickToggle,
+            canReselectRegion: canReselectRegion,
             onStart: { [weak self] systemAudio, mic, mouseClicksEnabled, videoTimeLimitMinutes in
                 CaptureSettings.shared.videoRecordingTimeLimitMinutes = videoTimeLimitMinutes
                 self?.onStart?(systemAudio, mic.enabled, mic.deviceID, mouseClicksEnabled, videoTimeLimitMinutes)
                 self?.onStart = nil
                 self?.onCancel = nil
+                self?.onReselectRegion = nil
             },
             onCancel: { [weak self] in
                 self?.onCancel?()
                 self?.onStart = nil
                 self?.onCancel = nil
+                self?.onReselectRegion = nil
+            },
+            onReselectRegion: { [weak self] in
+                self?.onReselectRegion?()
             }
         ))
         let fittingSize = hostingView.fittingSize
@@ -79,10 +96,35 @@ class StartRecordingPanel: NSPanel {
             setFrameOrigin(NSPoint(x: x, y: y))
         }
         orderFront(nil)
+        installEscapeKeyMonitor()
     }
 
     func dismiss() {
+        removeEscapeKeyMonitor()
         orderOut(nil)
+    }
+
+    private func installEscapeKeyMonitor() {
+        removeEscapeKeyMonitor()
+        escapeKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isVisible, event.keyCode == 53 else {
+                return event
+            }
+
+            if self.canReselectRegion {
+                self.onReselectRegion?()
+            } else {
+                self.onCancel?()
+            }
+            return nil
+        }
+    }
+
+    private func removeEscapeKeyMonitor() {
+        if let escapeKeyMonitor {
+            NSEvent.removeMonitor(escapeKeyMonitor)
+            self.escapeKeyMonitor = nil
+        }
     }
 }
 
@@ -102,8 +144,10 @@ private struct StartRecordingView: View {
     @State var mouseClicksEnabled: Bool
     @State var selectedVideoTimeLimitMinutes: Int
     let allowsMouseClickToggle: Bool
+    let canReselectRegion: Bool
     let onStart: (Bool, MicrophoneState, Bool, Int) -> Void
     let onCancel: () -> Void
+    let onReselectRegion: () -> Void
 
     private var videoTimeLimitLabel: String {
         selectedVideoTimeLimitMinutes == 0 ? "Unlimited" : "\(selectedVideoTimeLimitMinutes)m"
@@ -215,6 +259,28 @@ private struct StartRecordingView: View {
             Divider()
                 .frame(height: 20)
                 .overlay(.primary.opacity(0.2))
+
+            if canReselectRegion {
+                Button {
+                    onReselectRegion()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "crop")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Reselect")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(.primary.opacity(0.75))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.primary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Choose a different region")
+                .accessibilityLabel("Reselect region")
+                .accessibilityHint("Returns to region selection without changing recording options.")
+            }
 
             // Start button
             Button {
