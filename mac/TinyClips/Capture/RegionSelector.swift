@@ -4,13 +4,13 @@ import AppKit
 class RegionSelector {
     private static var activeSelector: RegionSelectorController?
 
-    static func selectRegion() async -> CaptureRegion? {
-        return await selectRegion(on: nil)
+    static func selectRegion(recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
+        return await selectRegion(on: nil, recentRegion: recentRegion)
     }
 
-    static func selectRegion(on screen: NSScreen?) async -> CaptureRegion? {
+    static func selectRegion(on screen: NSScreen?, recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
         return await withCheckedContinuation { continuation in
-            let selector = RegionSelectorController(screen: screen, completion: { region in
+            let selector = RegionSelectorController(screen: screen, recentRegion: recentRegion, completion: { region in
                 Self.activeSelector = nil
                 continuation.resume(returning: region)
             })
@@ -27,9 +27,11 @@ private class RegionSelectorController {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private let targetScreen: NSScreen?
+    private let recentRegion: CaptureRegion?
 
-    init(screen: NSScreen? = nil, completion: @escaping (CaptureRegion?) -> Void) {
+    init(screen: NSScreen? = nil, recentRegion: CaptureRegion? = nil, completion: @escaping (CaptureRegion?) -> Void) {
         self.targetScreen = screen
+        self.recentRegion = recentRegion
         self.completion = completion
     }
 
@@ -52,6 +54,10 @@ private class RegionSelectorController {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             let view = RegionSelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            if let recentRegion,
+               recentRegion.displayID == screen.displayID {
+                view.preselect(recentRegion, on: screen)
+            }
             view.onComplete = { [weak self] region in
                 self?.finish(with: region)
             }
@@ -112,6 +118,7 @@ private class RegionSelectionView: NSView {
 
     private var startPoint: NSPoint?
     private var currentPoint: NSPoint?
+    private var selectedRect: NSRect?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -123,9 +130,7 @@ private class RegionSelectionView: NSView {
         NSColor.black.withAlphaComponent(0.3).setFill()
         bounds.fill()
 
-        if let start = startPoint, let current = currentPoint {
-            let selectionRect = makeRect(from: start, to: current)
-
+        if let selectionRect = currentSelectionRect {
             // Clear the selection area
             NSColor.clear.setFill()
             selectionRect.fill(using: .copy)
@@ -182,9 +187,30 @@ private class RegionSelectionView: NSView {
         (text as NSString).draw(at: textPoint, withAttributes: attrs)
     }
 
+    func preselect(_ region: CaptureRegion, on screen: NSScreen) {
+        let visibleRect = NSRect(
+            x: region.sourceRect.minX,
+            y: screen.frame.height - region.sourceRect.maxY,
+            width: region.sourceRect.width,
+            height: region.sourceRect.height
+        ).intersection(bounds)
+        guard visibleRect.width >= 10, visibleRect.height >= 10 else { return }
+        selectedRect = visibleRect
+        needsDisplay = true
+    }
+
     override func mouseDown(with event: NSEvent) {
-        startPoint = clampedPoint(convert(event.locationInWindow, from: nil))
-        currentPoint = startPoint
+        let point = clampedPoint(convert(event.locationInWindow, from: nil))
+        if event.clickCount == 2,
+           let selectedRect,
+           selectedRect.contains(point),
+           let region = captureRegion(from: selectedRect) {
+            onComplete?(region)
+            return
+        }
+
+        startPoint = point
+        currentPoint = point
         needsDisplay = true
     }
 
@@ -205,7 +231,29 @@ private class RegionSelectionView: NSView {
             return
         }
 
-        guard let window = self.window, let screen = window.screen else { return }
+        guard let region = captureRegion(from: selectionRect) else { return }
+        onComplete?(region)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onCancel?()
+        } else if event.keyCode == 36,
+                  let selectedRect,
+                  let region = captureRegion(from: selectedRect) {
+            onComplete?(region)
+        }
+    }
+
+    private var currentSelectionRect: NSRect? {
+        if let start = startPoint, let current = currentPoint {
+            return makeRect(from: start, to: current)
+        }
+        return selectedRect
+    }
+
+    private func captureRegion(from selectionRect: NSRect) -> CaptureRegion? {
+        guard let window = self.window, let screen = window.screen else { return nil }
 
         // Convert view coordinates → window coordinates → screen coordinates
         let windowRect = convert(selectionRect, to: nil)
@@ -217,18 +265,11 @@ private class RegionSelectionView: NSView {
         let localY = screen.frame.maxY - screenRect.maxY
         let sourceRect = CGRect(x: localX, y: localY, width: screenRect.width, height: screenRect.height)
 
-        let region = CaptureRegion(
+        return CaptureRegion(
             sourceRect: sourceRect,
             displayID: displayID,
             scaleFactor: screen.backingScaleFactor
         )
-        onComplete?(region)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCancel?()
-        }
     }
 
     private func makeRect(from p1: NSPoint, to p2: NSPoint) -> NSRect {
@@ -255,4 +296,10 @@ private class RegionSelectionView: NSView {
 private class RegionOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+private extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    }
 }
