@@ -17,7 +17,7 @@
 
 | Thing | State |
 | --- | --- |
-| App packaging | Single-project **MSIX with identity** (`EnableMsixTooling`), `Refractored.TinyClips`, `Publisher=CN=Refractored`, version `1.0.0.0`. |
+| App packaging | Single-project **MSIX with identity** (`EnableMsixTooling`), `Refractored.TinyClips`, `Publisher=CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US`, version `1.0.0.0`. |
 | Architectures | **x64 + ARM64** (`<Platforms>x64;ARM64</Platforms>`). |
 | Min OS | `10.0.22621.0` (Win 11 22H2). |
 | Capabilities | `runFullTrust` + `microphone` declared in `Package.appxmanifest`. |
@@ -33,7 +33,7 @@
 
 - ☐ **Freeze the identity matrix** (see §5). Confirm final **package family name (PFN)**, publisher,
   display name. Note: the **Store will assign its own Identity/Publisher** — the Direct build keeps
-  `CN=Refractored` (or the Trusted Signing subject); the two channels are **different identities**.
+  `CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US` (the Trusted Signing subject); the two channels are **different identities**.
 - ☐ **Version strategy** — map release tag `vMAJOR.MINOR.PATCH` → `Package.appxmanifest`
   `Version="MAJOR.MINOR.PATCH.0"` (4-part, revision `0`). Bump on every submission (Store/winget
   reject duplicate versions). 🤖 stamp this in CI from the tag.
@@ -67,7 +67,7 @@
   submission (untrusted signature).*
 - ☐ Make sure `Package.appxmanifest` `Publisher` **exactly matches** the signing cert subject, or
   packaging will fail signature validation.
-- ☐ (Interim, internal test only) self-signed: `winapp cert generate --publisher "CN=Refractored"`
+- ☐ (Interim, internal test only) self-signed: `winapp cert generate --publisher "CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US"`
   + `winapp cert install`. Never publish a self-signed build to winget.
 
 ### 2.2 Build + sign the MSIX
@@ -104,7 +104,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
     `<publisher-id-hash>` placeholder).
   - `MinimumOSVersion` → `10.0.22621.0` (matches manifest).
 - ☐ Locale manifest (`...locale.en-US.yaml`) is **already populated** (PackageName, Publisher,
-  PublisherUrl/SupportUrl, Author, License MIT, Description, Moniker `tinyclips`, Tags). Optional
+  PublisherUrl/SupportUrl, Author, License MIT, Description, Tags). Optional
   adds per release: `Copyright` ("© <year> Refractored LLC") and `ReleaseNotes`/`ReleaseNotesUrl`.
   The version manifest (`...yaml`) is complete. **Only the installer manifest needs per-release
   edits** (URLs, hashes, real PFN).
@@ -129,7 +129,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
 ### 3.2 Store-configured package
 - ☐ Produce a **Store build** whose `Package.appxmanifest` `Identity`/`Publisher` are overridden with
   the Store values (Visual Studio "Associate App with the Store", or `winapp` pull, or a separate
-  Store manifest/config). Do **not** ship the Direct `CN=Refractored` identity to the Store.
+  Store manifest/config). Do **not** ship the Direct `CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US` identity to the Store.
 - ☐ Build the Store upload package: **`.msixupload`** bundling **x64 + ARM64** (Store re-signs).
 - ☐ Ensure the **Store build flavor** hides all self-update / winget / `.appinstaller` /
   external-purchase UI (Store-cert requirement, §1).
@@ -180,8 +180,8 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
 | Field | Direct (winget/MSIX) | Store |
 | --- | --- | --- |
 | Package Name | `Refractored.TinyClips` | **Store-assigned** |
-| Publisher | `CN=Refractored` (or Trusted Signing subject) | **Store-assigned** (`CN=<GUID>`) |
-| PublisherDisplayName | `Refractored` | Partner Center display name |
+| Publisher | `CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US` | **Store-assigned** (`CN=<GUID>`) |
+| PublisherDisplayName | `Refractored LLC` | Partner Center display name |
 | Version | from tag → `X.Y.Z.0` | from tag → `X.Y.Z.0` |
 | Signing | Azure Trusted Signing | Store re-signs |
 | Updates | `.appinstaller` + winget | Store |

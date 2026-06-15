@@ -1,7 +1,7 @@
 PackageIdentifier: Refractored.TinyClips
 PackageVersion: 1.0.0.0
 PackageLocale: en-US
-Publisher: Refractored
+Publisher: Refractored LLC
 PublisherUrl: https://github.com/jamesmontemagno
 PrivacyUrl: https://tinyclips.app/privacy.html
 PublisherSupportUrl: https://github.com/jamesmontemagno/tiny-clips/issues
@@ -15,7 +15,6 @@ Description: |-
   Tiny Clips is a lightweight system-tray app for quickly capturing screenshots,
   screen recordings (MP4), and animated GIFs. Pick a region or the full screen,
   use global hotkeys, and save straight to your Pictures/Videos folders.
-Moniker: tinyclips
 Tags:
   - screenshot
   - screen-recorder
