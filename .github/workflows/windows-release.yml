@@ -73,22 +73,23 @@ jobs:
 
       - name: Publish x64
         shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -v:minimal
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:EnableMsixTooling=false -o artifacts/windows/layout/x64 -v:minimal
 
       - name: Publish ARM64
         shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -v:minimal
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:EnableMsixTooling=false -o artifacts/windows/layout/arm64 -v:minimal
 
       - name: Package MSIX
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
 
-          $x64Layout = "windows/src/TinyClips.App/bin/x64/Release/net10.0-windows10.0.26100.0/win-x64"
-          $arm64Layout = "windows/src/TinyClips.App/bin/ARM64/Release/net10.0-windows10.0.26100.0/win-arm64"
+          $manifestPath = "windows/src/TinyClips.App/Package.appxmanifest"
+          $x64Layout = "artifacts/windows/layout/x64"
+          $arm64Layout = "artifacts/windows/layout/arm64"
 
-          winapp package $x64Layout --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
-          winapp package $arm64Layout --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+          winapp package $x64Layout --manifest $manifestPath --executable TinyClips.App.exe --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
+          winapp package $arm64Layout --manifest $manifestPath --executable TinyClips.App.exe --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
 
       - name: Azure login
         uses: azure/login@v2
