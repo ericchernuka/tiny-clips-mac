@@ -160,7 +160,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
 
 ## 4. CI / automation gaps to close  🤖
 
-- ☐ **New `windows-release.yml`** (tag `v*` triggered), separate from the macOS `release.yml`:
+- ☑ **New `windows-release.yml`** (tag `v*-windows` triggered), separate from the macOS `release.yml`:
   1. Build Release x64 + ARM64.
   2. `winapp pack` → MSIX/bundle.
   3. **Sign** via Azure Trusted Signing (GitHub action / `azuresigntool`) — needs Azure creds as
@@ -168,7 +168,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
   4. Run **WACK**; fail on errors.
   5. Compute `InstallerSha256` + `SignatureSha256`; stamp version from tag.
   6. Create GitHub Release with signed assets + CHANGELOG body.
-  7. (Optional) `wingetcreate update` to open the winget-pkgs PR automatically. ⚠️ PAT secret.
+  7. Generate a ready-to-submit winget manifest artifact with release URLs and hashes.
 - ☐ **Store publish** can be automated later via the Partner Center submission API / Store action
   (separate secrets); start manual.
 - ☐ Add WACK + (optionally) signed-package validation as a CI tier.

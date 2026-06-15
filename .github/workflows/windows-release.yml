@@ -1,0 +1,312 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*-windows'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Windows release tag (for example, v1.0.1-windows)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  APP_PROJECT: windows/src/TinyClips.App/TinyClips.App.csproj
+  PACKAGE_FAMILY_NAME: Refractored.TinyClips_vmshqmcyy894t
+  SIGNTOOL_TIMESTAMP_URL: http://timestamp.acs.microsoft.com
+
+jobs:
+  build-sign-release:
+    name: Build, sign, and release MSIX
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set release version
+        shell: pwsh
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "${{ inputs.tag }}"
+          } else {
+            "${{ github.ref_name }}"
+          }
+
+          if ($tag -notmatch '^v(?<base>\d+\.\d+\.\d+)(?:\.(?<revision>\d+))?-windows$') {
+            throw "Windows release tags must look like v1.2.3-windows or v1.2.3.4-windows. Got '$tag'."
+          }
+
+          $revision = if ($Matches.revision) { $Matches.revision } else { "0" }
+          $packageVersion = "$($Matches.base).$revision"
+          $assetVersion = if ($Matches.revision) { "$($Matches.base).$revision" } else { $Matches.base }
+
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
+          "PACKAGE_VERSION=$packageVersion" >> $env:GITHUB_ENV
+          "ASSET_VERSION=$assetVersion" >> $env:GITHUB_ENV
+
+      - name: Stamp package manifest version
+        shell: pwsh
+        run: |
+          $manifestPath = "windows/src/TinyClips.App/Package.appxmanifest"
+          $content = Get-Content $manifestPath -Raw
+          $content = $content -replace 'Version="[^"]+"', "Version=""$env:PACKAGE_VERSION"""
+          Set-Content -Path $manifestPath -Value $content -Encoding UTF8
+
+      - name: Install Windows App CLI
+        shell: pwsh
+        run: |
+          winget install -e --id Microsoft.winappcli --accept-source-agreements --accept-package-agreements --silent
+          "$env:LOCALAPPDATA\Microsoft\WindowsApps" >> $env:GITHUB_PATH
+
+      - name: Restore Windows App SDK
+        shell: pwsh
+        run: winapp restore
+
+      - name: Publish x64
+        shell: pwsh
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -v:minimal
+
+      - name: Publish ARM64
+        shell: pwsh
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -v:minimal
+
+      - name: Package MSIX
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
+
+          $x64Layout = "windows/src/TinyClips.App/bin/x64/Release/net10.0-windows10.0.26100.0/win-x64"
+          $arm64Layout = "windows/src/TinyClips.App/bin/ARM64/Release/net10.0-windows10.0.26100.0/win-arm64"
+
+          winapp package $x64Layout --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
+          winapp package $arm64Layout --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Artifact Signing client
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/tools | Out-Null
+          $nuget = Join-Path (Resolve-Path artifacts/tools) "nuget.exe"
+          Invoke-WebRequest -Uri https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile $nuget
+          & $nuget install Microsoft.ArtifactSigning.Client -OutputDirectory artifacts/tools -ExcludeVersion -NonInteractive
+
+      - name: Sign MSIX packages
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$signtool) {
+            throw "SignTool x64 was not found."
+          }
+
+          $dlib = Get-ChildItem artifacts/tools/Microsoft.ArtifactSigning.Client -Recurse -Filter Azure.CodeSigning.Dlib.dll |
+            Where-Object { $_.FullName -match '\\bin\\x64\\' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dlib) {
+            throw "Azure.CodeSigning.Dlib.dll x64 was not found."
+          }
+
+          $metadataPath = Join-Path (Resolve-Path artifacts/windows) "artifact-signing-metadata.json"
+          @{
+            Endpoint = "${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}"
+            CodeSigningAccountName = "${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}"
+            CertificateProfileName = "${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}"
+            CorrelationId = "${{ github.repository }}-${{ github.run_id }}"
+            ExcludeCredentials = @(
+              "ManagedIdentityCredential",
+              "WorkloadIdentityCredential",
+              "SharedTokenCacheCredential",
+              "VisualStudioCredential",
+              "VisualStudioCodeCredential",
+              "AzurePowerShellCredential",
+              "AzureDeveloperCliCredential",
+              "InteractiveBrowserCredential"
+            )
+          } | ConvertTo-Json | Set-Content -Path $metadataPath -Encoding UTF8
+
+          & $signtool sign /v /fd SHA256 /tr $env:SIGNTOOL_TIMESTAMP_URL /td SHA256 /dlib "$dlib" /dmdf "$metadataPath" "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
+          & $signtool sign /v /fd SHA256 /tr $env:SIGNTOOL_TIMESTAMP_URL /td SHA256 /dlib "$dlib" /dmdf "$metadataPath" "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+
+      - name: Verify signatures
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          & $signtool verify /pa /v "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
+          & $signtool verify /pa /v "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+
+      - name: Run WACK
+        shell: pwsh
+        run: |
+          $appcert = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe"
+          if (!(Test-Path $appcert)) {
+            throw "Windows App Certification Kit appcert.exe was not found at '$appcert'."
+          }
+
+          New-Item -ItemType Directory -Force -Path artifacts/windows/wack | Out-Null
+          $wackDir = Resolve-Path artifacts/windows/wack
+          & $appcert test -appxpackagepath (Resolve-Path "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix") -reportoutputpath (Join-Path $wackDir "TinyClips-$env:ASSET_VERSION-x64-wack.xml")
+          & $appcert test -appxpackagepath (Resolve-Path "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix") -reportoutputpath (Join-Path $wackDir "TinyClips-$env:ASSET_VERSION-arm64-wack.xml")
+
+          foreach ($report in Get-ChildItem artifacts/windows/wack/*.xml) {
+            [xml]$xml = Get-Content $report.FullName
+            if ($xml.REPORT.OVERALL_RESULT -ne "PASS") {
+              throw "WACK failed for $($report.Name): $($xml.REPORT.OVERALL_RESULT)"
+            }
+          }
+
+      - name: Compute winget hashes
+        shell: pwsh
+        run: |
+          $x64Package = "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
+          $arm64Package = "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+
+          $x64InstallerHash = (winget hash $x64Package | Select-String 'InstallerSha256:' | Select-Object -Last 1).ToString().Split(':')[1].Trim()
+          $x64SignatureHash = (winget hash --msix $x64Package | Select-String 'SignatureSha256:' | Select-Object -Last 1).ToString().Split(':')[1].Trim()
+          $arm64InstallerHash = (winget hash $arm64Package | Select-String 'InstallerSha256:' | Select-Object -Last 1).ToString().Split(':')[1].Trim()
+          $arm64SignatureHash = (winget hash --msix $arm64Package | Select-String 'SignatureSha256:' | Select-Object -Last 1).ToString().Split(':')[1].Trim()
+
+          "X64_INSTALLER_SHA256=$x64InstallerHash" >> $env:GITHUB_ENV
+          "X64_SIGNATURE_SHA256=$x64SignatureHash" >> $env:GITHUB_ENV
+          "ARM64_INSTALLER_SHA256=$arm64InstallerHash" >> $env:GITHUB_ENV
+          "ARM64_SIGNATURE_SHA256=$arm64SignatureHash" >> $env:GITHUB_ENV
+
+          @"
+          PackageVersion: $env:PACKAGE_VERSION
+          PackageFamilyName: $env:PACKAGE_FAMILY_NAME
+
+          x64 InstallerSha256: $x64InstallerHash
+          x64 SignatureSha256: $x64SignatureHash
+
+          arm64 InstallerSha256: $arm64InstallerHash
+          arm64 SignatureSha256: $arm64SignatureHash
+          "@ | Set-Content -Path artifacts/windows/winget-hashes.txt -Encoding UTF8
+
+      - name: Generate winget manifest artifact
+        shell: pwsh
+        run: |
+          $wingetDir = "artifacts/windows/winget"
+          New-Item -ItemType Directory -Force -Path $wingetDir | Out-Null
+          Copy-Item windows/packaging/winget/Refractored.TinyClips.yaml $wingetDir
+          Copy-Item windows/packaging/winget/Refractored.TinyClips.locale.en-US.yaml $wingetDir
+
+          foreach ($manifest in Get-ChildItem $wingetDir/*.yaml) {
+            $content = Get-Content $manifest.FullName -Raw
+            $content = $content -replace 'PackageVersion: .*', "PackageVersion: $env:PACKAGE_VERSION"
+            Set-Content -Path $manifest.FullName -Value $content -Encoding UTF8
+          }
+
+          @"
+          # Installer manifest for the signed MSIX produced by the Windows Release workflow.
+          PackageIdentifier: Refractored.TinyClips
+          PackageVersion: $env:PACKAGE_VERSION
+          MinimumOSVersion: 10.0.22621.0
+          InstallerType: msix
+          Scope: user
+          InstallModes:
+            - silent
+            - silentWithProgress
+          PackageFamilyName: $env:PACKAGE_FAMILY_NAME
+          Installers:
+            - Architecture: x64
+              InstallerUrl: https://github.com/jamesmontemagno/tiny-clips/releases/download/$env:RELEASE_TAG/TinyClips-$env:ASSET_VERSION-x64.msix
+              InstallerSha256: $env:X64_INSTALLER_SHA256
+              SignatureSha256: $env:X64_SIGNATURE_SHA256
+            - Architecture: arm64
+              InstallerUrl: https://github.com/jamesmontemagno/tiny-clips/releases/download/$env:RELEASE_TAG/TinyClips-$env:ASSET_VERSION-arm64.msix
+              InstallerSha256: $env:ARM64_INSTALLER_SHA256
+              SignatureSha256: $env:ARM64_SIGNATURE_SHA256
+          ManifestType: installer
+          ManifestVersion: 1.6.0
+          "@ | ForEach-Object { $_ -replace '^          ', '' } |
+            Set-Content -Path (Join-Path $wingetDir "Refractored.TinyClips.installer.yaml") -Encoding UTF8
+
+          winget validate --manifest $wingetDir
+
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $lines = Get-Content windows/CHANGELOG.md
+          $escapedTag = [regex]::Escape($env:RELEASE_TAG)
+          $start = $null
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^## \[$escapedTag\]") {
+              $start = $i
+              break
+            }
+          }
+
+          if ($null -ne $start) {
+            $end = $lines.Count
+            for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^## ') {
+                $end = $i
+                break
+              }
+            }
+            $notes = @($lines[($start + 1)..($end - 1)] | Where-Object { $_ -ne "" })
+          } else {
+            $notes = @("Windows release $env:PACKAGE_VERSION.")
+          }
+
+          $notes += ""
+          $notes += "## Release validation"
+          $notes += "- Azure Artifact Signing completed for x64 and ARM64 MSIX packages."
+          $notes += "- SignTool verification passed for x64 and ARM64 MSIX packages."
+          $notes += "- WACK overall result passed for x64 and ARM64 MSIX packages."
+          $notes += ""
+          $notes += "## winget hashes"
+          $notes += '```text'
+          $notes += (Get-Content artifacts/windows/winget-hashes.txt)
+          $notes += '```'
+
+          $notes | Set-Content -Path artifacts/windows/release-notes.md -Encoding UTF8
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            artifacts/windows/*.msix
+            artifacts/windows/*.txt
+            artifacts/windows/winget/*.yaml
+            artifacts/windows/wack/*.xml
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Tiny Clips for Windows ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          body_path: artifacts/windows/release-notes.md
+          files: |
+            artifacts/windows/*.msix
+            artifacts/windows/winget-hashes.txt
+            artifacts/windows/wack/*.xml
+          draft: false
+          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, 'beta') || contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, 'alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

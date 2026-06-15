@@ -34,6 +34,25 @@ winapp sign --package <path-to.msix>
 
 Attach the signed `.msix` files to a GitHub Release (e.g. `v1.0.0`).
 
+### Automated Windows release workflow
+
+`.github/workflows/windows-release.yml` runs for tags like `v1.0.1-windows` and maps them to
+MSIX/winget versions like `1.0.1.0`. It builds x64 + ARM64, packages MSIX files, signs them with
+Azure Artifact Signing, runs WACK, computes winget hashes, generates a versioned winget manifest
+artifact, and creates the GitHub Release.
+
+Required repository secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_ARTIFACT_SIGNING_ENDPOINT` (for example, `https://wus2.codesigning.azure.net/`)
+- `AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME` (for example, `Refractored`)
+- `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME` (for example, `tinyclips-release`)
+
+The Azure identity must have the **Artifact Signing Certificate Profile Signer** role on the
+certificate profile.
+
 ## 2. Publish to winget
 
 The three-file manifest in this folder (`*.yaml`) is the winget submission. After a signed
