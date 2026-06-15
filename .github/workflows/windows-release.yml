@@ -71,17 +71,13 @@ jobs:
           winget install -e --id Microsoft.winappcli --accept-source-agreements --accept-package-agreements --silent
           "$env:LOCALAPPDATA\Microsoft\WindowsApps" >> $env:GITHUB_PATH
 
-      - name: Restore Windows App SDK
-        shell: pwsh
-        run: winapp restore
-
       - name: Publish x64
         shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -v:minimal
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -v:minimal
 
       - name: Publish ARM64
         shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -v:minimal
+        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -v:minimal
 
       - name: Package MSIX
         shell: pwsh
@@ -224,7 +220,7 @@ jobs:
           # Installer manifest for the signed MSIX produced by the Windows Release workflow.
           PackageIdentifier: Refractored.TinyClips
           PackageVersion: $env:PACKAGE_VERSION
-          MinimumOSVersion: 10.0.22621.0
+          MinimumOSVersion: 10.0.22000.0
           InstallerType: msix
           Scope: user
           InstallModes:

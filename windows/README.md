@@ -34,7 +34,7 @@ A native **WinUI 3 / Windows App SDK** port of Tiny Clips — a tray-based scree
 
 ## Requirements
 
-- Windows 11 **22H2 (build 22621)** or later
+- Windows 11 **21H2 (build 22000)** or later
 - [.NET 10 SDK](https://dotnet.microsoft.com/)
 - Windows SDK `10.0.26100`
 - **Developer Mode** enabled (Settings → System → For developers) for MSIX sideload/registration
