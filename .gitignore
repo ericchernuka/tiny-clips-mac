@@ -20,6 +20,10 @@ Packages/
 # Visual Studio workspace/local state
 .vs/
 
+# Windows local SDK/release artifacts
+.winapp/
+artifacts/
+
 # Python (tooling/scripts)
 __pycache__/
 *.py[cod]

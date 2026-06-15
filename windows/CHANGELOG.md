@@ -5,6 +5,8 @@ own `CHANGELOG.md` at the repository root.
 
 ## [Unreleased]
 
+## [v1.0.0-windows] - 2026-06-15
+
 ### Added
 - **Branding overlay** — when enabled in Settings, captures get a subtle "Captured on Tiny Clips"
   badge (a rounded black pill with white text) in the bottom-right corner, matching the macOS app.

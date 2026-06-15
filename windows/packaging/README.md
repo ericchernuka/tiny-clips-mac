@@ -20,7 +20,7 @@ cd windows
 winapp restore
 
 # (Dev only) create + trust a local signing cert
-winapp cert generate --publisher "CN=Refractored"
+winapp cert generate --publisher "CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US"
 winapp cert install
 
 # Produce the MSIX (x64 and arm64)
