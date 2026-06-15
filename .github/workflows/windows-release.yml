@@ -24,6 +24,7 @@ jobs:
   build-sign-release:
     name: Build, sign, and release MSIX
     runs-on: windows-latest
+    environment: windows-release
 
     steps:
       - name: Checkout code
