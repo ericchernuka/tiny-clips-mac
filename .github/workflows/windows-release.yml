@@ -62,7 +62,7 @@ jobs:
         run: |
           $manifestPath = "windows/src/TinyClips.App/Package.appxmanifest"
           $content = Get-Content $manifestPath -Raw
-          $content = $content -replace 'Version="[^"]+"', "Version=""$env:PACKAGE_VERSION"""
+          $content = $content -creplace '(<Identity[\s\S]*?Version=")[^"]+(")', "`${1}$env:PACKAGE_VERSION`${2}"
           Set-Content -Path $manifestPath -Value $content -Encoding UTF8
 
       - name: Install Windows App CLI
