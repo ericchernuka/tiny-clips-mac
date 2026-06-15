@@ -7,7 +7,7 @@ enables toast notifications, startup tasks, and Store distribution.
 ## Prerequisites
 
 - Windows App Development CLI (`winapp`): `winget install Microsoft.winappcli`
-- Windows App SDK + Windows SDK (restored by `winapp restore`)
+- Windows App SDK + Windows SDK (restored by `dotnet restore` / `dotnet publish`)
 - A code-signing certificate (dev: self-signed; release: trusted CA or Store-signed)
 
 ## 1. Build a signed MSIX (direct distribution)
@@ -16,23 +16,41 @@ enables toast notifications, startup tasks, and Store distribution.
 # From repo root
 cd windows
 
-# Pin SDKs / generate projections
-winapp restore
-
 # (Dev only) create + trust a local signing cert
 winapp cert generate --publisher "CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US"
 winapp cert install
 
-# Produce the MSIX (x64 and arm64)
-dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=x64
-dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=arm64
-winapp pack   # or `msbuild /t:GenerateAppxPackage`
+# Produce self-contained MSIX packages (x64 and arm64)
+dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false
+dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=arm64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false
+winapp package src\TinyClips.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64 --output TinyClips-x64.msix
+winapp package src\TinyClips.App\bin\arm64\Release\net10.0-windows10.0.26100.0\win-arm64 --output TinyClips-arm64.msix
 
 # Sign the package(s)
 winapp sign --package <path-to.msix>
 ```
 
 Attach the signed `.msix` files to a GitHub Release (e.g. `v1.0.0`).
+
+### Automated Windows release workflow
+
+`.github/workflows/windows-release.yml` runs for tags like `v1.0.1-windows` and maps them to
+MSIX/winget versions like `1.0.1.0`. It builds x64 + ARM64 with
+`WindowsAppSDKSelfContained=true`, packages self-contained MSIX files, signs them with Azure
+Artifact Signing, runs WACK, computes winget hashes, generates a versioned winget manifest
+artifact, and creates the GitHub Release.
+
+Required repository secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_ARTIFACT_SIGNING_ENDPOINT` (for example, `https://wus2.codesigning.azure.net/`)
+- `AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME` (for example, `Refractored`)
+- `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME` (for example, `tinyclips-release`)
+
+The Azure identity must have the **Artifact Signing Certificate Profile Signer** role on the
+certificate profile.
 
 ## 2. Publish to winget
 

@@ -19,7 +19,7 @@
 | --- | --- |
 | App packaging | Single-project **MSIX with identity** (`EnableMsixTooling`), `Refractored.TinyClips`, `Publisher=CN=Refractored LLC, O=Refractored LLC, L=Seattle, S=Washington, C=US`, version `1.0.0.0`. |
 | Architectures | **x64 + ARM64** (`<Platforms>x64;ARM64</Platforms>`). |
-| Min OS | `10.0.22621.0` (Win 11 22H2). |
+| Min OS | `10.0.22000.0` (Win 11 21H2). |
 | Capabilities | `runFullTrust` + `microphone` declared in `Package.appxmanifest`. |
 | winget manifest | **Templates exist** in `windows/packaging/winget/` (installer/locale/version) with `<FILL-IN>` placeholders. |
 | CI | `windows-build.yml` builds x64+ARM64 Release + runs Core tests on PR. **No release/packaging/signing CI.** `release.yml` is **macOS-only**. |
@@ -71,9 +71,8 @@
   + `winapp cert install`. Never publish a self-signed build to winget.
 
 ### 2.2 Build + sign the MSIX
-- ☐ `winapp restore` (pin SDKs / projections).
-- ☐ `dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=x64` and `-p:Platform=arm64`.
-- ☐ `winapp pack` (or `msbuild /t:GenerateAppxPackage`) → MSIX per arch (or a single `.msixbundle`).
+- ☐ `dotnet publish src/TinyClips.App/TinyClips.App.csproj -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true` and `-p:Platform=arm64 -p:WindowsAppSDKSelfContained=true`.
+- ☐ `winapp package` (or `msbuild /t:GenerateAppxPackage`) → self-contained MSIX per arch (or a single `.msixbundle`).
 - ☐ Sign with Trusted Signing (`winapp sign --package <.msix>` / the Trusted Signing task/action).
 - ☐ Decide **single `.msixbundle` (x64+ARM64)** vs **two arch-specific MSIX**. winget supports both;
   bundle is simpler for one InstallerUrl, per-arch gives smaller downloads. **Recommend per-arch MSIX**
@@ -102,7 +101,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
   - `PackageFamilyName` → **real PFN** from the signed package:
     `Get-AppxPackage Refractored.TinyClips | Select-Object PackageFamilyName` (replace the
     `<publisher-id-hash>` placeholder).
-  - `MinimumOSVersion` → `10.0.22621.0` (matches manifest).
+  - `MinimumOSVersion` → `10.0.22000.0` (matches manifest and winget validation images).
 - ☐ Locale manifest (`...locale.en-US.yaml`) is **already populated** (PackageName, Publisher,
   PublisherUrl/SupportUrl, Author, License MIT, Description, Tags). Optional
   adds per release: `Copyright` ("© <year> Refractored LLC") and `ReleaseNotes`/`ReleaseNotesUrl`.
@@ -160,7 +159,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
 
 ## 4. CI / automation gaps to close  🤖
 
-- ☐ **New `windows-release.yml`** (tag `v*` triggered), separate from the macOS `release.yml`:
+- ☑ **New `windows-release.yml`** (tag `v*-windows` triggered), separate from the macOS `release.yml`:
   1. Build Release x64 + ARM64.
   2. `winapp pack` → MSIX/bundle.
   3. **Sign** via Azure Trusted Signing (GitHub action / `azuresigntool`) — needs Azure creds as
@@ -168,7 +167,7 @@ The 3-file manifest lives in `windows/packaging/winget/`. Per release:
   4. Run **WACK**; fail on errors.
   5. Compute `InstallerSha256` + `SignatureSha256`; stamp version from tag.
   6. Create GitHub Release with signed assets + CHANGELOG body.
-  7. (Optional) `wingetcreate update` to open the winget-pkgs PR automatically. ⚠️ PAT secret.
+  7. Generate a ready-to-submit winget manifest artifact with release URLs and hashes.
 - ☐ **Store publish** can be automated later via the Partner Center submission API / Store action
   (separate secrets); start manual.
 - ☐ Add WACK + (optionally) signed-package validation as a CI tier.
