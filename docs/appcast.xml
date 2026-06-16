@@ -11,24 +11,24 @@
         <item>
             
             
-            <title>1.4.0.3</title>
+            <title>1.0.0-windows</title>
             
             
-            <pubDate>Wed, 27 May 2026 21:16:33 +0000</pubDate>
+            <pubDate>Mon, 15 Jun 2026 20:22:15 +0000</pubDate>
             
             
-            <sparkle:version>35</sparkle:version>
+            <sparkle:version>36</sparkle:version>
             
             
-            <sparkle:shortVersionString>1.4.0.3</sparkle:shortVersionString>
+            <sparkle:shortVersionString>1.0.0-windows</sparkle:shortVersionString>
             
             
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             
             
-            <description><![CDATA[<h3>What's Changed</h3><ul><li>chore: update CHANGELOG for v1.4.0.3 release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips-mac/compare/v1.4.0.2...v1.4.0.3">Full Changelog</a></p>]]></description>
-            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips-mac/releases/tag/v1.4.0.3</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/jamesmontemagno/tiny-clips-mac/releases/download/v1.4.0.3/TinyClips-v1.4.0.3.zip" length="3151026" type="application/octet-stream" sparkle:edSignature="Jwt6HMMjj0If94hOmbGqWS7xu5Zfe+nLD31VzgcEYwDoCC2ezMMPY/9jh5RAUYVasWkGBS4zw/QWqSbnZUcLAg=="/>
+            <description><![CDATA[<h3>What's Changed</h3><ul><li>Prepare Windows winget release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.4.0.3...v1.0.0-windows">Full Changelog</a></p>]]></description>
+            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.0.0-windows</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.0.0-windows/TinyClips-v1.0.0-windows.zip" length="3296567" type="application/octet-stream" sparkle:edSignature="SOOBifbUTJKIstzbkVf/kPBVN8LlOtRSh3GcbSb+bhllzEKP+HLwwoRx6ziGyNnu1u0LTBJrx5lUbAHU8YQzAg=="/>
             
         
         </item>

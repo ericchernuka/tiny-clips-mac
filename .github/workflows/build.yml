@@ -3,8 +3,14 @@ name: Build
 on:
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'mac/**'
+      - '.github/workflows/build.yml'
   push:
     branches: [main, develop]
+    paths:
+      - 'mac/**'
+      - '.github/workflows/build.yml'
 
 env:
   SCHEME: TinyClips
@@ -33,13 +39,13 @@ jobs:
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project ${{ env.SCHEME }}.xcodeproj \
+            -project mac/${{ env.SCHEME }}.xcodeproj \
             -scheme ${{ env.SCHEME }}
 
       - name: Build project
         run: |
           xcodebuild build \
-            -project ${{ env.SCHEME }}.xcodeproj \
+            -project mac/${{ env.SCHEME }}.xcodeproj \
             -scheme ${{ env.SCHEME }} \
             -configuration Debug \
             CODE_SIGN_IDENTITY="" \

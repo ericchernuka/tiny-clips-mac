@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    Shared build settings for all TinyClips Windows projects.
+    Individual projects may override any of these in their own PropertyGroup.
+    Target: Windows 11 21H2 (22000+) for winget validation compatibility.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <Platforms>x64;ARM64</Platforms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Authors>Refractored</Authors>
+    <Company>Refractored</Company>
+    <Product>Tiny Clips</Product>
+  </PropertyGroup>
+
+</Project>
