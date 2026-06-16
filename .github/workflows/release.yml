@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      - '!*-windows'
   workflow_dispatch:
     inputs:
       version:
