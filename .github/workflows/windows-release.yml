@@ -335,6 +335,16 @@ jobs:
           }
 
           $notes += ""
+          $notes += "## Install"
+          $notes += "Tiny Clips is published in the [winget community repository](https://github.com/microsoft/winget-pkgs). Install it from any Windows 11 terminal:"
+          $notes += ""
+          $notes += '```text'
+          $notes += 'winget install Refractored.TinyClips'
+          $notes += '```'
+          $notes += ""
+          $notes += 'Update later with `winget upgrade Refractored.TinyClips`.'
+
+          $notes += ""
           $notes += "## Release validation"
           $notes += "- Azure Artifact Signing completed for x64 and ARM64 MSIX packages."
           $notes += "- SignTool verification passed for x64 and ARM64 MSIX packages."
