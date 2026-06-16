@@ -66,31 +66,48 @@ jobs:
           $content = $content -creplace '(<Identity[\s\S]*?Version=")[^"]+(")', "`${1}$env:PACKAGE_VERSION`${2}"
           Set-Content -Path $manifestPath -Value $content -Encoding UTF8
 
-      - name: Install Windows App CLI
-        shell: pwsh
-        run: |
-          winget install -e --id Microsoft.WinAppCli --source winget --accept-source-agreements --accept-package-agreements --silent
-          "$env:LOCALAPPDATA\Microsoft\WindowsApps" >> $env:GITHUB_PATH
-
-      - name: Publish x64
-        shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:EnableMsixTooling=false -o artifacts/windows/layout/x64 -v:minimal
-
-      - name: Publish ARM64
-        shell: pwsh
-        run: dotnet publish $env:APP_PROJECT -c Release -p:Platform=ARM64 -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:EnableMsixTooling=false -o artifacts/windows/layout/arm64 -v:minimal
-
-      - name: Package MSIX
+      - name: Build and package MSIX
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
 
-          $manifestPath = "windows/src/TinyClips.App/Package.appxmanifest"
-          $x64Layout = "artifacts/windows/layout/x64"
-          $arm64Layout = "artifacts/windows/layout/arm64"
+          # Framework-dependent MSIX built with the supported MSBuild MSIX tooling.
+          # This produces an AppxManifest with the WinRT ActivatableClass registrations
+          # required for the installed package to launch on clean machines (matches the
+          # working v1.0.0 release). Self-contained packaging omits those registrations
+          # and crashes on startup with REGDB_E_CLASSNOTREG. The WindowsAppSDK runtime
+          # is declared as a framework PackageDependency and acquired by winget/Store.
+          $platforms = @(
+            @{ Platform = "x64";   Rid = "win-x64";   Asset = "x64" }
+            @{ Platform = "ARM64"; Rid = "win-arm64"; Asset = "arm64" }
+          )
 
-          winapp package $x64Layout --manifest $manifestPath --executable TinyClips.App.exe --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-x64.msix"
-          winapp package $arm64Layout --manifest $manifestPath --executable TinyClips.App.exe --output "artifacts/windows/TinyClips-$env:ASSET_VERSION-arm64.msix"
+          foreach ($p in $platforms) {
+            $packageDir = "artifacts/windows/package/$($p.Asset)"
+            New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+            $packageDirFull = (Resolve-Path $packageDir).Path + [IO.Path]::DirectorySeparatorChar
+
+            dotnet build $env:APP_PROJECT `
+              -c Release `
+              -p:Platform=$($p.Platform) `
+              -p:RuntimeIdentifier=$($p.Rid) `
+              -p:WindowsAppSDKSelfContained=false `
+              -p:EnableMsixTooling=true `
+              -p:GenerateAppxPackageOnBuild=true `
+              -p:AppxPackageDir=$packageDirFull `
+              -p:AppxBundle=Never `
+              -p:UapAppxPackageBuildMode=SideloadOnly `
+              -p:AppxPackageSigningEnabled=false `
+              -v:minimal
+            if ($LASTEXITCODE -ne 0) { throw "MSIX build failed for $($p.Platform)." }
+
+            $produced = Get-ChildItem $packageDir -Recurse -Filter *.msix |
+              Where-Object { $_.Name -notmatch 'symbols' } |
+              Select-Object -First 1
+            if (-not $produced) { throw "No MSIX produced for $($p.Platform)." }
+
+            Copy-Item $produced.FullName "artifacts/windows/TinyClips-$env:ASSET_VERSION-$($p.Asset).msix" -Force
+          }
 
       - name: Azure login
         uses: azure/login@v2
