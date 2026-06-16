@@ -5,6 +5,18 @@ own `CHANGELOG.md` at the repository root.
 
 ## [Unreleased]
 
+### Fixed
+- **Installed MSIX no longer crashes on startup** — the winget/MSIX build was switched to
+  self-contained packaging to clear winget validation, but the resulting package shipped an
+  AppxManifest with **no** WinRT activation registrations. On a clean machine (without the
+  Windows App Runtime installed) the app crashed immediately at `Application.Start` with
+  `REGDB_E_CLASSNOTREG` (`0xc000027b`), because the installed package resolves WinRT activation
+  from the manifest, not from the executable's embedded reg-free manifest. The release workflow
+  now packages a **framework-dependent** MSIX with the supported MSBuild MSIX tooling, which
+  emits the full set of `ActivatableClass` registrations and declares the Windows App Runtime as
+  a framework dependency (the same configuration as the original, working v1.0.0 release). The
+  runtime is acquired automatically by winget/Store at install time.
+
 ## [v1.0.0-windows] - 2026-06-15
 
 ### Added
