@@ -21,6 +21,10 @@ own `CHANGELOG.md` at the repository root.
   and asserts the package is genuinely framework-dependent (WindowsAppRuntime dependency present,
   no bundled `coreclr.dll`) before signing.
 
+### Improved
+- **Onboarding wizard now defaults to a wider layout** — increased the first-run welcome window
+  width and relaxed step content max-widths so introductory copy is less likely to wrap on first launch.
+
 ## [v1.0.5-windows] - 2026-06-16
 
 ### Fixed
@@ -47,6 +51,7 @@ own `CHANGELOG.md` at the repository root.
   installation failed there (it succeeded locally only because the runtime was already present).
   The winget installer manifest now declares `Microsoft.WindowsAppRuntime.1.8` under
   `Dependencies.PackageDependencies`, so winget installs the runtime first on any clean machine.
+>>>>>>> origin/main
 - **Installed MSIX no longer crashes on startup** — the winget/MSIX build was switched to
   self-contained packaging to clear winget validation, but the resulting package shipped an
   AppxManifest with **no** WinRT activation registrations. On a clean machine (without the
