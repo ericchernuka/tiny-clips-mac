@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Dispatching;
 using TinyClips.Core.Models;
 using TinyClips.Core.Services;
 
@@ -25,7 +27,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ILaunchAtLoginService _launchAtLoginService;
     private readonly IAudioDeviceService _audioDevices;
     private readonly IClipStorageService _storage;
+    private readonly DispatcherQueue? _dispatcherQueue;
     private bool _loading;
+    private string _savedMicrophoneId = string.Empty;
 
     // Persistence stays suppressed until the Settings window has finished its first
     // layout/binding pass. WinUI TwoWay x:Bind targets (ComboBox.SelectedIndex,
@@ -45,7 +49,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         _launchAtLoginService = launchAtLogin;
         _audioDevices = audioDevices;
         _storage = storage;
+        _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         Load();
+        _ = LoadMicrophonesAsync();
 
         // Reconcile the toggle with the OS-owned launch-at-login (StartupTask) state.
         _ = RefreshLaunchAtLoginAsync();
@@ -138,13 +144,30 @@ public sealed partial class SettingsViewModel : ObservableObject
     private bool _recordAudio;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MicrophoneSelectorEnabled))]
     private bool _recordMicrophone;
 
     /// <summary>Microphone devices for the picker (first entry is the system default).</summary>
     public System.Collections.ObjectModel.ObservableCollection<AudioInputDevice> Microphones { get; } = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MicrophoneLoadingVisibility))]
+    [NotifyPropertyChangedFor(nameof(MicrophoneSelectorVisibility))]
+    [NotifyPropertyChangedFor(nameof(MicrophoneSelectorEnabled))]
+    private bool _isMicrophonesLoading = true;
+
+    [ObservableProperty]
     private AudioInputDevice? _selectedMicrophone;
+
+    public Microsoft.UI.Xaml.Visibility MicrophoneLoadingVisibility => IsMicrophonesLoading
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility MicrophoneSelectorVisibility => IsMicrophonesLoading
+        ? Microsoft.UI.Xaml.Visibility.Collapsed
+        : Microsoft.UI.Xaml.Visibility.Visible;
+
+    public bool MicrophoneSelectorEnabled => RecordMicrophone && !IsMicrophonesLoading;
 
     [ObservableProperty]
     private double _videoRecordingTimeLimitMinutes;
@@ -303,17 +326,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordAudio = _settings.RecordAudio;
             RecordMicrophone = _settings.RecordMicrophone;
 
-            var savedMicId = _settings.SelectedMicrophoneId ?? string.Empty;
-            var microphones = _audioDevices.GetMicrophones();
-
-            SelectedMicrophone = null;
-            Microphones.Clear();
-            foreach (var mic in microphones)
-            {
-                Microphones.Add(mic);
-            }
-
-            SelectedMicrophone = Microphones.FirstOrDefault(m => m.Id == savedMicId) ?? Microphones[0];
+            _savedMicrophoneId = _settings.SelectedMicrophoneId ?? string.Empty;
 
             VideoRecordingTimeLimitMinutes = _settings.VideoRecordingTimeLimitMinutes;
             VideoCountdownEnabled = _settings.VideoCountdownEnabled;
@@ -340,6 +353,70 @@ public sealed partial class SettingsViewModel : ObservableObject
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task LoadMicrophonesAsync()
+    {
+        IsMicrophonesLoading = true;
+        var microphones = await Task.Run(() => _audioDevices.GetMicrophones());
+        await ApplyMicrophonesAsync(microphones);
+    }
+
+    private async Task ApplyMicrophonesAsync(IReadOnlyList<AudioInputDevice> microphones)
+    {
+        if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
+        {
+            ApplyMicrophones(microphones);
+            return;
+        }
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    ApplyMicrophones(microphones);
+                    completion.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }))
+        {
+            throw new InvalidOperationException("Unable to update microphone list on the UI thread.");
+        }
+
+        await completion.Task;
+    }
+
+    private void ApplyMicrophones(IReadOnlyList<AudioInputDevice> microphones)
+    {
+        _loading = true;
+        try
+        {
+            SelectedMicrophone = null;
+            Microphones.Clear();
+
+            if (microphones.Count == 0)
+            {
+                Microphones.Add(new AudioInputDevice(string.Empty, "System default"));
+            }
+            else
+            {
+                foreach (var mic in microphones)
+                {
+                    Microphones.Add(mic);
+                }
+            }
+
+            SelectedMicrophone = Microphones.FirstOrDefault(m => m.Id == _savedMicrophoneId) ?? Microphones[0];
+        }
+        finally
+        {
+            _loading = false;
+            IsMicrophonesLoading = false;
         }
     }
 

@@ -525,6 +525,20 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="Choose which input is recorded when &quot;Record microphone&quot; is on." />
                         </StackPanel>
+                        <StackPanel
+                            Grid.Column="1"
+                            MinWidth="220"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind ViewModel.MicrophoneLoadingVisibility, Mode=OneWay}">
+                            <ProgressRing Width="20" Height="20" IsActive="True" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Loading microphones..." />
+                        </StackPanel>
                         <ComboBox
                             Grid.Column="1"
                             MinWidth="220"
@@ -532,9 +546,10 @@
                             AutomationProperties.AutomationId="MicrophoneDeviceCombo"
                             AutomationProperties.Name="Microphone device"
                             DisplayMemberPath="Name"
-                            IsEnabled="{x:Bind ViewModel.RecordMicrophone, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.MicrophoneSelectorEnabled, Mode=OneWay}"
                             ItemsSource="{x:Bind ViewModel.Microphones, Mode=OneWay}"
-                            SelectedItem="{x:Bind ViewModel.SelectedMicrophone, Mode=TwoWay}" />
+                            SelectedItem="{x:Bind ViewModel.SelectedMicrophone, Mode=TwoWay}"
+                            Visibility="{x:Bind ViewModel.MicrophoneSelectorVisibility, Mode=OneWay}" />
                     </Grid>
                 </Border>
 
