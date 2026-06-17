@@ -1,8 +1,10 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, Position = 0)]
     [string]$Version,
 
+    [switch]$Mac,
+    [switch]$Windows,
     [switch]$Push
 )
 
@@ -13,8 +15,17 @@ if ($Version -notmatch '^v\d+\.\d+\.\d+$') {
     throw "Version must match v<major>.<minor>.<patch> (example: v1.0.8)."
 }
 
-$macTag = $Version
-$windowsTag = "$Version-windows"
+if (-not $Mac -and -not $Windows) {
+    throw "Select at least one platform with -Mac and/or -Windows."
+}
+
+$selectedTags = @()
+if ($Mac) {
+    $selectedTags += $Version
+}
+if ($Windows) {
+    $selectedTags += "$Version-windows"
+}
 
 git rev-parse --is-inside-work-tree *> $null
 if ($LASTEXITCODE -ne 0) {
@@ -35,7 +46,7 @@ function Test-RemoteTagExists {
     return -not [string]::IsNullOrWhiteSpace($matches)
 }
 
-foreach ($tag in @($macTag, $windowsTag)) {
+foreach ($tag in $selectedTags) {
     if (Test-LocalTagExists -Tag $tag) {
         throw "Tag '$tag' already exists locally."
     }
@@ -44,21 +55,24 @@ foreach ($tag in @($macTag, $windowsTag)) {
     }
 }
 
-if ($PSCmdlet.ShouldProcess($macTag, "Create annotated macOS tag")) {
-    git tag -a $macTag -m "Release $macTag"
+foreach ($tag in $selectedTags) {
+    $label = if ($tag -like "*-windows") { "Windows" } else { "macOS" }
+    if ($PSCmdlet.ShouldProcess($tag, "Create annotated $label tag")) {
+        git tag -a $tag -m "Release $tag"
+    }
 }
 
-if ($PSCmdlet.ShouldProcess($windowsTag, "Create annotated Windows tag")) {
-    git tag -a $windowsTag -m "Release $windowsTag"
-}
-
-if ($Push -and $PSCmdlet.ShouldProcess("origin", "Push tags $macTag and $windowsTag")) {
-    git push origin $macTag $windowsTag
+if ($Push) {
+    $tagList = $selectedTags -join " "
+    if ($PSCmdlet.ShouldProcess("origin", "Push tags $tagList")) {
+        git push origin @selectedTags
+    }
 }
 
 Write-Host "Created tags:"
-Write-Host "- $macTag"
-Write-Host "- $windowsTag"
+foreach ($tag in $selectedTags) {
+    Write-Host "- $tag"
+}
 if (-not $Push) {
-    Write-Host "Push with: git push origin $macTag $windowsTag"
+    Write-Host ("Push with: git push origin {0}" -f ($selectedTags -join " "))
 }

@@ -3,14 +3,16 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/create-release-tags.sh <version> [--push] [--dry-run]
+Usage: scripts/create-release-tags.sh <version> [--mac] [--windows] [--push] [--dry-run]
 
-Creates both release tags:
-- macOS tag: <version> (example: v1.0.8)
-- Windows tag: <version>-windows (example: v1.0.8-windows)
+Creates selected release tags:
+- --mac: <version> (example: v1.0.8)
+- --windows: <version>-windows (example: v1.0.8-windows)
 
 Options:
-  --push     Push both tags to origin.
+  --mac      Create only the macOS tag.
+  --windows  Create only the Windows tag.
+  --push     Push selected tags to origin.
   --dry-run  Print commands without running them.
   -h, --help Show this help text.
 EOF
@@ -23,12 +25,22 @@ fi
 
 push_tags=false
 dry_run=false
+create_mac=false
+create_windows=false
 version=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --push)
       push_tags=true
+      shift
+      ;;
+    --mac)
+      create_mac=true
+      shift
+      ;;
+    --windows)
+      create_windows=true
       shift
       ;;
     --dry-run)
@@ -67,13 +79,23 @@ if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+if [[ "$create_mac" != "true" && "$create_windows" != "true" ]]; then
+  echo "Select at least one platform with --mac and/or --windows." >&2
+  exit 1
+fi
+
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "This script must run inside a git repository." >&2
   exit 1
 fi
 
-mac_tag="$version"
-windows_tag="${version}-windows"
+selected_tags=()
+if [[ "$create_mac" == "true" ]]; then
+  selected_tags+=("$version")
+fi
+if [[ "$create_windows" == "true" ]]; then
+  selected_tags+=("${version}-windows")
+fi
 
 tag_exists_local() {
   git rev-parse -q --verify "refs/tags/$1" >/dev/null 2>&1
@@ -83,7 +105,7 @@ tag_exists_remote() {
   git ls-remote --exit-code --tags origin "refs/tags/$1" >/dev/null 2>&1
 }
 
-for tag in "$mac_tag" "$windows_tag"; do
+for tag in "${selected_tags[@]}"; do
   if tag_exists_local "$tag"; then
     echo "Tag '$tag' already exists locally." >&2
     exit 1
@@ -102,16 +124,18 @@ run() {
   fi
 }
 
-run git tag -a "$mac_tag" -m "Release $mac_tag"
-run git tag -a "$windows_tag" -m "Release $windows_tag"
+for tag in "${selected_tags[@]}"; do
+  run git tag -a "$tag" -m "Release $tag"
+done
 
 if [[ "$push_tags" == "true" ]]; then
-  run git push origin "$mac_tag" "$windows_tag"
+  run git push origin "${selected_tags[@]}"
 fi
 
 echo "Created tags:"
-echo "- $mac_tag"
-echo "- $windows_tag"
+for tag in "${selected_tags[@]}"; do
+  echo "- $tag"
+done
 if [[ "$push_tags" != "true" ]]; then
-  echo "Push with: git push origin $mac_tag $windows_tag"
+  echo "Push with: git push origin ${selected_tags[*]}"
 fi

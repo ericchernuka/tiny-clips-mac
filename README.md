@@ -198,12 +198,12 @@ Found a bug or have a feature request? [Open an issue](https://github.com/jamesm
 
 ## Release Tagging Helpers
 
-Create both release tags in one step (`vX.Y.Z` for macOS and `vX.Y.Z-windows` for Windows):
+Create one or both release tags by selecting platforms (`--mac`, `--windows`):
 
 ```powershell
-pwsh -File scripts/create-release-tags.ps1 -Version v1.0.8 -Push
+pwsh -File scripts/create-release-tags.ps1 v1.0.8 -Mac -Windows -Push
 ```
 
 ```bash
-scripts/create-release-tags.sh v1.0.8 --push
+scripts/create-release-tags.sh v1.0.8 --mac --windows --push
 ```
