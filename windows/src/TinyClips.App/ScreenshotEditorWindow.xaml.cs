@@ -193,8 +193,7 @@ public sealed partial class ScreenshotEditorWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 800));
-        (AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.Maximize();
+        AppWindowPlacement.CenterInCurrentWorkAreaAtHalfSize(AppWindow);
 
         var settings = App.Services.GetRequiredService<ICaptureSettings>();
         RootGrid.RequestedTheme = settings.Theme switch
