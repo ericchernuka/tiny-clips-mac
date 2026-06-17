@@ -16,9 +16,7 @@ using Microsoft.Windows.AppNotifications.Builder;
 using TinyClips.Core.Capture;
 using TinyClips.Core.Models;
 using TinyClips.Core.Services;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
-using Windows.Storage.Streams;
 
 namespace TinyClips.App;
 
@@ -962,21 +960,12 @@ public partial class App : Application
                 return;
             }
 
-            var file = await StorageFile.GetFileFromPathAsync(path);
-            var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
-            package.SetStorageItems(new[] { file });
-
-            // For still images, also place the bitmap so it can be pasted directly into editors.
-            if (type == CaptureType.Screenshot)
-            {
-                package.SetBitmap(RandomAccessStreamReference.CreateFromFile(file));
-            }
-
-            Clipboard.SetContent(package);
+            await ClipboardService.CopySavedClipAsync(path, type);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Clipboard copy failed: {ex}");
+            ShowClipboardFailureNotification(Path.GetFileName(path));
         }
     }
 
@@ -1009,6 +998,23 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to show save notification: {ex}");
+        }
+    }
+
+    internal static void ShowClipboardFailureNotification(string fileName)
+    {
+        try
+        {
+            var notification = new AppNotificationBuilder()
+                .AddText("Couldn't copy to clipboard")
+                .AddText(fileName)
+                .BuildNotification();
+
+            AppNotificationManager.Default.Show(notification);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to show clipboard failure notification: {ex}");
         }
     }
 

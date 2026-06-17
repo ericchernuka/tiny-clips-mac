@@ -26,7 +26,6 @@ using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
 using Windows.UI;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace TinyClips.App;
 
@@ -2353,18 +2352,12 @@ public sealed partial class ScreenshotEditorWindow : Window
         try
         {
             using var flattened = await RenderToBitmapAsync();
-            using var stream = new InMemoryRandomAccessStream();
-            var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
-            encoder.SetSoftwareBitmap(flattened);
-            await encoder.FlushAsync();
-
-            var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
-            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
-            Clipboard.SetContent(package);
+            await ClipboardService.CopyBitmapAsync(flattened);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Copy failed: {ex}");
+            App.ShowClipboardFailureNotification(System.IO.Path.GetFileName(_filePath));
         }
     }
 
