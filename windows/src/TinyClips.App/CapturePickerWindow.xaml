@@ -17,14 +17,9 @@
         <Border
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Padding="14,8"
-            Background="Transparent"
-            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="{StaticResource OverlayCornerRadius}">
-            <Border.Shadow>
-                <ThemeShadow />
-            </Border.Shadow>
+            Padding="8"
+            BorderThickness="0"
+            CornerRadius="8">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <FontIcon
                     x:Name="ModeIcon"

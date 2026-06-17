@@ -30,6 +30,7 @@ public sealed partial class CapturePickerWindow : Window
 {
     private static readonly int[] CountdownOptions = { 1, 2, 3, 5, 10 };
     private static readonly int[] LimitOptions = { 0, 1, 2, 5, 10, 15, 30 };
+    private const int CornerRadiusDip = 8;
 
     private readonly TaskCompletionSource<CapturePickerResult?> _result = new();
     private bool _countdownEnabled;
@@ -111,7 +112,16 @@ public sealed partial class CapturePickerWindow : Window
             AppWindow.Move(new PointInt32(x, y));
         }
 
+        ApplyRoundedRegion(width, height, scale);
         RootGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void ApplyRoundedRegion(int width, int height, double scale)
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var radius = (int)Math.Round(CornerRadiusDip * scale);
+        var region = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
+        SetWindowRgn(hwnd, region, true);
     }
 
     private void BuildTimerFlyout()
@@ -170,14 +180,9 @@ public sealed partial class CapturePickerWindow : Window
 
     private void ConfigurePresenter()
     {
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.IsResizable = false;
-        }
+        var presenter = OverlappedPresenter.CreateForContextMenu();
+        presenter.IsAlwaysOnTop = true;
+        AppWindow.SetPresenter(presenter);
 
         AppWindow.IsShownInSwitchers = false;
     }
@@ -245,6 +250,12 @@ public sealed partial class CapturePickerWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowRgn(nint hWnd, nint hRgn, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] bool bRedraw);
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern nint CreateRoundRectRgn(int x1, int y1, int x2, int y2, int cx, int cy);
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {

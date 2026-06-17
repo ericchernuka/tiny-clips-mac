@@ -11,10 +11,10 @@
     <Grid x:Name="RootGrid" Background="Transparent">
         <Border
             Padding="24"
-            Background="Transparent"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
             BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
             BorderThickness="1"
-            CornerRadius="{StaticResource OverlayCornerRadius}">
+            CornerRadius="8">
             <StackPanel Spacing="16">
                 <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Choose a screen" />
                 <GridView

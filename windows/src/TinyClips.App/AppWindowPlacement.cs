@@ -10,7 +10,7 @@ internal static class AppWindowPlacement
         var displayArea = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
         var width = Math.Max(1, workArea.Width / 2);
-        var height = Math.Max(1, workArea.Height / 2);
+        var height = Math.Max(1, workArea.Height * 3 / 4);
         var x = workArea.X + ((workArea.Width - width) / 2);
         var y = workArea.Y + ((workArea.Height - height) / 2);
 

@@ -216,14 +216,9 @@ public sealed partial class RecordingIndicatorWindow : Window
 
     private void ConfigurePresenter()
     {
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.IsResizable = false;
-        }
+        var presenter = OverlappedPresenter.CreateForContextMenu();
+        presenter.IsAlwaysOnTop = true;
+        AppWindow.SetPresenter(presenter);
 
         AppWindow.IsShownInSwitchers = false;
     }

@@ -13,14 +13,16 @@ namespace TinyClips.App;
 /// </summary>
 public sealed partial class WindowPickerWindow : Window
 {
+    private const int CornerRadiusDip = 8;
     private readonly TaskCompletionSource<nint?> _result = new();
     private bool _completed;
+    private bool _layoutApplied;
 
     private WindowPickerWindow()
     {
         InitializeComponent();
         ConfigurePresenter();
-        CenterOnPrimaryDisplay(520, 640);
+        Activated += OnActivated;
 
         var ownHwnd = WindowNative.GetWindowHandle(this);
         WindowList.ItemsSource = WindowEnumerator.GetWindows(ownHwnd);
@@ -43,16 +45,22 @@ public sealed partial class WindowPickerWindow : Window
 
     private void OnCancel(object sender, RoutedEventArgs e) => Complete(null);
 
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated || _layoutApplied)
+        {
+            return;
+        }
+
+        _layoutApplied = true;
+        CenterOnPrimaryDisplay(520, 640);
+    }
+
     private void ConfigurePresenter()
     {
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.IsResizable = false;
-        }
+        var presenter = OverlappedPresenter.CreateForContextMenu();
+        presenter.IsAlwaysOnTop = true;
+        AppWindow.SetPresenter(presenter);
 
         AppWindow.IsShownInSwitchers = false;
     }
@@ -71,6 +79,15 @@ public sealed partial class WindowPickerWindow : Window
         }
 
         AppWindow.Resize(new SizeInt32(w, h));
+        ApplyRoundedRegion(w, h, scale);
+    }
+
+    private void ApplyRoundedRegion(int width, int height, double scale)
+    {
+        var hwnd = WindowNative.GetWindowHandle(this);
+        var radius = (int)Math.Round(CornerRadiusDip * scale);
+        var region = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
+        SetWindowRgn(hwnd, region, true);
     }
 
     private double GetScale()
@@ -83,6 +100,12 @@ public sealed partial class WindowPickerWindow : Window
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hwnd);
 
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowRgn(nint hWnd, nint hRgn, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] bool bRedraw);
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern nint CreateRoundRectRgn(int x1, int y1, int x2, int y2, int cx, int cy);
+
     private void Complete(nint? hwnd)
     {
         if (_completed)
@@ -91,6 +114,7 @@ public sealed partial class WindowPickerWindow : Window
         }
 
         _completed = true;
+        Activated -= OnActivated;
         _result.TrySetResult(hwnd);
         Close();
     }

@@ -8,15 +8,12 @@
         <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
 
-    <!--  A single rounded-square card. The window region is clipped to the same rounded
-          square (see code-behind) so the card fills the window edge-to-edge with no
-          mismatched "box in a box" frame.  -->
+    <!--  A single popup card. The window region is clipped to the same rounded shape
+          (see code-behind) so the card fills the window edge-to-edge.  -->
     <Border
         x:Name="RootBorder"
-        Background="Transparent"
-        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-        BorderThickness="3"
-        CornerRadius="20">
+       BorderThickness="0"
+        CornerRadius="8">
         <TextBlock
             x:Name="CountText"
             HorizontalAlignment="Center"

@@ -9,16 +9,16 @@ using WinRT.Interop;
 namespace TinyClips.App;
 
 /// <summary>
-/// A borderless, always-on-top square countdown card shown before a capture begins. Counts down
+/// A borderless, always-on-top countdown card shown before a capture begins. Counts down
 /// from the requested number of seconds and completes once it reaches zero. The window is
-/// clipped to a rounded square (matching the card) and excluded from screen capture so it never
+/// clipped to a rounded shape (matching the card) and excluded from screen capture so it never
 /// appears in a recording, and it hides itself before the countdown task completes so recording
 /// starts on a clean frame.
 /// </summary>
 public sealed partial class CountdownWindow : Window
 {
     private const int SizeDip = 132;
-    private const int CornerRadiusDip = 20;
+    private const int CornerRadiusDip = 8;
     private const uint WdaExcludeFromCapture = 0x11;
 
     private readonly DispatcherQueueTimer _timer;
@@ -75,14 +75,9 @@ public sealed partial class CountdownWindow : Window
 
     private void ConfigurePresenter()
     {
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.IsResizable = false;
-        }
+        var presenter = OverlappedPresenter.CreateForContextMenu();
+        presenter.IsAlwaysOnTop = true;
+        AppWindow.SetPresenter(presenter);
 
         AppWindow.IsShownInSwitchers = false;
     }

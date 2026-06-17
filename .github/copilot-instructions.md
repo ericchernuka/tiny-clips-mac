@@ -4,6 +4,8 @@ TinyClips is now a cross-platform repository with:
 - macOS app in `mac/` (SwiftUI + AppKit, Xcode project)
 - Windows app in `windows/` (WinUI 3 + Windows App SDK, .NET solution)
 
+If i ask a question or need somethign and I don't specify windows or mac or both ask me.
+
 Use this file for repo-wide rules and platform selection. Keep behavior platform-aware and avoid cross-app assumptions.
 
 ## Start Here
