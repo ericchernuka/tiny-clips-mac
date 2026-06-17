@@ -3,7 +3,7 @@ using NAudio.CoreAudioApi;
 namespace TinyClips.Core.Services;
 
 /// <summary>A capturable audio input device (microphone).</summary>
-public readonly record struct AudioInputDevice(string Id, string Name);
+public sealed record AudioInputDevice(string Id, string Name);
 
 /// <summary>Enumerates microphone (capture) devices for the settings UI.</summary>
 public interface IAudioDeviceService

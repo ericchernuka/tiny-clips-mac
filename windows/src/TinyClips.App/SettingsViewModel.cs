@@ -144,7 +144,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public System.Collections.ObjectModel.ObservableCollection<AudioInputDevice> Microphones { get; } = new();
 
     [ObservableProperty]
-    private AudioInputDevice _selectedMicrophone;
+    private AudioInputDevice? _selectedMicrophone;
 
     [ObservableProperty]
     private double _videoRecordingTimeLimitMinutes;
@@ -303,14 +303,17 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordAudio = _settings.RecordAudio;
             RecordMicrophone = _settings.RecordMicrophone;
 
+            var savedMicId = _settings.SelectedMicrophoneId ?? string.Empty;
+            var microphones = _audioDevices.GetMicrophones();
+
+            SelectedMicrophone = null;
             Microphones.Clear();
-            foreach (var mic in _audioDevices.GetMicrophones())
+            foreach (var mic in microphones)
             {
                 Microphones.Add(mic);
             }
 
-            var savedMicId = _settings.SelectedMicrophoneId ?? string.Empty;
-            SelectedMicrophone = Microphones.FirstOrDefault(m => m.Id == savedMicId, Microphones[0]);
+            SelectedMicrophone = Microphones.FirstOrDefault(m => m.Id == savedMicId) ?? Microphones[0];
 
             VideoRecordingTimeLimitMinutes = _settings.VideoRecordingTimeLimitMinutes;
             VideoCountdownEnabled = _settings.VideoCountdownEnabled;
@@ -451,8 +454,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnRecordMicrophoneChanged(bool value) => Persist(() => _settings.RecordMicrophone = value);
 
-    partial void OnSelectedMicrophoneChanged(AudioInputDevice value) =>
-        Persist(() => _settings.SelectedMicrophoneId = value.Id ?? string.Empty);
+    partial void OnSelectedMicrophoneChanged(AudioInputDevice? value) =>
+        Persist(() => _settings.SelectedMicrophoneId = value?.Id ?? string.Empty);
 
     partial void OnVideoRecordingTimeLimitMinutesChanged(double value) =>
         Persist(() => _settings.VideoRecordingTimeLimitMinutes = (int)Math.Round(value));
