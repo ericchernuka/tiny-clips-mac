@@ -1,94 +1,79 @@
-# TinyClips — Project Guidelines
+# TinyClips - Agent Instructions
 
-TinyClips is a macOS menu bar app for screen capture (screenshots, video, GIF). It targets **macOS 15.0+**, uses **Swift 5** with an Xcode project (no Package.swift), and has **Sparkle** as its only dependency (via SPM) for direct distribution builds.
+TinyClips is now a cross-platform repository with:
+- macOS app in `mac/` (SwiftUI + AppKit, Xcode project)
+- Windows app in `windows/` (WinUI 3 + Windows App SDK, .NET solution)
 
-Two app variants share one codebase:
-- **`TinyClips`** — Direct distribution (non-sandboxed, Sparkle-enabled)
-- **`TinyClipsMAS`** — Mac App Store (sandboxed, no Sparkle, `APPSTORE` compilation condition)
+Use this file for repo-wide rules and platform selection. Keep behavior platform-aware and avoid cross-app assumptions.
 
-See `CONTRIBUTING.md` for full setup, project structure, and contribution workflow.
+## Start Here
 
-## Architecture
+- For mac architecture, capture flows, and contribution workflow, read [CONTRIBUTING.md](../CONTRIBUTING.md).
+- For Windows app status, structure, and commands, read [windows/README.md](../windows/README.md).
+- For deeper platform details, link to docs instead of re-embedding:
+  - [docs/retina-display-capture.md](../docs/retina-display-capture.md)
+  - [windows/docs/dpi-and-coordinates.md](../windows/docs/dpi-and-coordinates.md)
+  - [docs/app-store-variant-setup.md](../docs/app-store-variant-setup.md)
+  - [windows/packaging/README.md](../windows/packaging/README.md)
 
-- **Menu bar app** — SwiftUI `MenuBarExtra` + SwiftUI `Window` scenes (`"clips-manager"`, `"settings-window"`). No Dock icon by default (`LSUIElement = true`).
-- **Mixed SwiftUI + AppKit** — SwiftUI for menu bar, settings, Clips Manager; AppKit `NSWindow`/`NSPanel` subclasses for capture-time windows. AppKit windows host SwiftUI views via `NSHostingView`.
-- **`CaptureManager`** in `CaptureManager.swift` is the central coordinator owning recorders, writers, and all capture-time window lifecycles.
-- **Singleton services**: `CaptureSettings.shared`, `SaveService.shared`, `PermissionManager.shared`, `SparkleController.shared`, `StoreService.shared` (MAS only).
-- **Pro features** (MAS): gate on `StoreService.shared.isPro`. `StoreService` uses StoreKit 2 with `ProPlan` enum (monthly/yearly/lifetime). Guard pro UI with `#if APPSTORE`.
+## Platform Routing
 
-## Code Style
+- If a request touches only `mac/**`, follow mac conventions and build mac schemes.
+- If a request touches only `windows/**`, follow WinUI conventions and build/test Windows projects.
+- If a request touches both, validate both platforms before finishing.
 
-- `ObservableObject` / `@Published` / `@StateObject` — **not** `@Observable` (Observation framework).
-- `@AppStorage` for all user preferences (see `mac/TinyClips/Models/CaptureSettings.swift`).
-- `@MainActor` on all UI-facing classes. `@unchecked Sendable` + `DispatchQueue` for off-main-thread capture classes. No actors or `@Sendable` closures.
-- `// MARK: -` comments for section organization within files.
-- SwiftUI views inside window files as `private struct`.
-- `popover(item:)` over `popover(isPresented:)` for data-dependent popovers.
-- `#if canImport(Sparkle)` to guard Sparkle imports. `#if APPSTORE` for MAS-specific behavior.
-- Closures/callbacks for inter-component communication — no `NotificationCenter` posting.
-- `withCheckedContinuation` / `withCheckedThrowingContinuation` to bridge callback APIs to async.
-- Single `CaptureError` enum conforming to `LocalizedError`; surface via `SaveService.shared.showError()`.
+Do not mix platform-specific implementation patterns:
+- mac: Swift/SwiftUI/AppKit, `#if APPSTORE`, `#if canImport(Sparkle)`
+- windows: C#/XAML/WinUI 3, `TinyClipsStoreBuild` MSBuild property for Store flavor
 
-## Build and Test
+## Build and Validate
+
+### macOS (always validate both schemes for mac changes)
 
 ```bash
-# Build both variants (CI, no signing) — always validate BOTH schemes
 xcodebuild build -project mac/TinyClips.xcodeproj -scheme TinyClips -configuration Debug \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project mac/TinyClips.xcodeproj -scheme TinyClipsMAS -configuration Debug \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 
-- No test target exists.
-- CI (`.github/workflows/build.yml`) runs both scheme builds on PRs to `main`/`develop`.
-- **Agent sandbox caveat**: if `xcodebuild` fails with `Operation not permitted` or SwiftPM write errors (e.g., `sparkle.dia`), rerun unsandboxed.
+- mac has no test target.
+- If sandbox blocks `xcodebuild` (for example `Operation not permitted` or SwiftPM write errors), rerun unsandboxed.
 
-## Conventions
+### Windows (required for `windows/**` changes)
+
+```powershell
+dotnet restore windows/TinyClips.Windows.slnx
+dotnet build windows/src/TinyClips.App/TinyClips.App.csproj -c Debug -p:Platform=x64
+dotnet test windows/tests/TinyClips.Core.Tests/TinyClips.Core.Tests.csproj -c Debug
+```
+
+- WinUI 3 does not support `AnyCPU`; use `-p:Platform=x64` or `-p:Platform=ARM64`.
+
+## Critical Conventions
+
+### macOS
+
+- Keep MAS-only logic inside `#if APPSTORE`.
+- Never include Sparkle in MAS builds; guard Sparkle usage with `#if canImport(Sparkle)`.
+- Use `ObservableObject` / `@Published` / `@StateObject` and `@AppStorage` patterns used by existing code.
+- Follow targeted instruction files when they apply:
+  - `.github/instructions/capture-windows.instructions.md`
+  - `.github/instructions/mas-storekit.instructions.md`
 
 ### Windows
-- **SwiftUI `Window` scenes** for long-lived windows (`clips-manager`, `settings-window`). **AppKit subclasses** for capture-time panels.
-- Open scene windows via `openWindow(id:)`, then activate + bring to front with dual-pass (immediate + 0.1s delay to escape menu tracking timing).
-- For capture-time window/panel conventions (callback guards, floating panel recipe, SwiftUI hosting, keyboard interactivity, lifecycle), see `.github/instructions/capture-windows.instructions.md` — auto-applied to `mac/TinyClips/Views/*Panel.swift` and `*Window.swift`.
-- For `ProcessingIndicatorWindow` and similar floating panels:
-  - Do not combine `NSWindowCollectionBehaviorCanJoinAllSpaces` with `NSWindowCollectionBehaviorMoveToActiveSpace` (AppKit asserts and crashes).
-  - Avoid calling `layoutSubtreeIfNeeded()` from `show()` or while AppKit/SwiftUI is already in a layout pass; this can trigger layout recursion warnings and future breakage.
 
-### Capture Flows
-Three capture types (screenshot, video, GIF) follow: permission → optional picker → optional region/screen selection → capture/record → optional editor/trimmer → save. Editor/trimmer windows open **after** recording resources are released. See `CONTRIBUTING.md` for detailed flow diagrams.
+- Keep UI app concerns in `windows/src/TinyClips.App` and reusable/domain logic in `windows/src/TinyClips.Core`.
+- Follow DPI-safe coordinate handling from [windows/docs/dpi-and-coordinates.md](../windows/docs/dpi-and-coordinates.md).
+- Preserve tray-first behavior (no main window at startup) unless explicitly requested.
+- Keep global hotkey defaults aligned with Windows conventions documented in [windows/README.md](../windows/README.md).
 
-- Start recording controls (`StartRecordingPanel`):
-  - Show the mouse-click visuals toggle only when the user has Pro access.
-  - For non-Pro users, hide the toggle entirely (do not show a disabled control in this panel).
+## PR Checklist
 
-### Accessibility
-Treat accessibility as a release gate. Add `.accessibilityLabel`/`.accessibilityHint`/`.accessibilityValue` for icon-only buttons, custom controls, and stateful UI. Ensure keyboard alternatives. Validate on both schemes with VoiceOver. See `CONTRIBUTING.md` for full guidelines.
-
-### File Naming & Save
-Output: `TinyClips yyyy-MM-dd 'at' HH.mm.ss.{ext}`. Trimmed files get ` (trimmed)` suffix. Cancelled edits clean up temp files. Post-save notifications use `UserNotifications` framework.
-
-### Keyboard Shortcuts
-Screenshot `⌃⌥⌘5`, Video `⌃⌥⌘6`, GIF `⌃⌥⌘7`, Stop `⌘.`. Picker: `R`/`S`/`W`/`Esc`. Registered via Carbon `RegisterEventHotKey` in `HotKeyManager`. Custom key recording via `ShortcutRecorderField`.
-
-### PR Checklist
-- Both `TinyClips` and `TinyClipsMAS` schemes must build.
-- Update `CHANGELOG.md` (Added/Improved/Fixed).
-- Guard Sparkle with `#if canImport(Sparkle)` — never link to MAS target.
-- Verify accessibility with VoiceOver + keyboard on critical paths.
-
-## Documentation Reference
-
-| Doc | Topic |
-|-----|-------|
-| `CONTRIBUTING.md` | Setup, project structure, architecture, code style, contribution workflow |
-| `docs/sparkle-setup.md` | Adding Sparkle dependency for direct distribution |
-| `docs/app-store-variant-setup.md` | MAS target Xcode wiring, entitlements, sandbox |
-| `docs/subscription-and-clips-setup.md` | StoreKit setup, Pro gating, Uploadcare integration |
-| `docs/retina-display-capture.md` | Point vs pixel coordinates, `scalesToFit` strategy |
-| `docs/app-store-connect-metadata.md` | App Store Connect listing metadata |
-
-## Security
-
-- Direct target: hardened runtime, audio input entitlement, disabled library validation (Sparkle). **Not sandboxed.**
-- MAS target: sandboxed, Pictures/Movies read-write, audio input.
-- Screen recording permission: dual-check — `CGPreflightScreenCaptureAccess()` then `SCShareableContent` query (macOS 15+ false-negative fallback).
-- Microphone: `AVCaptureDevice.requestAccess(for: .audio)` at recording time.
+- Build/test only what changed at minimum, and both platforms when cross-platform files are touched.
+- Update changelog for the affected platform:
+  - root [CHANGELOG.md](../CHANGELOG.md) for mac/shared changes
+  - [windows/CHANGELOG.md](../windows/CHANGELOG.md) for Windows app changes
+- Preserve accessibility quality gates:
+  - mac: VoiceOver + keyboard for affected flows
+  - windows: keyboard navigation and accessible names for new/changed controls
