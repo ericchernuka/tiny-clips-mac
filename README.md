@@ -195,3 +195,15 @@ MIT License. See [LICENSE](LICENSE) for details.
 Contributions are welcome! Please feel free to submit a [Pull Request](https://github.com/jamesmontemagno/tiny-clips/pulls).
 
 Found a bug or have a feature request? [Open an issue](https://github.com/jamesmontemagno/tiny-clips/issues/new).
+
+## Release Tagging Helpers
+
+Create both release tags in one step (`vX.Y.Z` for macOS and `vX.Y.Z-windows` for Windows):
+
+```powershell
+pwsh -File scripts/create-release-tags.ps1 -Version v1.0.8 -Push
+```
+
+```bash
+scripts/create-release-tags.sh v1.0.8 --push
+```
