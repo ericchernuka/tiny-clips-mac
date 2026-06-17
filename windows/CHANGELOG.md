@@ -6,6 +6,10 @@ own `CHANGELOG.md` at the repository root.
 ## [Unreleased]
 
 ### Fixed
+- **winget dependency installation no longer forces user scope** — removed `Scope: user` from the
+  installer manifest generated for winget submissions. The app MSIX still installs per-user, but
+  the .NET Desktop Runtime and Windows App Runtime dependency packages use machine/unknown-scope
+  installers; forcing user scope made winget validation reject them with "No suitable installer found."
 - **Recording overlays now appear immediately after countdown for video/GIF** — the red capture border and stop controls are shown before the recorder start call, so recording UI no longer appears late after capture has already begun.
 - **"Show in Explorer after save" is now respected in all finalize paths** — post-trim and direct video/GIF finalization only reveal files in Explorer when the setting is enabled.
 - **Stop panel is now visible during countdown but safely disabled** — for video/GIF captures with countdown enabled, the recording panel appears immediately with Stop disabled, then enables once recording actually starts.
@@ -77,8 +81,7 @@ own `CHANGELOG.md` at the repository root.
   AppxManifest. That runtime is missing on winget's clean, network-isolated validation VMs, so
   installation failed there (it succeeded locally only because the runtime was already present).
   The winget installer manifest now declares `Microsoft.WindowsAppRuntime.1.8` under
-  `Dependencies.PackageDependencies`, so winget installs the runtime first on any clean machine.
->>>>>>> origin/main
+  `  Dependencies.PackageDependencies`, so winget installs the runtime first on any clean machine.
 - **Installed MSIX no longer crashes on startup** — the winget/MSIX build was switched to
   self-contained packaging to clear winget validation, but the resulting package shipped an
   AppxManifest with **no** WinRT activation registrations. On a clean machine (without the
