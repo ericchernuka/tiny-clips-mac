@@ -40,9 +40,12 @@ video (MP4), and animated GIFs of a selected screen region — on **macOS** and 
 **Homebrew**
 
 ```bash
-brew tap jamesmontemagno/tiny-clips
+brew tap jamesmontemagno/tiny-clips https://github.com/jamesmontemagno/tiny-clips
+brew trust jamesmontemagno/tiny-clips 2>/dev/null || true
 brew install --cask tiny-clips
 ```
+
+The `brew trust` line is only needed on Homebrew versions that require trust for non-official taps; it safely no-ops elsewhere.
 
 **Download**
 
