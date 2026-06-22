@@ -430,21 +430,21 @@ private struct StartRecordingView: View {
                         .strokeBorder(.primary.opacity(0.15), lineWidth: 0.5)
                 }
         }
+    }
 
-        private func startPanelMenuLabel(icon: String, title: String) -> some View {
-                HStack(spacing: 4) {
-                    Image(systemName: icon)
-                        .font(.system(size: 11))
-                    Text(title)
-                        .font(.system(size: 12, weight: .medium))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9))
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(.primary.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+    private func startPanelMenuLabel(icon: String, title: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9))
         }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.primary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
