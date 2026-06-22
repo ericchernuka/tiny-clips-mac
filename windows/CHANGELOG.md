@@ -5,6 +5,12 @@ own `CHANGELOG.md` at the repository root.
 
 ## [Unreleased]
 
+### Improved
+- **Video/GIF recording now matches the macOS target-first setup flow** — after choosing Region,
+  Screen, or Window, Windows now shows a pre-record panel before countdown. Video captures can pick
+  system audio, microphone on/off, the microphone device defaulting to Settings, mouse-click visuals,
+  and the recording time limit; GIF captures keep the no-audio setup with mouse-click visuals.
+
 ### Fixed
 - **Settings now opens immediately while microphones load in the background** — microphone device enumeration is now asynchronous, and the microphone picker shows a loading spinner until devices are ready instead of blocking the settings window during startup.
 - **Picker overlays now match the tray popup shell style** — capture, screen, window, and countdown picker windows now use the same context-menu presenter behavior, 8px rounded window clipping, and filled popup surface treatment as the tray popup, making corners/backgrounds visually consistent.

@@ -345,6 +345,19 @@ public partial class App : Application
                 return;
             }
 
+            RecordingSetupResult? recordingSetup = null;
+            if (type is CaptureType.Video or CaptureType.Gif)
+            {
+                recordingSetup = await ShowRecordingSetupAsync(type, selection, settings);
+                if (recordingSetup is null)
+                {
+                    CloseRecordingRegionIndicator();
+                    return;
+                }
+
+                ApplyRecordingSetup(type, recordingSetup, settings);
+            }
+
             var showDisabledStopDuringCountdown = type is CaptureType.Video or CaptureType.Gif
                 && pick.CountdownEnabled
                 && pick.CountdownDuration > 0;
@@ -358,7 +371,9 @@ public partial class App : Application
             {
                 try
                 {
-                    if (selection.Region is { } region)
+                    var recordingRegionAlreadyShown = type is CaptureType.Video or CaptureType.Gif
+                        && _recordingRegionIndicator is not null;
+                    if (selection.Region is { } region && !recordingRegionAlreadyShown)
                     {
                         regionIndicator = new RegionIndicatorWindow();
                         regionIndicator.Show(ToVirtualDesktopRegion(selection.Target, region));
@@ -397,7 +412,7 @@ public partial class App : Application
                     {
                         ShowRecordingIndicator(CaptureType.Video, selection);
                     }
-                    await Services.GetRequiredService<IVideoRecordingService>().StartAsync(selection.Target, selection.Region, pick.VideoTimeLimitMinutes);
+                    await Services.GetRequiredService<IVideoRecordingService>().StartAsync(selection.Target, selection.Region, recordingSetup?.VideoTimeLimitMinutes);
                     ActivateRecordingIndicatorForStartedCapture();
                     UpdateRecordingState();
                     break;
@@ -415,6 +430,7 @@ public partial class App : Application
                     break;
             }
         }
+
         catch (Exception ex)
         {
             Debug.WriteLine($"Capture failed: {ex}");
@@ -423,6 +439,44 @@ public partial class App : Application
             _activeRecordingSelection = null;
             HideRecordingIndicatorIfNotRecording();
         }
+    }
+
+    private async Task<RecordingSetupResult?> ShowRecordingSetupAsync(CaptureType type, TargetSelection selection, ICaptureSettings settings)
+    {
+        PixelRect? region = null;
+        if (selection.Region is { } selectedRegion)
+        {
+            region = ToVirtualDesktopRegion(selection.Target, selectedRegion);
+            if (settings.ShowRegionIndicator)
+            {
+                ShowRecordingRegionIndicator(selection);
+            }
+        }
+
+        var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
+        var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
+        var result = await RecordingSetupWindow.RunAsync(type, settings, audioDevices, monitor, region);
+        if (result is null)
+        {
+            CloseRecordingRegionIndicator();
+        }
+
+        return result;
+    }
+
+    private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)
+    {
+        settings.SetShowMouseClickVisuals(setup.ShowMouseClicks, type);
+
+        if (type != CaptureType.Video)
+        {
+            return;
+        }
+
+        settings.RecordAudio = setup.RecordSystemAudio;
+        settings.RecordMicrophone = setup.RecordMicrophone;
+        settings.SelectedMicrophoneId = setup.SelectedMicrophoneId;
+        settings.VideoRecordingTimeLimitMinutes = setup.VideoTimeLimitMinutes;
     }
 
     private async Task<TargetSelection?> ResolveTargetAsync(CapturePickerMode mode)
@@ -734,15 +788,8 @@ public partial class App : Application
 
         var hotKeys = Services.GetRequiredService<IHotKeyService>();
         var settings = Services.GetRequiredService<ICaptureSettings>();
-        var showAudioControls = type == CaptureType.Video;
-        var window = new RecordingIndicatorWindow(
-            hotKeys.StopRecordingDisplayString,
-            showAudioControls,
-            settings.RecordMicrophone,
-            settings.RecordAudio);
+        var window = new RecordingIndicatorWindow(hotKeys.StopRecordingDisplayString);
         window.StopRequested = () => _ = StopActiveRecordingAsync();
-        window.MicrophoneToggled = on => settings.RecordMicrophone = on;
-        window.SystemAudioToggled = on => settings.RecordAudio = on;
         window.Closed += (_, _) =>
         {
             if (ReferenceEquals(_recordingIndicator, window))
