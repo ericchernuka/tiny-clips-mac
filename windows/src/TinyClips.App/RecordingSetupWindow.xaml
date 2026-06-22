@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="TinyClips.App.RecordingSetupWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid
+        x:Name="RootGrid"
+        Background="Transparent"
+        KeyDown="OnKeyDown"
+        PointerMoved="OnPointerMoved"
+        PointerPressed="OnPointerPressed"
+        PointerReleased="OnPointerReleased">
+        <Border
+            Padding="12,8"
+            Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource OverlayCornerRadius}">
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center">
+                <ToggleButton
+                    x:Name="SystemAudioToggle"
+                    Width="34"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="SetupSystemAudioButton"
+                    AutomationProperties.Name="System audio"
+                    Checked="OnSystemAudioToggled"
+                    Unchecked="OnSystemAudioToggled"
+                    ToolTipService.ToolTip="System audio">
+                    <FontIcon x:Name="SystemAudioIcon" FontSize="14" Glyph="&#xE767;" />
+                </ToggleButton>
+
+                <ToggleButton
+                    x:Name="MicrophoneToggle"
+                    Width="34"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="SetupMicrophoneButton"
+                    AutomationProperties.Name="Microphone"
+                    Checked="OnMicrophoneToggled"
+                    Unchecked="OnMicrophoneToggled"
+                    ToolTipService.ToolTip="Microphone">
+                    <Grid Width="18" Height="18">
+                        <FontIcon
+                            x:Name="MicrophoneIcon"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Glyph="&#xE720;" />
+                        <Line
+                            x:Name="MicrophoneSlash"
+                            X1="3"
+                            X2="15"
+                            Y1="15"
+                            Y2="3"
+                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                            StrokeEndLineCap="Round"
+                            StrokeThickness="2"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </ToggleButton>
+
+                <Grid x:Name="MicrophonePickerHost" MinWidth="210">
+                    <ComboBox
+                        x:Name="MicrophoneCombo"
+                        MinWidth="210"
+                        AutomationProperties.AutomationId="SetupMicrophoneDeviceCombo"
+                        AutomationProperties.Name="Microphone device"
+                        DisplayMemberPath="Name"
+                        SelectionChanged="OnMicrophoneSelectionChanged" />
+                    <StackPanel
+                        x:Name="MicrophoneLoadingPanel"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                        <ProgressRing
+                            Width="20"
+                            Height="20"
+                            IsActive="True" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="Loading..." />
+                    </StackPanel>
+                </Grid>
+
+                <ToggleButton
+                    x:Name="MouseClicksToggle"
+                    Width="34"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="SetupMouseClicksButton"
+                    AutomationProperties.Name="Mouse click visuals"
+                    Checked="OnMouseClicksToggled"
+                    Unchecked="OnMouseClicksToggled"
+                    ToolTipService.ToolTip="Mouse click visuals">
+                    <FontIcon
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="16"
+                        Glyph="&#xE962;" />
+                </ToggleButton>
+
+                <DropDownButton
+                    x:Name="LimitButton"
+                    AutomationProperties.AutomationId="SetupTimeLimitButton"
+                    AutomationProperties.Name="Recording time limit"
+                    ToolTipService.ToolTip="Recording time limit">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE823;" />
+                        <TextBlock x:Name="LimitLabel" Text="No limit" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="LimitFlyout" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+
+                <Rectangle
+                    Width="1"
+                    Height="24"
+                    Margin="2,0"
+                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <Button
+                    x:Name="StartButton"
+                    AutomationProperties.AutomationId="StartRecordingButton"
+                    AutomationProperties.Name="Start recording"
+                    Click="OnStart"
+                    Style="{StaticResource AccentButtonStyle}"
+                    ToolTipService.ToolTip="Start recording (Enter)">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse
+                            Width="10"
+                            Height="10"
+                            Fill="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <TextBlock Text="Record" />
+                    </StackPanel>
+                </Button>
+
+                <Button
+                    x:Name="CancelButton"
+                    Width="34"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="CancelRecordingSetupButton"
+                    AutomationProperties.Name="Cancel recording setup"
+                    Click="OnCancel"
+                    ToolTipService.ToolTip="Cancel (Esc)">
+                    <FontIcon FontFamily="Segoe Fluent Icons" FontSize="12" Glyph="&#xE711;" />
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
