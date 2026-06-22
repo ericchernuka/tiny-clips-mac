@@ -66,6 +66,10 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
     var onWebcamError: ((String) -> Void)?
 
     func start(outputURL: URL, selectedWebcamID: String) async throws {
+        guard await PermissionManager.shared.requestCameraPermission() else {
+            throw CaptureError.webcamPermissionDenied
+        }
+
         let device: AVCaptureDevice
         if let selected = WebcamDeviceCatalog.device(for: selectedWebcamID) {
             device = selected

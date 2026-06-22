@@ -16,6 +16,12 @@ public sealed class CaptureSettingsTests
         Assert.Equal(100, settings.ScreenshotScale);
         Assert.Equal("TinyClips {date} at {time}", settings.FileNameTemplate);
         Assert.True(settings.ShowTrimmer);
+        Assert.False(settings.WebcamEnabled);
+        Assert.Equal(string.Empty, settings.SelectedWebcamId);
+        Assert.Equal(WebcamShape.Circle, settings.WebcamShape);
+        Assert.Equal(WebcamSizePreset.Medium, settings.WebcamSizePreset);
+        Assert.Equal(WebcamCornerPosition.BottomRight, settings.WebcamCornerPosition);
+        Assert.Null(settings.WebcamCornerRadius);
         Assert.Equal(MultiMonitorCaptureMode.Picker, settings.MultiMonitorCaptureMode);
     }
 
@@ -29,12 +35,50 @@ public sealed class CaptureSettingsTests
         settings.VideoFrameRate = 60;
         settings.FileNameTemplate = "Custom {date}";
         settings.MultiMonitorCaptureMode = MultiMonitorCaptureMode.UnderCursor;
+        settings.WebcamEnabled = true;
+        settings.SelectedWebcamId = "webcam-1";
+        settings.WebcamShape = WebcamShape.RoundedRectangle;
+        settings.WebcamSizePreset = WebcamSizePreset.Large;
+        settings.WebcamCornerPosition = WebcamCornerPosition.TopLeft;
+        settings.WebcamCornerRadius = 16.0;
 
         Assert.False(settings.CopyScreenshotToClipboard);
         Assert.Equal(24.5, settings.GifFrameRate);
         Assert.Equal(60, settings.VideoFrameRate);
         Assert.Equal("Custom {date}", settings.FileNameTemplate);
         Assert.Equal(MultiMonitorCaptureMode.UnderCursor, settings.MultiMonitorCaptureMode);
+        Assert.True(settings.WebcamEnabled);
+        Assert.Equal("webcam-1", settings.SelectedWebcamId);
+        Assert.Equal(WebcamShape.RoundedRectangle, settings.WebcamShape);
+        Assert.Equal(WebcamSizePreset.Large, settings.WebcamSizePreset);
+        Assert.Equal(WebcamCornerPosition.TopLeft, settings.WebcamCornerPosition);
+        Assert.Equal(16.0, settings.WebcamCornerRadius);
+    }
+
+    [Fact]
+    public void WebcamSettings_ParsePersistedStringsAndCornerRadiusSentinel()
+    {
+        var settingsService = new TestSettingsService();
+        settingsService.Set("webcamShape", "rectangle");
+        settingsService.Set("webcamSize", "small");
+        settingsService.Set("webcamCorner", "topRight");
+        settingsService.Set("webcamCornerRadius", -1.0);
+        var settings = new CaptureSettings(settingsService);
+
+        Assert.Equal(WebcamShape.Rectangle, settings.WebcamShape);
+        Assert.Equal(WebcamSizePreset.Small, settings.WebcamSizePreset);
+        Assert.Equal(WebcamCornerPosition.TopRight, settings.WebcamCornerPosition);
+        Assert.Null(settings.WebcamCornerRadius);
+
+        settings.WebcamShape = WebcamShape.Circle;
+        settings.WebcamSizePreset = WebcamSizePreset.Medium;
+        settings.WebcamCornerPosition = WebcamCornerPosition.BottomLeft;
+        settings.WebcamCornerRadius = null;
+
+        Assert.Equal(WebcamShape.Circle, settings.WebcamShape);
+        Assert.Equal(WebcamSizePreset.Medium, settings.WebcamSizePreset);
+        Assert.Equal(WebcamCornerPosition.BottomLeft, settings.WebcamCornerPosition);
+        Assert.Null(settings.WebcamCornerRadius);
     }
 
     [Fact]

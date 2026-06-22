@@ -391,11 +391,6 @@ public partial class App : Application
                     break;
 
                 case CaptureType.Video:
-                    if (settings.WebcamEnabled && !settings.RecordMicrophone)
-                    {
-                        settings.RecordMicrophone = true;
-                    }
-
                     _activeRecordingSelection = selection;
                     ShowRecordingRegionIndicator(selection);
                     if (!showDisabledStopDuringCountdown)
