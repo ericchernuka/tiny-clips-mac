@@ -210,3 +210,9 @@ pwsh -File scripts/create-release-tags.ps1 v1.0.8 -Mac -Windows -Push
 ```bash
 scripts/create-release-tags.sh v1.0.8 --mac --windows --push
 ```
+
+Copilot extension tool is also available in this repo:
+
+```text
+release_tagging_create_tags version=v1.0.8 mac=true windows=true push=true
+```
