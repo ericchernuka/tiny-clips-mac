@@ -27,7 +27,7 @@ public sealed record RecordingSetupResult(
 /// </summary>
 public sealed partial class RecordingSetupWindow : Window
 {
-    private static readonly int[] LimitOptions = { 0, 1, 3, 5, 10, 15, 30, 45, 60 };
+    private static readonly int[] LimitOptions = { 0, 1, 2, 3, 5, 10, 15, 30, 45, 60 };
 
     private const int TopOffsetDip = 24;
     private const int RegionOutsideOffsetDip = 12;
@@ -69,7 +69,15 @@ public sealed partial class RecordingSetupWindow : Window
 
         MicrophoneCombo.ItemsSource = _microphones;
         _microphones.Add(new AudioInputDevice(string.Empty, "System default"));
-        MicrophoneCombo.SelectedItem = _microphones[0];
+        _suppressEvents = true;
+        try
+        {
+            MicrophoneCombo.SelectedItem = _microphones[0];
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
 
         ConfigurePresenter();
         ConfigureForCaptureType();
@@ -207,12 +215,12 @@ public sealed partial class RecordingSetupWindow : Window
         RootGrid.UpdateLayout();
         RootGrid.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
 
-        var width = (int)Math.Ceiling(RootGrid.DesiredSize.Width * scale);
-        var height = (int)Math.Ceiling(RootGrid.DesiredSize.Height * scale);
+        var width = (int)Math.Ceiling(RootGrid.DesiredSize.Width * scale) + 2;
+        var height = (int)Math.Ceiling(RootGrid.DesiredSize.Height * scale) + 2;
         var topOffset = (int)Math.Round(TopOffsetDip * scale);
         var regionOutsideOffset = (int)Math.Round(RegionOutsideOffsetDip * scale);
 
-        AppWindow.Resize(new SizeInt32(width + 2, height + 2));
+        AppWindow.Resize(new SizeInt32(width, height));
 
         if (GetWorkArea(monitor) is not { } work)
         {

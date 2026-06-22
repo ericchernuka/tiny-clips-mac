@@ -447,21 +447,27 @@ public partial class App : Application
         if (selection.Region is { } selectedRegion)
         {
             region = ToVirtualDesktopRegion(selection.Target, selectedRegion);
-            if (settings.ShowRegionIndicator)
+            RegionIndicatorWindow? setupRegionIndicator = null;
+            try
             {
-                ShowRecordingRegionIndicator(selection);
+                if (settings.ShowRegionIndicator)
+                {
+                    setupRegionIndicator = ShowRegionIndicator(selection);
+                }
+
+                var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
+                var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
+                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, monitor, region);
+            }
+            finally
+            {
+                setupRegionIndicator?.ClosePanel();
             }
         }
 
-        var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
-        var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
-        var result = await RecordingSetupWindow.RunAsync(type, settings, audioDevices, monitor, region);
-        if (result is null)
-        {
-            CloseRecordingRegionIndicator();
-        }
-
-        return result;
+        var setupMonitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
+        var setupAudioDevices = Services.GetRequiredService<IAudioDeviceService>();
+        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupMonitor, region);
     }
 
     private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)
@@ -746,13 +752,13 @@ public partial class App : Application
 
     private void ShowRecordingRegionIndicator(TargetSelection selection)
     {
-        if (selection.Region is not { } region)
+        if (selection.Region is null)
         {
             return;
         }
 
         CloseRecordingRegionIndicator();
-        var indicator = new RegionIndicatorWindow();
+        var indicator = ShowRegionIndicator(selection)!;
         _recordingRegionIndicator = indicator;
         indicator.Closed += (_, _) =>
         {
@@ -761,7 +767,18 @@ public partial class App : Application
                 _recordingRegionIndicator = null;
             }
         };
+    }
+
+    private RegionIndicatorWindow? ShowRegionIndicator(TargetSelection selection)
+    {
+        if (selection.Region is not { } region)
+        {
+            return null;
+        }
+
+        var indicator = new RegionIndicatorWindow();
         indicator.Show(ToVirtualDesktopRegion(selection.Target, region));
+        return indicator;
     }
 
     private void CloseRecordingRegionIndicatorIfNotRecording()
