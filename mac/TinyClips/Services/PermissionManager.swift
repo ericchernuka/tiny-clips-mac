@@ -42,6 +42,24 @@ class PermissionManager: ObservableObject {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
+    func requestCameraPermission() async -> Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        switch status {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .video)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    func cameraPermissionGranted() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+    }
+
     func requestNotificationPermission() async -> Bool {
         let center = UNUserNotificationCenter.current()
         let status = await notificationPermissionStatus()
@@ -80,6 +98,11 @@ class PermissionManager: ObservableObject {
 
     func openMicrophoneSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openCameraSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") else { return }
         NSWorkspace.shared.open(url)
     }
 

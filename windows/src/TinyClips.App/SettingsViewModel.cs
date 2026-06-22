@@ -26,6 +26,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IHotKeyService _hotKeys;
     private readonly ILaunchAtLoginService _launchAtLoginService;
     private readonly IAudioDeviceService _audioDevices;
+    private readonly IWebcamDeviceEnumerator _webcamDevices;
     private readonly IClipStorageService _storage;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _loading;
@@ -42,16 +43,24 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Raised when the selected theme changes so the window can re-apply it live.</summary>
     public event Action? ThemeChanged;
 
-    public SettingsViewModel(ICaptureSettings settings, IHotKeyService hotKeys, ILaunchAtLoginService launchAtLogin, IAudioDeviceService audioDevices, IClipStorageService storage)
+    public SettingsViewModel(
+        ICaptureSettings settings,
+        IHotKeyService hotKeys,
+        ILaunchAtLoginService launchAtLogin,
+        IAudioDeviceService audioDevices,
+        IWebcamDeviceEnumerator webcamDevices,
+        IClipStorageService storage)
     {
         _settings = settings;
         _hotKeys = hotKeys;
         _launchAtLoginService = launchAtLogin;
         _audioDevices = audioDevices;
+        _webcamDevices = webcamDevices;
         _storage = storage;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         Load();
         _ = LoadMicrophonesAsync();
+        _ = LoadWebcamsAsync();
 
         // Reconcile the toggle with the OS-owned launch-at-login (StartupTask) state.
         _ = RefreshLaunchAtLoginAsync();
@@ -168,6 +177,48 @@ public sealed partial class SettingsViewModel : ObservableObject
         : Microsoft.UI.Xaml.Visibility.Visible;
 
     public bool MicrophoneSelectorEnabled => RecordMicrophone && !IsMicrophonesLoading;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WebcamSettingsEnabled))]
+    [NotifyPropertyChangedFor(nameof(WebcamCornerRadiusEnabled))]
+    private bool _webcamEnabled;
+
+    /// <summary>Webcam devices for the picker (first entry is the system default).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<WebcamDeviceInfo> Webcams { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WebcamLoadingVisibility))]
+    [NotifyPropertyChangedFor(nameof(WebcamSelectorVisibility))]
+    [NotifyPropertyChangedFor(nameof(WebcamSettingsEnabled))]
+    private bool _isWebcamsLoading = true;
+
+    public Microsoft.UI.Xaml.Visibility WebcamLoadingVisibility => IsWebcamsLoading
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility WebcamSelectorVisibility => IsWebcamsLoading
+        ? Microsoft.UI.Xaml.Visibility.Collapsed
+        : Microsoft.UI.Xaml.Visibility.Visible;
+
+    public bool WebcamSettingsEnabled => WebcamEnabled && !IsWebcamsLoading;
+
+    [ObservableProperty]
+    private string _selectedWebcamId = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WebcamCornerRadiusEnabled))]
+    private int _webcamShapeIndex;
+
+    [ObservableProperty]
+    private int _webcamSizePresetIndex;
+
+    [ObservableProperty]
+    private int _webcamCornerPositionIndex;
+
+    [ObservableProperty]
+    private double _webcamCornerRadius = -1;
+
+    public bool WebcamCornerRadiusEnabled => WebcamSettingsEnabled && WebcamShapeIndex == 1;
 
     [ObservableProperty]
     private double _videoRecordingTimeLimitMinutes;
@@ -327,6 +378,28 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordMicrophone = _settings.RecordMicrophone;
 
             _savedMicrophoneId = _settings.SelectedMicrophoneId ?? string.Empty;
+            WebcamEnabled = _settings.WebcamEnabled;
+            SelectedWebcamId = _settings.SelectedWebcamId;
+            WebcamShapeIndex = _settings.WebcamShape switch
+            {
+                WebcamShape.Rectangle => 0,
+                WebcamShape.RoundedRectangle => 1,
+                _ => 2,
+            };
+            WebcamSizePresetIndex = _settings.WebcamSizePreset switch
+            {
+                WebcamSizePreset.Small => 0,
+                WebcamSizePreset.Large => 2,
+                _ => 1,
+            };
+            WebcamCornerPositionIndex = _settings.WebcamCornerPosition switch
+            {
+                WebcamCornerPosition.TopLeft => 0,
+                WebcamCornerPosition.TopRight => 1,
+                WebcamCornerPosition.BottomLeft => 2,
+                _ => 3,
+            };
+            WebcamCornerRadius = _settings.WebcamCornerRadius ?? -1;
 
             VideoRecordingTimeLimitMinutes = _settings.VideoRecordingTimeLimitMinutes;
             VideoCountdownEnabled = _settings.VideoCountdownEnabled;
@@ -361,6 +434,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         IsMicrophonesLoading = true;
         var microphones = await Task.Run(() => _audioDevices.GetMicrophones());
         await ApplyMicrophonesAsync(microphones);
+    }
+
+    private async Task LoadWebcamsAsync()
+    {
+        IsWebcamsLoading = true;
+        var webcams = await _webcamDevices.GetWebcamDevicesAsync();
+        await ApplyWebcamsAsync(webcams);
     }
 
     private async Task ApplyMicrophonesAsync(IReadOnlyList<AudioInputDevice> microphones)
@@ -417,6 +497,59 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             _loading = false;
             IsMicrophonesLoading = false;
+        }
+    }
+
+    private async Task ApplyWebcamsAsync(IReadOnlyList<WebcamDeviceInfo> webcams)
+    {
+        if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
+        {
+            ApplyWebcams(webcams);
+            return;
+        }
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    ApplyWebcams(webcams);
+                    completion.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }))
+        {
+            throw new InvalidOperationException("Unable to update webcam list on the UI thread.");
+        }
+
+        await completion.Task;
+    }
+
+    private void ApplyWebcams(IReadOnlyList<WebcamDeviceInfo> webcams)
+    {
+        _loading = true;
+        try
+        {
+            Webcams.Clear();
+            Webcams.Add(new WebcamDeviceInfo(string.Empty, "System default"));
+
+            foreach (var webcam in webcams)
+            {
+                Webcams.Add(webcam);
+            }
+
+            if (!Webcams.Any(device => device.Id == SelectedWebcamId))
+            {
+                SelectedWebcamId = Webcams[0].Id;
+            }
+        }
+        finally
+        {
+            _loading = false;
+            IsWebcamsLoading = false;
         }
     }
 
@@ -533,6 +666,35 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnSelectedMicrophoneChanged(AudioInputDevice? value) =>
         Persist(() => _settings.SelectedMicrophoneId = value?.Id ?? string.Empty);
+
+    partial void OnWebcamEnabledChanged(bool value) => Persist(() => _settings.WebcamEnabled = value);
+
+    partial void OnSelectedWebcamIdChanged(string value) => Persist(() => _settings.SelectedWebcamId = value);
+
+    partial void OnWebcamShapeIndexChanged(int value) => Persist(() => _settings.WebcamShape = value switch
+    {
+        0 => WebcamShape.Rectangle,
+        1 => WebcamShape.RoundedRectangle,
+        _ => WebcamShape.Circle,
+    });
+
+    partial void OnWebcamSizePresetIndexChanged(int value) => Persist(() => _settings.WebcamSizePreset = value switch
+    {
+        0 => WebcamSizePreset.Small,
+        2 => WebcamSizePreset.Large,
+        _ => WebcamSizePreset.Medium,
+    });
+
+    partial void OnWebcamCornerPositionIndexChanged(int value) => Persist(() => _settings.WebcamCornerPosition = value switch
+    {
+        0 => WebcamCornerPosition.TopLeft,
+        1 => WebcamCornerPosition.TopRight,
+        2 => WebcamCornerPosition.BottomLeft,
+        _ => WebcamCornerPosition.BottomRight,
+    });
+
+    partial void OnWebcamCornerRadiusChanged(double value) =>
+        Persist(() => _settings.WebcamCornerRadius = value < 0 ? null : value);
 
     partial void OnVideoRecordingTimeLimitMinutesChanged(double value) =>
         Persist(() => _settings.VideoRecordingTimeLimitMinutes = (int)Math.Round(value));

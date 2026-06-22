@@ -2,6 +2,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Channels;
 using TinyClips.Core.Models;
 using TinyClips.Core.Services;
+using Windows.Graphics.Imaging;
 using Windows.Media.Core;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
@@ -18,6 +19,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private readonly IMonitorService _monitors;
     private readonly IClipStorageService _storage;
     private readonly ICaptureSettings _settings;
+    private readonly IWebcamCaptureService _webcamCapture;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private ContinuousCaptureSession? _capture;
@@ -34,6 +36,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private int _clickOriginX;
     private int _clickOriginY;
     private BrandingOverlayCompositor? _branding;
+    private WebcamOverlayCompositor? _webcamOverlay;
+    private bool _webcamCaptureSubscribed;
 
     private AudioCaptureService? _audio;
     private AudioStreamDescriptor? _audioDescriptor;
@@ -43,11 +47,13 @@ public sealed class VideoRecordingService : IVideoRecordingService
     public VideoRecordingService(
         IMonitorService monitors,
         IClipStorageService storage,
-        ICaptureSettings settings)
+        ICaptureSettings settings,
+        IWebcamCaptureService webcamCapture)
     {
         _monitors = monitors;
         _storage = storage;
         _settings = settings;
+        _webcamCapture = webcamCapture;
     }
 
     public bool IsRecording { get; private set; }
@@ -86,6 +92,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
                 StartMouseClickOverlay(captureTarget, region);
                 _branding = _settings.ShowBrandingOverlay ? new BrandingOverlayCompositor() : null;
+                await StartWebcamOverlayAsync(cancellationToken).ConfigureAwait(false);
 
                 var width = _capture.OutputWidth;
                 var height = _capture.OutputHeight;
@@ -160,7 +167,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
             }
             catch
             {
-                CleanupFailedStart();
+                await CleanupFailedStartAsync().ConfigureAwait(false);
                 throw;
             }
         }
@@ -174,6 +181,14 @@ public sealed class VideoRecordingService : IVideoRecordingService
     {
         DrawClickOverlay(frame, pts);
         _branding?.Draw(frame.BgraPixels, frame.Width, frame.Height);
+
+        if (_webcamOverlay is not null &&
+            _webcamCapture.TryGetLatestFrame(out WebcamFrame? webcamFrame) &&
+            webcamFrame is not null)
+        {
+            _webcamOverlay.Draw(frame.BgraPixels, frame.Width, frame.Height, webcamFrame);
+        }
+
         _channel?.Writer.TryWrite(new TimestampedFrame(CreateBottomUpVideoBuffer(frame), pts));
     }
 
@@ -238,13 +253,14 @@ public sealed class VideoRecordingService : IVideoRecordingService
         return pixels;
     }
 
-    private void CleanupFailedStart()
+    private async Task CleanupFailedStartAsync()
     {
         _limitTimer?.Dispose();
         _limitTimer = null;
         _clickMonitor?.Dispose();
         _clickMonitor = null;
         _branding = null;
+        await StopWebcamOverlayAsync().ConfigureAwait(false);
         _capture?.Dispose();
         _capture = null;
         DisposeAudio();
@@ -269,6 +285,83 @@ public sealed class VideoRecordingService : IVideoRecordingService
         _outputPath = null;
         IsRecording = false;
     }
+
+    private async Task StartWebcamOverlayAsync(CancellationToken cancellationToken)
+    {
+        _webcamOverlay = null;
+        if (!_settings.WebcamEnabled)
+        {
+            return;
+        }
+
+        _webcamOverlay = new WebcamOverlayCompositor(
+            _settings.WebcamCornerPosition,
+            _settings.WebcamSizePreset,
+            _settings.WebcamShape,
+            _settings.WebcamCornerRadius);
+
+        if (_webcamCapture.IsRunning)
+        {
+            try
+            {
+                await _webcamCapture.StopAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best effort; we'll attempt a fresh start below.
+            }
+        }
+
+        try
+        {
+            _webcamCapture.CaptureFailed += OnWebcamCaptureFailed;
+            _webcamCaptureSubscribed = true;
+            await _webcamCapture
+                .StartAsync(_settings.SelectedWebcamId, ResolveRequestedWebcamSize(_settings.WebcamSizePreset), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await StopWebcamOverlayAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task StopWebcamOverlayAsync()
+    {
+        _webcamOverlay = null;
+
+        if (_webcamCaptureSubscribed)
+        {
+            _webcamCapture.CaptureFailed -= OnWebcamCaptureFailed;
+            _webcamCaptureSubscribed = false;
+        }
+
+        if (!_webcamCapture.IsRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            await _webcamCapture.StopAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ignore webcam teardown errors so screen recording can complete cleanly.
+        }
+    }
+
+    private void OnWebcamCaptureFailed(object? sender, WebcamCaptureFailedEventArgs args)
+    {
+        _webcamOverlay = null;
+    }
+
+    private static BitmapSize ResolveRequestedWebcamSize(WebcamSizePreset preset) => preset switch
+    {
+        WebcamSizePreset.Small => new BitmapSize { Width = 640, Height = 360 },
+        WebcamSizePreset.Large => new BitmapSize { Width = 1280, Height = 720 },
+        _ => new BitmapSize { Width = 960, Height = 540 },
+    };
 
     private async void OnSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
     {
@@ -399,6 +492,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             _clickMonitor?.Dispose();
             _clickMonitor = null;
+            await StopWebcamOverlayAsync().ConfigureAwait(false);
 
             // Signal audio end-of-stream and stop the device before draining the encoder,
             // otherwise the continuous silence source would prevent EOS.

@@ -2,6 +2,11 @@ import SwiftUI
 import ScreenCaptureKit
 import Combine
 
+struct VideoRecordingArtifacts {
+    let screenRecordingURL: URL
+    let webcamRecordingURL: URL?
+}
+
 @MainActor
 class CaptureManager: ObservableObject {
     @Published var isRecording = false {
@@ -11,11 +16,14 @@ class CaptureManager: ObservableObject {
     }
     @Published var recordingMicrophoneEnabled = false
     @Published var activeMicrophoneName: String?
+    @Published var activeWebcamName: String?
     @Published var microphoneLevel: Double = 0
     @Published var microphoneWarningMessage: String?
 
     private var videoRecorder: VideoRecorder?
+    private var webcamRecorder: WebcamRecorder?
     private var gifWriter: GifWriter?
+    private(set) var lastVideoRecordingArtifacts: VideoRecordingArtifacts?
     private var screenshotPickerPanel: CapturePickerPanel?
     private var screenshotPickerPosition: NSPoint?
     private var recordingPickerPanel: CapturePickerPanel?
@@ -47,6 +55,7 @@ class CaptureManager: ObservableObject {
     private var activeMouseClickRegion: CaptureRegion?
     private var activeMouseClickCaptureType: CaptureType?
     private var activeMouseClickCaptureEnabledOverride: Bool?
+    private var activeWebcamOverlaySelection: StartRecordingPanel.WebcamSelection?
     private let hotKeyManager = HotKeyManager()
     private var hotKeySettingsCancellable: AnyCancellable?
 
@@ -323,6 +332,7 @@ class CaptureManager: ObservableObject {
         systemAudio: Bool,
         microphone: Bool,
         selectedMicrophoneID: String,
+        webcamSelection: StartRecordingPanel.WebcamSelection,
         mouseClicksEnabled: Bool,
         timeLimitMinutes: Int,
         countdownEnabled: Bool,
@@ -341,6 +351,9 @@ class CaptureManager: ObservableObject {
                 let url = shouldSaveImmediately
                     ? SaveService.shared.generateURL(for: .video)
                     : self.temporaryURL(fileExtension: CaptureType.video.fileExtension)
+                let webcamEnabled = webcamSelection.enabled
+                let webcamOutputURL = webcamEnabled ? self.webcamCompanionURL(for: url) : nil
+                self.activeWebcamOverlaySelection = webcamEnabled ? webcamSelection : nil
 
                 do {
                     let recorder = VideoRecorder()
@@ -368,7 +381,21 @@ class CaptureManager: ObservableObject {
                             SaveService.shared.showError("Microphone error: \(message)")
                         }
                     }
+
+                    let webcamRecorder = WebcamRecorder()
+                    webcamRecorder.onWebcamDeviceName = { [weak self] name in
+                        DispatchQueue.main.async {
+                            self?.activeWebcamName = name.isEmpty ? nil : name
+                        }
+                    }
+                    webcamRecorder.onWebcamError = { message in
+                        DispatchQueue.main.async {
+                            SaveService.shared.showError("Webcam error: \(message)")
+                        }
+                    }
+
                     self.videoRecorder = recorder
+                    self.webcamRecorder = nil
                     self.activeRecordingRegion = target.region
                     self.isRecording = true
                     self.activeMouseClickCaptureEnabledOverride = mouseClicksEnabled
@@ -377,6 +404,8 @@ class CaptureManager: ObservableObject {
                     self.microphoneWarningMessage = nil
                     self.microphoneLevel = 0
                     self.activeMicrophoneName = nil
+                    self.activeWebcamName = nil
+                    self.lastVideoRecordingArtifacts = nil
 
                     try await recorder.start(
                         target: target,
@@ -387,6 +416,23 @@ class CaptureManager: ObservableObject {
                     )
                     self.debugRecordingLifecycle("Video session \(sessionID) started")
                     self.recordingMicrophoneEnabled = recorder.isMicrophoneCaptureActive
+
+                    if webcamEnabled, let webcamOutputURL {
+                        do {
+                            try await webcamRecorder.start(
+                                outputURL: webcamOutputURL,
+                                selectedWebcamID: webcamSelection.deviceID
+                            )
+                            self.webcamRecorder = webcamRecorder
+                            self.debugRecordingLifecycle("Webcam session started at \(webcamOutputURL.path)")
+                        } catch {
+                            self.webcamRecorder = nil
+                            self.activeWebcamName = nil
+                            self.activeWebcamOverlaySelection = nil
+                            SaveService.shared.showError("Webcam recording was not started: \(error.localizedDescription). Screen recording will continue without webcam.")
+                        }
+                    }
+
                     self.showStopPanel()
                     self.scheduleVideoAutoStopIfNeeded(timeLimitMinutes: timeLimitMinutes, sessionID: sessionID)
                 } catch {
@@ -394,10 +440,13 @@ class CaptureManager: ObservableObject {
                     _ = self.stopMouseClickMonitoring()
                     self.activeMouseClickCaptureEnabledOverride = nil
                     self.resetRecordingAudioStatus()
+                    self.activeWebcamName = nil
                     self.isRecording = false
                     self.activeRecordingRegion = nil
                     self.dismissRegionIndicator()
                     self.activeRecordingSessionID = nil
+                    self.webcamRecorder = nil
+                    self.activeWebcamOverlaySelection = nil
                     self.debugRecordingLifecycle("Video session failed to start: \(error.localizedDescription)")
                     SaveService.shared.showError("Video recording failed: \(error.localizedDescription)")
                 }
@@ -482,7 +531,7 @@ class CaptureManager: ObservableObject {
         // whatever the async export flow does next. If the export later
         // hangs, the user can still interact with the app.
         guard !isStoppingRecording else { return }
-        guard isRecording || videoRecorder != nil || gifWriter != nil else { return }
+        guard isRecording || videoRecorder != nil || webcamRecorder != nil || gifWriter != nil else { return }
 
         isStoppingRecording = true
         cancelVideoAutoStopTask()
@@ -516,13 +565,14 @@ class CaptureManager: ObservableObject {
         defer { activeMouseClickCaptureEnabledOverride = nil }
 
         let videoRecorderAtStop = videoRecorder
+        let webcamRecorderAtStop = webcamRecorder
         let gifWriterAtStop = gifWriter
 
         let capturedMouseClickData = stopMouseClickMonitoring()
         let shortVideoIndicatorBypassThreshold: TimeInterval = 120
 
         let stoppedRecordingType: CaptureType?
-        if videoRecorderAtStop != nil {
+        if videoRecorderAtStop != nil || webcamRecorderAtStop != nil {
             stoppedRecordingType = .video
         } else if gifWriterAtStop != nil {
             stoppedRecordingType = .gif
@@ -554,8 +604,29 @@ class CaptureManager: ObservableObject {
         let videoShowTrimmer = CaptureSettings.shared.showTrimmer
         let videoShouldSaveImmediately = !videoShowTrimmer || CaptureSettings.shared.saveImmediatelyVideo
         let videoOverlayStyle = CaptureSettings.shared.mouseClickOverlayStyle(for: .video)
+        let showBrandingOverlay = CaptureSettings.shared.showBrandingOverlay
+        let webcamShapeSetting = CaptureSettings.shared.webcamShape
+        let webcamCornerSetting = CaptureSettings.shared.webcamCorner
+        let webcamSizeSetting = CaptureSettings.shared.webcamSize
+        let webcamCornerRadiusSetting = CaptureSettings.shared.webcamCornerRadius
+        let webcamOverlaySelection = activeWebcamOverlaySelection
 
         var savedVideoURL: URL?
+        var savedWebcamURL: URL?
+
+        if let recorder = webcamRecorderAtStop {
+            do {
+                savedWebcamURL = try await recorder.stop()
+            } catch {
+                SaveService.shared.showError("Webcam save failed: \(error.localizedDescription). Continuing with screen-only export.")
+            }
+
+            if webcamRecorder === recorder {
+                webcamRecorder = nil
+            } else {
+                debugRecordingLifecycle("Skipped clearing stale webcam recorder reference")
+            }
+        }
 
         if let recorder = videoRecorderAtStop {
             do {
@@ -600,26 +671,54 @@ class CaptureManager: ObservableObject {
                 }
             }
 
-            if CaptureSettings.shared.showBrandingOverlay, let currentURL = savedVideoURL {
-                do {
-                    let brandingOutputURL = videoShouldSaveImmediately
-                        ? SaveService.shared.generateURL(for: .video)
-                        : temporaryURL(fileExtension: "mp4")
-                    savedVideoURL = try await Self.overlayBrandingVideoOffMain(
-                        sourceURL: currentURL,
-                        outputURL: brandingOutputURL,
-                        onProgress: { [weak self] overlayProgress in
-                            guard let self else { return }
-                            let normalized = min(max(overlayProgress, 0), 1)
-                            let mapped = 0.85 + (normalized * 0.1)
-                            Task { @MainActor in
-                                self.updateProcessingProgress(mapped, status: "Applying branding...")
-                            }
-                        }
+            if let currentURL = savedVideoURL {
+                let webcamOverlayOptions: BrandingOverlayProcessor.WebcamOverlayOptions? = {
+                    guard let savedWebcamURL, FileManager.default.fileExists(atPath: savedWebcamURL.path) else {
+                        return nil
+                    }
+
+                    let shape = webcamOverlaySelection?.shape ?? webcamShapeSetting
+                    let corner = webcamOverlaySelection?.corner ?? webcamCornerSetting
+                    let size = webcamOverlaySelection?.size ?? webcamSizeSetting
+                    let cornerRadiusOverride: CGFloat? = webcamCornerRadiusSetting >= 0
+                        ? CGFloat(webcamCornerRadiusSetting)
+                        : nil
+
+                    return BrandingOverlayProcessor.WebcamOverlayOptions(
+                        videoURL: savedWebcamURL,
+                        shape: shape,
+                        corner: corner,
+                        size: size,
+                        cornerRadiusOverride: cornerRadiusOverride
                     )
-                    updateProcessingProgress(0.95, status: "Finalizing...")
-                } catch {
-                    SaveService.shared.showError("Branding overlay failed for video: \(error.localizedDescription)")
+                }()
+
+                if showBrandingOverlay || webcamOverlayOptions != nil {
+                    do {
+                        let brandingOutputURL = videoShouldSaveImmediately
+                            ? SaveService.shared.generateURL(for: .video)
+                            : temporaryURL(fileExtension: "mp4")
+                        savedVideoURL = try await Self.overlayBrandingVideoOffMain(
+                            sourceURL: currentURL,
+                            outputURL: brandingOutputURL,
+                            includeBranding: showBrandingOverlay,
+                            webcamOverlay: webcamOverlayOptions,
+                            onProgress: { [weak self] overlayProgress in
+                                guard let self else { return }
+                                let normalized = min(max(overlayProgress, 0), 1)
+                                let mapped = 0.85 + (normalized * 0.1)
+                                Task { @MainActor in
+                                    let status = showBrandingOverlay
+                                        ? (webcamOverlayOptions == nil ? "Applying branding..." : "Applying branding + webcam...")
+                                        : "Applying webcam overlay..."
+                                    self.updateProcessingProgress(mapped, status: status)
+                                }
+                            }
+                        )
+                        updateProcessingProgress(0.95, status: "Finalizing...")
+                    } catch {
+                        SaveService.shared.showError("Video compositing failed: \(error.localizedDescription)")
+                    }
                 }
             }
 
@@ -630,6 +729,17 @@ class CaptureManager: ObservableObject {
                 debugRecordingLifecycle("Skipped clearing stale video recorder reference")
             }
         }
+
+        if let savedVideoURL {
+            lastVideoRecordingArtifacts = VideoRecordingArtifacts(
+                screenRecordingURL: savedVideoURL,
+                webcamRecordingURL: savedWebcamURL
+            )
+        } else if videoRecorderAtStop != nil || webcamRecorderAtStop != nil {
+            lastVideoRecordingArtifacts = nil
+        }
+
+        activeWebcamOverlaySelection = nil
 
         if let writer = gifWriterAtStop {
             let url = SaveService.shared.generateURL(for: .gif)
@@ -802,6 +912,8 @@ class CaptureManager: ObservableObject {
 
         pendingRecordingTarget = nil
         pendingRecordingType = nil
+        lastVideoRecordingArtifacts = nil
+        activeWebcamOverlaySelection = nil
 
         _ = stopMouseClickMonitoring()
 
@@ -810,7 +922,7 @@ class CaptureManager: ObservableObject {
             return
         }
 
-        if videoRecorder != nil || gifWriter != nil || isRecording {
+        if videoRecorder != nil || webcamRecorder != nil || gifWriter != nil || isRecording {
             isStoppingRecording = true
             let stoppingSessionID = activeRecordingSessionID
             activeRecordingSessionID = nil
@@ -884,7 +996,7 @@ class CaptureManager: ObservableObject {
     private func showStartPanel() {
         let panel = StartRecordingPanel(
             captureType: pendingRecordingType ?? .video,
-            onStart: { [weak self] systemAudio, mic, selectedMicrophoneID, mouseClicksEnabled, videoTimeLimitMinutes in
+            onStart: { [weak self] systemAudio, microphoneSelection, webcamSelection, mouseClicksEnabled, videoTimeLimitMinutes in
                 guard
                     let self,
                     let target = self.pendingRecordingTarget,
@@ -903,8 +1015,9 @@ class CaptureManager: ObservableObject {
                     self.beginVideoRecording(
                         target: target,
                         systemAudio: systemAudio,
-                        microphone: mic,
-                        selectedMicrophoneID: selectedMicrophoneID,
+                        microphone: microphoneSelection.enabled,
+                        selectedMicrophoneID: microphoneSelection.deviceID,
+                        webcamSelection: webcamSelection,
                         mouseClicksEnabled: mouseClicksEnabled,
                         timeLimitMinutes: videoTimeLimitMinutes,
                         countdownEnabled: countdownEnabled,
@@ -1014,6 +1127,7 @@ class CaptureManager: ObservableObject {
     private func resetRecordingAudioStatus() {
         recordingMicrophoneEnabled = false
         activeMicrophoneName = nil
+        activeWebcamName = nil
         microphoneLevel = 0
         microphoneWarningMessage = nil
     }
@@ -1325,6 +1439,14 @@ class CaptureManager: ObservableObject {
             .appendingPathExtension(fileExtension)
     }
 
+    private func webcamCompanionURL(for primaryVideoURL: URL) -> URL {
+        let stem = primaryVideoURL.deletingPathExtension().lastPathComponent
+        return primaryVideoURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(stem)-webcam")
+            .appendingPathExtension("mp4")
+    }
+
     private func nextRecordingSessionID() -> UInt64 {
         recordingSessionCounter += 1
         return recordingSessionCounter
@@ -1381,12 +1503,16 @@ class CaptureManager: ObservableObject {
     nonisolated private static func overlayBrandingVideoOffMain(
         sourceURL: URL,
         outputURL: URL,
+        includeBranding: Bool,
+        webcamOverlay: BrandingOverlayProcessor.WebcamOverlayOptions?,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> URL {
         try await Task.detached(priority: .userInitiated) {
             try await BrandingOverlayProcessor.overlayOnVideo(
                 sourceURL: sourceURL,
                 outputURL: outputURL,
+                includeBranding: includeBranding,
+                webcamOverlay: webcamOverlay,
                 onProgress: onProgress
             )
         }.value

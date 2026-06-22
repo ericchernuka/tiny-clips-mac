@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Added a capture-device catalog layer for macOS that now includes webcam discovery (built-in wide-angle, external, Continuity Camera, and Desk View where available) with stable IDs, user-friendly stable sorting, and reusable connect/disconnect/interruption notification hooks.
+- Added macOS webcam setup controls in recording start and video settings (enable toggle, device picker, shape/corner/size presets), plus start-panel plumbing so webcam selections flow into the video capture start path. Enabling webcam now auto-enables microphone by default (still manually overridable).
+- Added macOS export compositing support for recorded webcam artifacts, including corner placement, size presets, and shape masking (circle, rounded rectangle, rectangle) merged into the existing video post-processing pipeline alongside branding overlays.
+
 ## v1.4.1.0 - 2026-06-08
 
 ### Improved

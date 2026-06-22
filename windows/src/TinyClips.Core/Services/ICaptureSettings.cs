@@ -34,6 +34,12 @@ public interface ICaptureSettings
     bool RecordAudio { get; set; }
     bool RecordMicrophone { get; set; }
     string SelectedMicrophoneId { get; set; }
+    bool WebcamEnabled { get; set; }
+    string SelectedWebcamId { get; set; }
+    WebcamShape WebcamShape { get; set; }
+    WebcamSizePreset WebcamSizePreset { get; set; }
+    WebcamCornerPosition WebcamCornerPosition { get; set; }
+    double? WebcamCornerRadius { get; set; }
     bool ShowScreenshotEditor { get; set; }
     bool ShowGifTrimmer { get; set; }
     bool SaveImmediatelyScreenshot { get; set; }

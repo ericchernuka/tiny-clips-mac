@@ -15,6 +15,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IHotKeyService, HotKeyService>();
         services.AddSingleton<ILaunchAtLoginService, LaunchAtLoginService>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
+        services.AddSingleton<IWebcamDeviceEnumerator, WebcamDeviceEnumerator>();
+        services.AddSingleton<IWebcamCaptureService, WebcamCaptureService>();
         services.AddSingleton<IMonitorService, MonitorService>();
         services.AddSingleton<IScreenCaptureService, ScreenCaptureService>();
         services.AddSingleton<IScreenshotService, ScreenshotService>();
