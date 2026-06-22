@@ -22,7 +22,7 @@ This map aligns implementation work with the current todo set.
 | `win-devices` | Webcam enumeration | Device catalog and selection persistence |
 | `win-perms` | Webcam capability and permission handling | Capability declared + runtime behavior verified |
 | `win-capture` | MediaCapture/MediaFrameReader pipeline | Timestamped webcam frame ingestion for session |
-| `win-compositor` | CPU post-process compositor | MP4 export with overlay composited from screen + webcam tracks |
+| `win-compositor` | CPU in-pipeline compositor | MP4 output with webcam overlay blended directly into BGRA capture frames before encoding |
 | `win-ui` | WinUI controls and state surfacing | User-facing webcam overlay controls and status |
 | `win-build` | Validation | `dotnet restore/build/test` pass for Windows solution/projects |
 
@@ -48,4 +48,3 @@ This map aligns implementation work with the current todo set.
 - Failure paths degrade cleanly to screen-only recording.
 - Platform build/test validation passes for touched areas.
 - Docs and changelog reflect implemented scope and known limitations.
-

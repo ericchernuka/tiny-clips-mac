@@ -11,7 +11,9 @@ Add an optional webcam picture-in-picture overlay for screen recordings while ke
 ### Phase 1 MVP decisions
 
 - Ship webcam overlay for **video (MP4)** recordings first.
-- Use **post-process compositing** as the default architecture on both platforms.
+- Use platform-appropriate compositing:
+  - macOS records screen and webcam streams separately, then composites them during MP4 export.
+  - Windows blends webcam frames into the BGRA screen frames during the capture/encode pipeline before MP4 encoding.
 - Keep controls intentionally small for MVP:
   - enable/disable webcam overlay
   - camera device selection
@@ -53,23 +55,23 @@ See also: [docs/retina-display-capture.md](retina-display-capture.md).
 
 ### Decision
 
-Use **MediaCapture + MediaFrameReader** for webcam ingestion and a **CPU compositor** for post-process overlay output:
+Use **MediaCapture + MediaFrameReader** for webcam ingestion and a **CPU compositor** in the capture/encode pipeline:
 
 1. Record screen content using the current Windows capture/recording path.
-2. Read webcam frames through MediaCapture/MediaFrameReader on a separate pipeline.
-3. Composite overlay in CPU post-processing for Phase 1 MP4 export.
+2. Read webcam frames through MediaCapture/MediaFrameReader alongside the recording session.
+3. Blend the latest webcam frame into each BGRA capture frame before the frame is handed to the encoder for Phase 1 MP4 output.
 
 ### Why this direction
 
 - Works with current app architecture and keeps MVP implementation explicit and debuggable.
-- Avoids high-risk real-time GPU composition changes in Phase 1.
+- Avoids high-risk real-time GPU composition changes in Phase 1 while keeping the final encoded output single-track.
 - Enables straightforward phased expansion into live controls and GIF support.
 
 ### Key risks and gotchas
 
-- **Timestamp alignment:** screen and webcam streams must be aligned to avoid jumpy overlay playback.
+- **Frame freshness:** webcam frame selection must avoid stale or jumpy overlay playback.
 - **Pixel format conversion:** conversion/copy paths can become hot spots if not bounded.
-- **CPU budget:** compositor cost can impact export latency on lower-end hardware.
+- **CPU budget:** compositor cost can impact capture/encode throughput on lower-end hardware.
 - **DPI/coordinate correctness:** overlay placement must remain stable under mixed DPI displays.
 - **Device lifecycle:** camera unplug/sleep/resume and busy-device cases need resilient recovery.
 - **Capabilities/privacy:** app capability and runtime permission states must be handled clearly.
@@ -78,12 +80,12 @@ See also: [windows/docs/dpi-and-coordinates.md](../windows/docs/dpi-and-coordina
 
 ## Phased roadmap
 
-### Phase 1 — MVP (post-process overlay for MP4)
+### Phase 1 — MVP (webcam overlay for MP4)
 
 - Cross-platform webcam settings model + defaults.
 - Device enumeration and selection.
 - Webcam capture pipeline per platform.
-- Post-process compositor producing final MP4 with overlay.
+- Platform compositor producing final MP4 with overlay: post-process export on macOS, in-pipeline BGRA composition on Windows.
 - Basic overlay presets (position/size/shape).
 - Error handling and fallback to screen-only recording.
 
@@ -99,4 +101,3 @@ See also: [windows/docs/dpi-and-coordinates.md](../windows/docs/dpi-and-coordina
 - Apply webcam overlay pipeline to GIF export path.
 - Add GIF-specific sizing/perf limits to keep file size bounded.
 - Validate quality/perf tradeoffs for short-loop captures.
-

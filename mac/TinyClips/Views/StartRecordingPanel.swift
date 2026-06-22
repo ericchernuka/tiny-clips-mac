@@ -89,14 +89,16 @@ class StartRecordingPanel: NSPanel {
             allowsMouseClickToggle: allowsMouseClickToggle,
             onStart: { [weak self] systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes in
                 CaptureSettings.shared.videoRecordingTimeLimitMinutes = videoTimeLimitMinutes
-                self?.onStart?(systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes)
-                self?.onStart = nil
-                self?.onCancel = nil
+                guard let panel = self, let onStart = panel.onStart else { return }
+                panel.onStart = nil
+                panel.onCancel = nil
+                onStart(systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes)
             },
             onCancel: { [weak self] in
-                self?.onCancel?()
-                self?.onStart = nil
-                self?.onCancel = nil
+                guard let panel = self, let onCancel = panel.onCancel else { return }
+                panel.onStart = nil
+                panel.onCancel = nil
+                onCancel()
             }
         ))
         let fittingSize = hostingView.fittingSize
