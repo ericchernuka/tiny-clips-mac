@@ -15,10 +15,11 @@ A native **WinUI 3 / Windows App SDK** port of Tiny Clips — a tray-based scree
 ## Features
 
 - **Capture picker** — choose **Region**, **Screen**, or **Window** (R / S / W) before any capture,
-  mirroring the macOS picker, with an inline pre-capture countdown.
+  mirroring the macOS picker. Video/GIF captures then show a pre-record setup panel before countdown.
 - **Screenshot** (PNG/JPEG, scale, quality) — full screen, a specific window, or a drag-selected **region**.
   The region selector shows a live snapshot of the screen and dims only outside the selection.
-- **Video recording** → hardware-accelerated **H.264 MP4** (configurable frame rate, time limit).
+- **Video recording** → hardware-accelerated **H.264 MP4** (configurable frame rate, audio sources,
+  microphone device, mouse-click visuals, and time limit before each recording).
 - **GIF recording** → animated GIF (frame rate, max-width downscale, infinite loop).
 - **Recording indicator** — a floating always-on-top panel shows the elapsed time and a Stop button
   (with the stop hotkey) while recording.
@@ -87,8 +88,9 @@ dotnet build windows/src/TinyClips.App/TinyClips.App.csproj -c Debug -p:Platform
 The app launches **tray-only** (no window). Left- or right-click the tray icon for the Fluent
 menu: **Screenshot**, **Capture Region**, **Record Video**, **Record GIF**, **Settings**,
 **Guide**, **Exit**. Capture items first show the **Region / Screen / Window** picker.
-Recording items toggle to **Stop Recording** (also `Ctrl+Shift+S`) while active, and a floating
-recording indicator shows the elapsed time. Global hotkeys work app-wide.
+Video/GIF captures then show a setup panel before countdown and recording. Recording items toggle
+to **Stop Recording** (also `Ctrl+Shift+S`) while active, and a floating recording indicator shows
+the elapsed time. Global hotkeys work app-wide.
 
 For coordinate/DPI behaviour across mixed-DPI monitors, see
 [`docs/dpi-and-coordinates.md`](docs/dpi-and-coordinates.md).

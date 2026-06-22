@@ -66,13 +66,7 @@ public sealed partial class CapturePickerWindow : Window
         BuildTimerFlyout();
         UpdateTimerLabel();
 
-        // Only video supports an auto-stop time limit.
-        if (captureType == CaptureType.Video)
-        {
-            LimitButton.Visibility = Visibility.Visible;
-            BuildLimitFlyout();
-            UpdateLimitLabel();
-        }
+        LimitButton.Visibility = Visibility.Collapsed;
 
         ConfigurePresenter();
 
