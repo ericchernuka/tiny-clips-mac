@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Improved
 - Streamlined the macOS start recording panel by placing the microphone picker next to the mic toggle and moving webcam device/shape/corner/size choices into a compact settings popup.
 - Moved the macOS video recording time-limit picker to the initial capture picker next to the countdown control.
+- Reorganized macOS Video settings into clearer groups (Video Quality, Audio, Webcam Overlay, and Effects), and made webcam shape/corner/size settings configurable without first enabling the webcam overlay toggle.
 
 ### Fixed
 - Fixed macOS webcam overlay exports so circular overlays keep a square crop instead of stretching the camera aspect ratio, and so the webcam track is clipped instead of the screen recording track.
