@@ -17,6 +17,7 @@ public interface ICaptureSettings
     double GifFrameRate { get; set; }
     int GifMaxWidth { get; set; }
     int VideoFrameRate { get; set; }
+    VideoEncoderProfile VideoEncoderProfile { get; set; }
     bool ShowMouseClickVisualsInVideo { get; set; }
     bool ShowMouseClickVisualsInGif { get; set; }
     bool GifMouseClicksUseVideoSettings { get; set; }
@@ -34,6 +35,12 @@ public interface ICaptureSettings
     bool RecordAudio { get; set; }
     bool RecordMicrophone { get; set; }
     string SelectedMicrophoneId { get; set; }
+    bool WebcamEnabled { get; set; }
+    string SelectedWebcamId { get; set; }
+    WebcamShape WebcamShape { get; set; }
+    WebcamSizePreset WebcamSizePreset { get; set; }
+    WebcamCornerPosition WebcamCornerPosition { get; set; }
+    double? WebcamCornerRadius { get; set; }
     bool ShowScreenshotEditor { get; set; }
     bool ShowGifTrimmer { get; set; }
     bool SaveImmediatelyScreenshot { get; set; }

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Windows.Graphics.Capture;
@@ -8,17 +10,24 @@ using Windows.Graphics.DirectX.Direct3D11;
 namespace TinyClips.Core.Capture;
 
 /// <summary>
-/// A continuous Windows.Graphics.Capture session that pumps settled BGRA8 frames
-/// to a callback at (at most) a target frame rate. Frames are delivered tightly
-/// packed and cropped to the optional region. Presentation timestamps are relative
-/// to the first delivered frame. Used by the video and GIF recorders.
+/// A continuous Windows.Graphics.Capture session that pumps BGRA8 frames to a callback
+/// at a steady target frame rate. WGC only raises FrameArrived when the screen content
+/// changes, so a separate timer "pump" re-emits the most recently captured frame at the
+/// target cadence — this keeps the encoded video at a true constant frame rate (no
+/// stretched/squished playback on a static desktop) and lets a per-frame webcam overlay
+/// stay smooth even when the screen itself is idle. Frames are delivered tightly packed
+/// and cropped to the optional region; presentation timestamps are relative to the first
+/// emitted frame. Capture starts on <see cref="Start"/>, but no frames are emitted until
+/// <see cref="BeginEmitting"/> is called, so callers can warm up the encoder (and webcam)
+/// first and keep capture/encoder warm-up out of the recorded timeline. Used by the video
+/// and GIF recorders.
 /// </summary>
 internal sealed class ContinuousCaptureSession : IDisposable
 {
     private readonly CaptureTarget _target;
     private readonly PixelRect? _region;
     private readonly bool _includeCursor;
-    private readonly TimeSpan _minFrameInterval;
+    private readonly TimeSpan _frameInterval;
     private readonly object _sync = new();
 
     private ID3D11Device? _d3dDevice;
@@ -28,13 +37,17 @@ internal sealed class ContinuousCaptureSession : IDisposable
     private ID3D11Texture2D? _stagingTexture;
     private ID3D11DeviceContext? _context;
 
-    private TimeSpan? _baseTime;
-    private TimeSpan _lastEmit = TimeSpan.MinValue;
+    private readonly Stopwatch _clock = new();
+    private Timer? _pump;
+    private byte[]? _latestPixels;
+    private int _latestWidth;
+    private int _latestHeight;
+    private TimeSpan _lastEmittedPts = TimeSpan.MinValue;
     private int _fullWidth;
     private int _fullHeight;
     private volatile bool _running;
 
-    /// <summary>Raised for each throttled frame: tightly-packed BGRA8 + relative PTS.</summary>
+    /// <summary>Raised at the target frame rate: tightly-packed BGRA8 + relative PTS.</summary>
     public event Action<CapturedFrame, TimeSpan>? FrameReady;
 
     /// <summary>Output width in pixels (region width, or full monitor width), rounded down to even.</summary>
@@ -49,9 +62,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
         _region = region;
         _includeCursor = includeCursor;
         var fps = Math.Clamp(targetFps, 1, 120);
-        // Throttle slightly below the nominal interval so we don't systematically
-        // drop every other frame due to timing jitter.
-        _minFrameInterval = TimeSpan.FromSeconds(0.95 / fps);
+        _frameInterval = TimeSpan.FromSeconds(1.0 / fps);
     }
 
     public void Start()
@@ -94,6 +105,31 @@ internal sealed class ContinuousCaptureSession : IDisposable
         _session.StartCapture();
     }
 
+    /// <summary>
+    /// Begins emitting frames at the target cadence. The screen is captured (and the latest
+    /// frame cached) from <see cref="Start"/>, but no frames are emitted — and the presentation
+    /// clock does not start — until this is called. Callers invoke it only once the rest of the
+    /// pipeline (encoder, webcam overlay) is ready to consume frames, so the recorded timeline
+    /// starts cleanly at the real "recording started" moment instead of baking in capture /
+    /// encoder / camera warm-up as dead pre-roll at the front of the clip.
+    /// </summary>
+    public void BeginEmitting()
+    {
+        lock (_sync)
+        {
+            if (!_running || _pump is not null)
+            {
+                return;
+            }
+
+            // Anchor the presentation clock to the moment emission begins.
+            _clock.Restart();
+
+            // Steady-rate pump: re-emits the latest captured frame even when WGC is idle.
+            _pump = new Timer(OnPump, null, _frameInterval, _frameInterval);
+        }
+    }
+
     private void OnFrameArrived(Direct3D11CaptureFramePool pool, object? args)
     {
         if (!_running)
@@ -112,22 +148,6 @@ internal sealed class ContinuousCaptureSession : IDisposable
             lock (_sync)
             {
                 if (!_running || _context is null || _d3dDevice is null)
-                {
-                    return;
-                }
-
-                var relative = _baseTime is { } baseTime
-                    ? frame.SystemRelativeTime - baseTime
-                    : TimeSpan.Zero;
-
-                if (_baseTime is null)
-                {
-                    _baseTime = frame.SystemRelativeTime;
-                    relative = TimeSpan.Zero;
-                }
-
-                // Throttle to the target frame rate (but always allow the first frame).
-                if (_lastEmit != TimeSpan.MinValue && relative - _lastEmit < _minFrameInterval)
                 {
                     return;
                 }
@@ -155,15 +175,63 @@ internal sealed class ContinuousCaptureSession : IDisposable
                 _context.CopyResource(_stagingTexture, frameTexture);
 
                 var captured = ReadStaging((int)desc.Width, (int)desc.Height);
-                _lastEmit = relative;
-
-                FrameReady?.Invoke(captured, relative);
+                _latestPixels = captured.BgraPixels;
+                _latestWidth = captured.Width;
+                _latestHeight = captured.Height;
             }
         }
         catch
         {
             // A single dropped/failed frame must not tear down the recording.
         }
+    }
+
+    private void OnPump(object? state)
+    {
+        if (!_running)
+        {
+            return;
+        }
+
+        byte[] copy;
+        int width;
+        int height;
+        TimeSpan pts;
+
+        if (!Monitor.TryEnter(_sync))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_running || _latestPixels is null)
+            {
+                // No screen frame captured yet; nothing to emit.
+                return;
+            }
+
+            width = _latestWidth;
+            height = _latestHeight;
+            copy = (byte[])_latestPixels.Clone();
+
+            // First emitted frame anchors the timeline at zero; subsequent frames use the
+            // real elapsed time so the encoded duration matches wall-clock (and the audio).
+            pts = _lastEmittedPts == TimeSpan.MinValue ? TimeSpan.Zero : _clock.Elapsed;
+            if (_lastEmittedPts != TimeSpan.MinValue && pts <= _lastEmittedPts)
+            {
+                pts = _lastEmittedPts + TimeSpan.FromTicks(1);
+            }
+
+            _lastEmittedPts = pts;
+        }
+        finally
+        {
+            Monitor.Exit(_sync);
+        }
+
+        // Raise outside the lock so heavy per-frame compositing doesn't stall WGC delivery.
+        FrameReady?.Invoke(new CapturedFrame(copy, width, height), pts);
     }
 
     private unsafe CapturedFrame ReadStaging(int frameWidth, int frameHeight)
@@ -205,6 +273,9 @@ internal sealed class ContinuousCaptureSession : IDisposable
     public void Stop()
     {
         _running = false;
+        _pump?.Dispose();
+        _pump = null;
+        _clock.Stop();
         lock (_sync)
         {
             if (_framePool is not null)
@@ -231,6 +302,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
             _d3dDevice?.Dispose();
             _d3dDevice = null;
             _context = null;
+            _latestPixels = null;
         }
     }
 }

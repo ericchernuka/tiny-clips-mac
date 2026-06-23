@@ -96,6 +96,11 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="General" />
 
+                <TextBlock
+                    Margin="4,4,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Appearance" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -103,7 +108,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Appearance" />
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Theme" />
                             <TextBlock
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -122,6 +127,11 @@
                     </Grid>
                 </Border>
 
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Files &amp; saving" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -129,11 +139,21 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save location" />
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save locations" />
                             <TextBlock
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{x:Bind ViewModel.SaveLocationDisplay, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.ScreenshotSaveLocationDisplay, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.VideoGifSaveLocationDisplay, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.SaveLocationModeDisplay, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                         <Button
@@ -204,6 +224,11 @@
                     </Grid>
                 </Border>
 
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Startup" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -233,6 +258,11 @@
                            IsOn="{x:Bind ViewModel.LaunchAtLogin, Mode=TwoWay}" />
                    </Grid>
                 </Border>
+
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Capture behavior" />
 
                 <Border Style="{StaticResource SettingCardStyle}">
                    <Grid ColumnSpacing="16">
@@ -312,6 +342,11 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="Screenshot" />
 
+                <TextBlock
+                    Margin="4,4,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Image &amp; quality" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -386,6 +421,11 @@
                     </Grid>
                 </Border>
 
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Capture behavior" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -450,6 +490,11 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="Video" />
 
+                <TextBlock
+                    Margin="4,4,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Video quality" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -475,6 +520,37 @@
                             Value="{x:Bind ViewModel.VideoFrameRate, Mode=TwoWay}" />
                     </Grid>
                 </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Encoder profile" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="High gives the best quality and smallest files. Baseline maximizes player compatibility." />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="1"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="VideoEncoderProfileCombo"
+                            AutomationProperties.Name="Video encoder profile"
+                            SelectedIndex="{x:Bind ViewModel.VideoEncoderProfileIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="High (recommended)" />
+                            <ComboBoxItem Content="Baseline (compatibility)" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Audio" />
 
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -552,6 +628,176 @@
                             Visibility="{x:Bind ViewModel.MicrophoneSelectorVisibility, Mode=OneWay}" />
                     </Grid>
                 </Border>
+
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Webcam overlay" />
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enable webcam by default" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Start video recordings with the webcam overlay enabled. Device and layout options can be configured below." />
+                        </StackPanel>
+                        <ToggleSwitch
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="EnableWebcamToggle"
+                            AutomationProperties.Name="Enable webcam by default"
+                            IsOn="{x:Bind ViewModel.WebcamEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Webcam device" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Choose which camera to use for the overlay." />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="1"
+                            MinWidth="220"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind ViewModel.WebcamLoadingVisibility, Mode=OneWay}">
+                            <ProgressRing Width="20" Height="20" IsActive="True" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Loading webcams..." />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="1"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="WebcamDeviceCombo"
+                            AutomationProperties.Name="Webcam device"
+                            DisplayMemberPath="Name"
+                            IsEnabled="{x:Bind ViewModel.WebcamDeviceSelectorEnabled, Mode=OneWay}"
+                            ItemsSource="{x:Bind ViewModel.Webcams, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedWebcam, Mode=TwoWay}"
+                            Visibility="{x:Bind ViewModel.WebcamSelectorVisibility, Mode=OneWay}" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Webcam shape" />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="1"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="WebcamShapeCombo"
+                            AutomationProperties.Name="Webcam shape"
+                            SelectedIndex="{x:Bind ViewModel.WebcamShapeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Rectangle" />
+                            <ComboBoxItem Content="Rounded rectangle" />
+                            <ComboBoxItem Content="Circle" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Webcam corner" />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="1"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="WebcamCornerPositionCombo"
+                            AutomationProperties.Name="Webcam corner"
+                            SelectedIndex="{x:Bind ViewModel.WebcamCornerPositionIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Top left" />
+                            <ComboBoxItem Content="Top right" />
+                            <ComboBoxItem Content="Bottom left" />
+                            <ComboBoxItem Content="Bottom right" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Webcam size" />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="1"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="WebcamSizePresetCombo"
+                            AutomationProperties.Name="Webcam size"
+                            SelectedIndex="{x:Bind ViewModel.WebcamSizePresetIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Small" />
+                            <ComboBoxItem Content="Medium" />
+                            <ComboBoxItem Content="Large" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Rounded corner value" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Applies to rounded rectangle shape only (-1 uses the default)." />
+                        </StackPanel>
+                        <NumberBox
+                            Grid.Column="1"
+                            Width="120"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="WebcamCornerRadiusNumberBox"
+                            AutomationProperties.Name="Webcam rounded corner value"
+                            IsEnabled="{x:Bind ViewModel.WebcamCornerRadiusEnabled, Mode=OneWay}"
+                            Maximum="200"
+                            Minimum="-1"
+                            SpinButtonPlacementMode="Inline"
+                            Value="{x:Bind ViewModel.WebcamCornerRadius, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Recording &amp; output" />
 
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -665,6 +911,11 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="GIF" />
 
+                <TextBlock
+                    Margin="4,4,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="GIF quality" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -712,6 +963,11 @@
                             Value="{x:Bind ViewModel.GifMaxWidth, Mode=TwoWay}" />
                     </Grid>
                 </Border>
+
+                <TextBlock
+                    Margin="4,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Recording &amp; output" />
 
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -799,6 +1055,11 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="Mouse clicks" />
 
+                <TextBlock
+                    Margin="4,4,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Show clicks" />
+
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -862,7 +1123,7 @@
                 </Border>
 
                 <TextBlock
-                    Margin="4,8,0,0"
+                    Margin="4,16,0,0"
                     Style="{StaticResource BodyStrongTextBlockStyle}"
                     Text="Video click style" />
 

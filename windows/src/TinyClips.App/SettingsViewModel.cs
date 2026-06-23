@@ -26,10 +26,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IHotKeyService _hotKeys;
     private readonly ILaunchAtLoginService _launchAtLoginService;
     private readonly IAudioDeviceService _audioDevices;
+    private readonly IWebcamDeviceEnumerator _webcamDevices;
     private readonly IClipStorageService _storage;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _loading;
     private string _savedMicrophoneId = string.Empty;
+    private string _savedWebcamId = string.Empty;
 
     // Persistence stays suppressed until the Settings window has finished its first
     // layout/binding pass. WinUI TwoWay x:Bind targets (ComboBox.SelectedIndex,
@@ -42,28 +44,39 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Raised when the selected theme changes so the window can re-apply it live.</summary>
     public event Action? ThemeChanged;
 
-    public SettingsViewModel(ICaptureSettings settings, IHotKeyService hotKeys, ILaunchAtLoginService launchAtLogin, IAudioDeviceService audioDevices, IClipStorageService storage)
+    public SettingsViewModel(
+        ICaptureSettings settings,
+        IHotKeyService hotKeys,
+        ILaunchAtLoginService launchAtLogin,
+        IAudioDeviceService audioDevices,
+        IWebcamDeviceEnumerator webcamDevices,
+        IClipStorageService storage)
     {
         _settings = settings;
         _hotKeys = hotKeys;
         _launchAtLoginService = launchAtLogin;
         _audioDevices = audioDevices;
+        _webcamDevices = webcamDevices;
         _storage = storage;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         Load();
         _ = LoadMicrophonesAsync();
+        _ = LoadWebcamsAsync();
 
         // Reconcile the toggle with the OS-owned launch-at-login (StartupTask) state.
         _ = RefreshLaunchAtLoginAsync();
     }
 
-    /// <summary>
-    /// The folder clips are actually written to. When the user has not picked a
-    /// custom location this resolves to the default Pictures\TinyClips folder so
-    /// the Settings UI always shows a real path instead of a blank line.
-    /// </summary>
-    public string SaveLocationDisplay => string.IsNullOrWhiteSpace(SaveDirectory)
-        ? $"{_storage.OutputDirectory(CaptureType.Screenshot)} (default)"
+    public string ScreenshotSaveLocationDisplay => $"Screenshot: {ResolveEffectiveSaveLocation(CaptureType.Screenshot)}";
+
+    public string VideoGifSaveLocationDisplay => $"Video/GIF: {ResolveEffectiveSaveLocation(CaptureType.Video)}";
+
+    public string SaveLocationModeDisplay => string.IsNullOrWhiteSpace(SaveDirectory)
+        ? "Using defaults by capture type."
+        : "Custom save location override applies to all capture types.";
+
+    private string ResolveEffectiveSaveLocation(CaptureType type) => string.IsNullOrWhiteSpace(SaveDirectory)
+        ? $"{_storage.OutputDirectory(type)} (default)"
         : SaveDirectory;
 
     // General
@@ -71,6 +84,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private int _themeIndex;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ScreenshotSaveLocationDisplay))]
+    [NotifyPropertyChangedFor(nameof(VideoGifSaveLocationDisplay))]
+    [NotifyPropertyChangedFor(nameof(SaveLocationModeDisplay))]
     private string _saveDirectory = string.Empty;
 
     [ObservableProperty]
@@ -170,7 +186,50 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool MicrophoneSelectorEnabled => RecordMicrophone && !IsMicrophonesLoading;
 
     [ObservableProperty]
+    private bool _webcamEnabled;
+
+    /// <summary>Webcam devices for the picker (first entry is the system default).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<WebcamDeviceInfo> Webcams { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WebcamLoadingVisibility))]
+    [NotifyPropertyChangedFor(nameof(WebcamSelectorVisibility))]
+    [NotifyPropertyChangedFor(nameof(WebcamDeviceSelectorEnabled))]
+    private bool _isWebcamsLoading = true;
+
+    public Microsoft.UI.Xaml.Visibility WebcamLoadingVisibility => IsWebcamsLoading
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility WebcamSelectorVisibility => IsWebcamsLoading
+        ? Microsoft.UI.Xaml.Visibility.Collapsed
+        : Microsoft.UI.Xaml.Visibility.Visible;
+
+    public bool WebcamDeviceSelectorEnabled => !IsWebcamsLoading;
+
+    [ObservableProperty]
+    private WebcamDeviceInfo? _selectedWebcam;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WebcamCornerRadiusEnabled))]
+    private int _webcamShapeIndex;
+
+    [ObservableProperty]
+    private int _webcamSizePresetIndex;
+
+    [ObservableProperty]
+    private int _webcamCornerPositionIndex;
+
+    [ObservableProperty]
+    private double _webcamCornerRadius = -1;
+
+    public bool WebcamCornerRadiusEnabled => WebcamShapeIndex == 1;
+
+    [ObservableProperty]
     private double _videoRecordingTimeLimitMinutes;
+
+    [ObservableProperty]
+    private int _videoEncoderProfileIndex;
 
     [ObservableProperty]
     private bool _videoCountdownEnabled;
@@ -327,8 +386,31 @@ public sealed partial class SettingsViewModel : ObservableObject
             RecordMicrophone = _settings.RecordMicrophone;
 
             _savedMicrophoneId = _settings.SelectedMicrophoneId ?? string.Empty;
+            WebcamEnabled = _settings.WebcamEnabled;
+            _savedWebcamId = _settings.SelectedWebcamId ?? string.Empty;
+            WebcamShapeIndex = _settings.WebcamShape switch
+            {
+                WebcamShape.Rectangle => 0,
+                WebcamShape.RoundedRectangle => 1,
+                _ => 2,
+            };
+            WebcamSizePresetIndex = _settings.WebcamSizePreset switch
+            {
+                WebcamSizePreset.Small => 0,
+                WebcamSizePreset.Large => 2,
+                _ => 1,
+            };
+            WebcamCornerPositionIndex = _settings.WebcamCornerPosition switch
+            {
+                WebcamCornerPosition.TopLeft => 0,
+                WebcamCornerPosition.TopRight => 1,
+                WebcamCornerPosition.BottomLeft => 2,
+                _ => 3,
+            };
+            WebcamCornerRadius = _settings.WebcamCornerRadius ?? -1;
 
             VideoRecordingTimeLimitMinutes = _settings.VideoRecordingTimeLimitMinutes;
+            VideoEncoderProfileIndex = _settings.VideoEncoderProfile == VideoEncoderProfile.Baseline ? 1 : 0;
             VideoCountdownEnabled = _settings.VideoCountdownEnabled;
             VideoCountdownDuration = _settings.VideoCountdownDuration;
             ShowTrimmer = _settings.ShowTrimmer;
@@ -361,6 +443,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         IsMicrophonesLoading = true;
         var microphones = await Task.Run(() => _audioDevices.GetMicrophones());
         await ApplyMicrophonesAsync(microphones);
+    }
+
+    private async Task LoadWebcamsAsync()
+    {
+        IsWebcamsLoading = true;
+        var webcams = await _webcamDevices.GetWebcamDevicesAsync();
+        await ApplyWebcamsAsync(webcams);
     }
 
     private async Task ApplyMicrophonesAsync(IReadOnlyList<AudioInputDevice> microphones)
@@ -420,6 +509,56 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    private async Task ApplyWebcamsAsync(IReadOnlyList<WebcamDeviceInfo> webcams)
+    {
+        if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
+        {
+            ApplyWebcams(webcams);
+            return;
+        }
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    ApplyWebcams(webcams);
+                    completion.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }))
+        {
+            throw new InvalidOperationException("Unable to update webcam list on the UI thread.");
+        }
+
+        await completion.Task;
+    }
+
+    private void ApplyWebcams(IReadOnlyList<WebcamDeviceInfo> webcams)
+    {
+        _loading = true;
+        try
+        {
+            Webcams.Clear();
+            Webcams.Add(new WebcamDeviceInfo(string.Empty, "System default"));
+
+            foreach (var webcam in webcams)
+            {
+                Webcams.Add(webcam);
+            }
+
+            SelectedWebcam = Webcams.FirstOrDefault(device => device.Id == _savedWebcamId) ?? Webcams[0];
+        }
+        finally
+        {
+            _loading = false;
+            IsWebcamsLoading = false;
+        }
+    }
+
     partial void OnThemeIndexChanged(int value)
     {
         if (_loading || !_ready)
@@ -439,7 +578,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSaveDirectoryChanged(string value)
     {
         Persist(() => _settings.SaveDirectory = value);
-        OnPropertyChanged(nameof(SaveLocationDisplay));
     }
 
     partial void OnFileNameTemplateChanged(string value) => Persist(() => _settings.FileNameTemplate = value);
@@ -534,8 +672,41 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSelectedMicrophoneChanged(AudioInputDevice? value) =>
         Persist(() => _settings.SelectedMicrophoneId = value?.Id ?? string.Empty);
 
+    partial void OnWebcamEnabledChanged(bool value) => Persist(() => _settings.WebcamEnabled = value);
+
+    partial void OnSelectedWebcamChanged(WebcamDeviceInfo? value) =>
+        Persist(() => _settings.SelectedWebcamId = value?.Id ?? string.Empty);
+
+    partial void OnWebcamShapeIndexChanged(int value) => Persist(() => _settings.WebcamShape = value switch
+    {
+        0 => WebcamShape.Rectangle,
+        1 => WebcamShape.RoundedRectangle,
+        _ => WebcamShape.Circle,
+    });
+
+    partial void OnWebcamSizePresetIndexChanged(int value) => Persist(() => _settings.WebcamSizePreset = value switch
+    {
+        0 => WebcamSizePreset.Small,
+        2 => WebcamSizePreset.Large,
+        _ => WebcamSizePreset.Medium,
+    });
+
+    partial void OnWebcamCornerPositionIndexChanged(int value) => Persist(() => _settings.WebcamCornerPosition = value switch
+    {
+        0 => WebcamCornerPosition.TopLeft,
+        1 => WebcamCornerPosition.TopRight,
+        2 => WebcamCornerPosition.BottomLeft,
+        _ => WebcamCornerPosition.BottomRight,
+    });
+
+    partial void OnWebcamCornerRadiusChanged(double value) =>
+        Persist(() => _settings.WebcamCornerRadius = value < 0 ? null : value);
+
     partial void OnVideoRecordingTimeLimitMinutesChanged(double value) =>
         Persist(() => _settings.VideoRecordingTimeLimitMinutes = (int)Math.Round(value));
+
+    partial void OnVideoEncoderProfileIndexChanged(int value) =>
+        Persist(() => _settings.VideoEncoderProfile = value == 1 ? VideoEncoderProfile.Baseline : VideoEncoderProfile.High);
 
     partial void OnVideoCountdownEnabledChanged(bool value) => Persist(() => _settings.VideoCountdownEnabled = value);
 

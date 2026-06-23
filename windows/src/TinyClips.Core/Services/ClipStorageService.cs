@@ -24,10 +24,19 @@ public sealed class ClipStorageService : IClipStorageService
             return _settings.SaveDirectory.Trim();
         }
 
-        // Match the macOS app, which saves every capture type to a "TinyClips"
-        // folder inside the user's Pictures library by default.
-        var pictures = _fileSystem.GetFolderPath(Environment.SpecialFolder.MyPictures);
-        return Path.Combine(pictures, "TinyClips");
+        // Split defaults by media type: screenshots in Pictures, recordings in Videos.
+        // This keeps recording flows away from Pictures (which is commonly CFA-protected)
+        // while preserving screenshot expectations.
+        var folder = type == CaptureType.Screenshot
+            ? _fileSystem.GetFolderPath(Environment.SpecialFolder.MyPictures)
+            : _fileSystem.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            folder = _fileSystem.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        }
+
+        return Path.Combine(folder, "TinyClips");
     }
 
     public string GenerateFilePath(CaptureType type, string? fileExtension = null, string? stemSuffix = null)

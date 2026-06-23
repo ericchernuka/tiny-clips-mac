@@ -2,10 +2,27 @@ import AppKit
 import SwiftUI
 
 class StartRecordingPanel: NSPanel {
-    private var onStart: ((Bool, Bool, String, Bool, Int) -> Void)?
+    struct MicrophoneSelection {
+        let enabled: Bool
+        let deviceID: String
+    }
+
+    struct WebcamSelection {
+        let enabled: Bool
+        let deviceID: String
+        let shape: String
+        let corner: String
+        let size: String
+    }
+
+    private var onStart: ((Bool, MicrophoneSelection, WebcamSelection, Bool, Int) -> Void)?
     private var onCancel: (() -> Void)?
 
-    convenience init(captureType: CaptureType, onStart: @escaping (Bool, Bool, String, Bool, Int) -> Void, onCancel: @escaping () -> Void) {
+    convenience init(
+        captureType: CaptureType,
+        onStart: @escaping (Bool, MicrophoneSelection, WebcamSelection, Bool, Int) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         self.init(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -24,11 +41,22 @@ class StartRecordingPanel: NSPanel {
 
         let settings = CaptureSettings.shared
         let availableMicrophones = MicrophoneDeviceCatalog.availableOptions()
+        let availableWebcams = WebcamDeviceCatalog.availableOptions()
         let resolvedMicrophoneID: String = {
             let saved = settings.selectedMicrophoneID
             guard !saved.isEmpty, availableMicrophones.contains(where: { $0.id == saved }) else {
                 if !saved.isEmpty {
                     settings.selectedMicrophoneID = ""
+                }
+                return ""
+            }
+            return saved
+        }()
+        let resolvedWebcamID: String = {
+            let saved = settings.selectedWebcamID
+            guard !saved.isEmpty, availableWebcams.contains(where: { $0.id == saved }) else {
+                if !saved.isEmpty {
+                    settings.selectedWebcamID = ""
                 }
                 return ""
             }
@@ -50,19 +78,25 @@ class StartRecordingPanel: NSPanel {
             microphone: settings.recordMicrophone,
             selectedMicrophoneID: resolvedMicrophoneID,
             availableMicrophones: availableMicrophones,
+            webcamEnabled: settings.webcamEnabled,
+            selectedWebcamID: resolvedWebcamID,
+            webcamShape: settings.webcamShape,
+            webcamCorner: settings.webcamCorner,
+            webcamSize: settings.webcamSize,
+            availableWebcams: availableWebcams,
             mouseClicksEnabled: defaultMouseClicksEnabled,
-            selectedVideoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
             allowsMouseClickToggle: allowsMouseClickToggle,
-            onStart: { [weak self] systemAudio, mic, mouseClicksEnabled, videoTimeLimitMinutes in
-                CaptureSettings.shared.videoRecordingTimeLimitMinutes = videoTimeLimitMinutes
-                self?.onStart?(systemAudio, mic.enabled, mic.deviceID, mouseClicksEnabled, videoTimeLimitMinutes)
-                self?.onStart = nil
-                self?.onCancel = nil
+            onStart: { [weak self] systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes in
+                guard let panel = self, let onStart = panel.onStart else { return }
+                panel.onStart = nil
+                panel.onCancel = nil
+                onStart(systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes)
             },
             onCancel: { [weak self] in
-                self?.onCancel?()
-                self?.onStart = nil
-                self?.onCancel = nil
+                guard let panel = self, let onCancel = panel.onCancel else { return }
+                panel.onStart = nil
+                panel.onCancel = nil
+                onCancel()
             }
         ))
         let fittingSize = hostingView.fittingSize
@@ -89,24 +123,55 @@ class StartRecordingPanel: NSPanel {
 private struct StartRecordingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    struct MicrophoneState {
-        let enabled: Bool
-        let deviceID: String
-    }
-
     let captureType: CaptureType
     @State var systemAudio: Bool
     @State var microphone: Bool
     @State var selectedMicrophoneID: String
     let availableMicrophones: [MicrophoneDeviceOption]
+    @State var webcamEnabled: Bool
+    @State var selectedWebcamID: String
+    @State var webcamShape: String
+    @State var webcamCorner: String
+    @State var webcamSize: String
+    let availableWebcams: [WebcamDeviceOption]
     @State var mouseClicksEnabled: Bool
-    @State var selectedVideoTimeLimitMinutes: Int
     let allowsMouseClickToggle: Bool
-    let onStart: (Bool, MicrophoneState, Bool, Int) -> Void
+    let onStart: (Bool, StartRecordingPanel.MicrophoneSelection, StartRecordingPanel.WebcamSelection, Bool, Int) -> Void
     let onCancel: () -> Void
 
-    private var videoTimeLimitLabel: String {
-        selectedVideoTimeLimitMinutes == 0 ? "Unlimited" : "\(selectedVideoTimeLimitMinutes)m"
+    private var webcamShapeLabel: String {
+        switch webcamShape.lowercased() {
+        case "rectangle":
+            return "Rectangle"
+        case "rounded", "roundedrectangle":
+            return "Rounded"
+        default:
+            return "Circle"
+        }
+    }
+
+    private var webcamCornerLabel: String {
+        switch webcamCorner.lowercased() {
+        case "topleft":
+            return "Top Left"
+        case "topright":
+            return "Top Right"
+        case "bottomleft":
+            return "Bottom Left"
+        default:
+            return "Bottom Right"
+        }
+    }
+
+    private var webcamSizeLabel: String {
+        switch webcamSize.lowercased() {
+        case "small":
+            return "Small"
+        case "large":
+            return "Large"
+        default:
+            return "Medium"
+        }
     }
 
     var body: some View {
@@ -145,6 +210,84 @@ private struct StartRecordingView: View {
                 .accessibilityLabel("Microphone")
                 .accessibilityValue(microphone ? "On" : "Off")
                 .accessibilityHint("Toggles microphone recording.")
+
+                if microphone {
+                    Picker("Mic", selection: $selectedMicrophoneID) {
+                        Text("System Default").tag("")
+                        ForEach(availableMicrophones) { device in
+                            Text(device.name).tag(device.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 170)
+                    .help("Choose microphone input device.")
+                }
+            }
+
+            if captureType == .video {
+                Button {
+                    webcamEnabled.toggle()
+                    if webcamEnabled {
+                        microphone = true
+                    }
+                } label: {
+                    Image(systemName: webcamEnabled ? "video.fill.badge.checkmark" : "video.slash.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(webcamEnabled ? .white : .primary.opacity(0.5))
+                        .frame(width: 28, height: 28)
+                        .background(webcamEnabled ? .blue : .primary.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help(webcamEnabled ? "Webcam overlay: ON" : "Webcam overlay: OFF")
+                .accessibilityLabel("Webcam overlay")
+                .accessibilityValue(webcamEnabled ? "On" : "Off")
+                .accessibilityHint("Toggles webcam overlay for this recording.")
+
+                if webcamEnabled {
+                    Menu {
+                        Picker("Webcam device", selection: $selectedWebcamID) {
+                            Text("System Default").tag("")
+                            ForEach(availableWebcams) { device in
+                                Text(device.name).tag(device.id)
+                            }
+                        }
+
+                        Divider()
+
+                        Picker("Shape", selection: $webcamShape) {
+                            Text("Circle").tag("circle")
+                            Text("Rounded rectangle").tag("rounded")
+                            Text("Rectangle").tag("rectangle")
+                        }
+
+                        Picker("Corner", selection: $webcamCorner) {
+                            Text("Top left").tag("topLeft")
+                            Text("Top right").tag("topRight")
+                            Text("Bottom left").tag("bottomLeft")
+                            Text("Bottom right").tag("bottomRight")
+                        }
+
+                        Picker("Size", selection: $webcamSize) {
+                            Text("Small").tag("small")
+                            Text("Medium").tag("medium")
+                            Text("Large").tag("large")
+                        }
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .frame(width: 28, height: 28)
+                            .background(.primary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Choose webcam overlay settings.")
+                    .accessibilityLabel("Webcam settings")
+                    .accessibilityValue("\(webcamShapeLabel), \(webcamCornerLabel), \(webcamSizeLabel)")
+                    .accessibilityHint("Opens webcam device, shape, corner, and size settings.")
+                }
             }
 
             if allowsMouseClickToggle {
@@ -166,59 +309,25 @@ private struct StartRecordingView: View {
                 .accessibilityHint("Toggles mouse click visuals for this recording.")
             }
 
-            if microphone && captureType != .gif {
-                Picker("Mic", selection: $selectedMicrophoneID) {
-                    Text("System Default").tag("")
-                    ForEach(availableMicrophones) { device in
-                        Text(device.name).tag(device.id)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 170)
-                .help("Choose microphone input device.")
-            }
-
-            if captureType == .video {
-                Menu {
-                    Button("Unlimited") {
-                        selectedVideoTimeLimitMinutes = 0
-                    }
-                    Divider()
-                    ForEach([1, 3, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
-                        Button("\(minutes) minute\(minutes == 1 ? "" : "s")") {
-                            selectedVideoTimeLimitMinutes = minutes
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "hourglass")
-                            .font(.system(size: 11))
-                        Text(videoTimeLimitLabel)
-                            .font(.system(size: 12, weight: .medium))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.primary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Auto-stop recording time limit")
-                .accessibilityLabel("Recording time limit")
-                .accessibilityValue(videoTimeLimitLabel)
-                .accessibilityHint("Choose when recording should automatically stop.")
-            }
-
             Divider()
                 .frame(height: 20)
                 .overlay(.primary.opacity(0.2))
 
             // Start button
             Button {
-                onStart(systemAudio, .init(enabled: microphone, deviceID: selectedMicrophoneID), mouseClicksEnabled, selectedVideoTimeLimitMinutes)
+                onStart(
+                    systemAudio,
+                    .init(enabled: microphone, deviceID: selectedMicrophoneID),
+                    .init(
+                        enabled: webcamEnabled,
+                        deviceID: selectedWebcamID,
+                        shape: webcamShape,
+                        corner: webcamCorner,
+                        size: webcamSize
+                    ),
+                    mouseClicksEnabled,
+                    CaptureSettings.shared.videoRecordingTimeLimitMinutes
+                )
             } label: {
                 HStack(spacing: 5) {
                     Circle()
@@ -267,4 +376,5 @@ private struct StartRecordingView: View {
                 }
         }
     }
+
 }

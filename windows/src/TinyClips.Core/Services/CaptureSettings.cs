@@ -89,6 +89,12 @@ public sealed class CaptureSettings : ICaptureSettings
         set => _settings.Set("videoFrameRate", value);
     }
 
+    public VideoEncoderProfile VideoEncoderProfile
+    {
+        get => ParseVideoEncoderProfile(_settings.Get("videoEncoderProfile", "high"));
+        set => _settings.Set("videoEncoderProfile", ToPersistedVideoEncoderProfile(value));
+    }
+
     public bool ShowMouseClickVisualsInVideo
     {
         get => _settings.Get("showMouseClickVisualsInVideo", false);
@@ -189,6 +195,46 @@ public sealed class CaptureSettings : ICaptureSettings
     {
         get => _settings.Get("selectedMicrophoneID", string.Empty);
         set => _settings.Set("selectedMicrophoneID", value);
+    }
+
+    public bool WebcamEnabled
+    {
+        get => _settings.Get("webcamEnabled", false);
+        set => _settings.Set("webcamEnabled", value);
+    }
+
+    public string SelectedWebcamId
+    {
+        get => _settings.Get("selectedWebcamID", string.Empty);
+        set => _settings.Set("selectedWebcamID", value);
+    }
+
+    public WebcamShape WebcamShape
+    {
+        get => ParseWebcamShape(_settings.Get("webcamShape", "circle"));
+        set => _settings.Set("webcamShape", ToPersistedWebcamShape(value));
+    }
+
+    public WebcamSizePreset WebcamSizePreset
+    {
+        get => ParseWebcamSizePreset(_settings.Get("webcamSize", "medium"));
+        set => _settings.Set("webcamSize", ToPersistedWebcamSizePreset(value));
+    }
+
+    public WebcamCornerPosition WebcamCornerPosition
+    {
+        get => ParseWebcamCornerPosition(_settings.Get("webcamCorner", "bottomRight"));
+        set => _settings.Set("webcamCorner", ToPersistedWebcamCornerPosition(value));
+    }
+
+    public double? WebcamCornerRadius
+    {
+        get
+        {
+            var persisted = _settings.Get("webcamCornerRadius", -1.0);
+            return persisted < 0 ? null : persisted;
+        }
+        set => _settings.Set("webcamCornerRadius", value ?? -1.0);
     }
 
     public bool ShowScreenshotEditor
@@ -481,6 +527,12 @@ public sealed class CaptureSettings : ICaptureSettings
         RecordAudio = false;
         RecordMicrophone = false;
         SelectedMicrophoneId = string.Empty;
+        WebcamEnabled = false;
+        SelectedWebcamId = string.Empty;
+        WebcamShape = WebcamShape.Circle;
+        WebcamSizePreset = WebcamSizePreset.Medium;
+        WebcamCornerPosition = WebcamCornerPosition.BottomRight;
+        WebcamCornerRadius = null;
         ShowScreenshotEditor = true;
         ShowGifTrimmer = true;
         SaveImmediatelyScreenshot = true;
@@ -496,6 +548,7 @@ public sealed class CaptureSettings : ICaptureSettings
         VideoCountdownEnabled = true;
         VideoCountdownDuration = 3;
         VideoRecordingTimeLimitMinutes = 0;
+        VideoEncoderProfile = VideoEncoderProfile.High;
         GifCountdownEnabled = true;
         GifCountdownDuration = 3;
         ScreenshotCountdownEnabled = false;
@@ -512,4 +565,71 @@ public sealed class CaptureSettings : ICaptureSettings
         GifHotKeyCode = 55;
         GifHotKeyModifiers = 6;
     }
+
+    private static VideoEncoderProfile ParseVideoEncoderProfile(string value) =>
+        (value ?? string.Empty).ToLowerInvariant() switch
+        {
+            "baseline" => VideoEncoderProfile.Baseline,
+            "high" => VideoEncoderProfile.High,
+            _ => VideoEncoderProfile.High,
+        };
+
+    private static string ToPersistedVideoEncoderProfile(VideoEncoderProfile value) => value switch
+    {
+        VideoEncoderProfile.Baseline => "baseline",
+        VideoEncoderProfile.High => "high",
+        _ => "high",
+    };
+
+    private static WebcamShape ParseWebcamShape(string value) =>        (value ?? string.Empty).ToLowerInvariant() switch
+        {
+            "rectangle" => WebcamShape.Rectangle,
+            "rounded" or "roundedrectangle" => WebcamShape.RoundedRectangle,
+            "circle" => WebcamShape.Circle,
+            _ => WebcamShape.Circle,
+        };
+
+    private static string ToPersistedWebcamShape(WebcamShape value) => value switch
+    {
+        WebcamShape.Rectangle => "rectangle",
+        WebcamShape.RoundedRectangle => "rounded",
+        WebcamShape.Circle => "circle",
+        _ => "circle",
+    };
+
+    private static WebcamSizePreset ParseWebcamSizePreset(string value) =>
+        (value ?? string.Empty).ToLowerInvariant() switch
+        {
+            "small" => WebcamSizePreset.Small,
+            "medium" => WebcamSizePreset.Medium,
+            "large" => WebcamSizePreset.Large,
+            _ => WebcamSizePreset.Medium,
+        };
+
+    private static string ToPersistedWebcamSizePreset(WebcamSizePreset value) => value switch
+    {
+        WebcamSizePreset.Small => "small",
+        WebcamSizePreset.Medium => "medium",
+        WebcamSizePreset.Large => "large",
+        _ => "medium",
+    };
+
+    private static WebcamCornerPosition ParseWebcamCornerPosition(string value) =>
+        (value ?? string.Empty).ToLowerInvariant() switch
+        {
+            "topleft" => WebcamCornerPosition.TopLeft,
+            "topright" => WebcamCornerPosition.TopRight,
+            "bottomleft" => WebcamCornerPosition.BottomLeft,
+            "bottomright" => WebcamCornerPosition.BottomRight,
+            _ => WebcamCornerPosition.BottomRight,
+        };
+
+    private static string ToPersistedWebcamCornerPosition(WebcamCornerPosition value) => value switch
+    {
+        WebcamCornerPosition.TopLeft => "topLeft",
+        WebcamCornerPosition.TopRight => "topRight",
+        WebcamCornerPosition.BottomLeft => "bottomLeft",
+        WebcamCornerPosition.BottomRight => "bottomRight",
+        _ => "bottomRight",
+    };
 }

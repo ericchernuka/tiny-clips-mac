@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import CoreGraphics
 import CoreText
 import QuartzCore
@@ -10,6 +11,91 @@ import QuartzCore
 /// screenshots, video recordings, and GIFs.
 enum BrandingOverlayProcessor {
     private static let overlayText = "Captured on Tiny Clips"
+
+    struct WebcamOverlayOptions: Sendable {
+        let videoURL: URL
+        let shape: String
+        let corner: String
+        let size: String
+        let cornerRadiusOverride: CGFloat?
+    }
+
+    enum CompositionError: LocalizedError {
+        case sourceVideoTrackMissing
+        case videoCompositionTrackCreationFailed
+        case webcamCompositionTrackCreationFailed
+        case webcamVideoTrackMissing(URL)
+        case exportSessionCreationFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .sourceVideoTrackMissing:
+                return "Could not load the source video track for export composition."
+            case .videoCompositionTrackCreationFailed:
+                return "Could not create a mutable video track for export composition."
+            case .webcamCompositionTrackCreationFailed:
+                return "Could not create a mutable webcam track for export composition."
+            case let .webcamVideoTrackMissing(url):
+                return "Webcam overlay video is missing or invalid: \(url.lastPathComponent)."
+            case .exportSessionCreationFailed:
+                return "Could not create the video export session."
+            }
+        }
+    }
+
+    private enum WebcamOverlayShape: String, Equatable {
+        case circle
+        case rounded
+        case rectangle
+
+        init(rawValue: String) {
+            switch rawValue.lowercased() {
+            case "rounded", "roundedrectangle":
+                self = .rounded
+            case "rectangle":
+                self = .rectangle
+            default:
+                self = .circle
+            }
+        }
+    }
+
+    private enum WebcamOverlayCorner: String {
+        case topLeft
+        case topRight
+        case bottomLeft
+        case bottomRight
+
+        init(rawValue: String) {
+            switch rawValue.lowercased() {
+            case "topleft":
+                self = .topLeft
+            case "topright":
+                self = .topRight
+            case "bottomleft":
+                self = .bottomLeft
+            default:
+                self = .bottomRight
+            }
+        }
+    }
+
+    private enum WebcamOverlaySizePreset: String {
+        case small
+        case medium
+        case large
+
+        init(rawValue: String) {
+            switch rawValue.lowercased() {
+            case "small":
+                self = .small
+            case "large":
+                self = .large
+            default:
+                self = .medium
+            }
+        }
+    }
 
     // MARK: - Screenshot / Image
 
@@ -49,12 +135,14 @@ enum BrandingOverlayProcessor {
     static func overlayOnVideo(
         sourceURL: URL,
         outputURL: URL,
+        includeBranding: Bool = true,
+        webcamOverlay: WebcamOverlayOptions? = nil,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
         onProgress?(0.1)
         guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-            return sourceURL
+            throw CompositionError.sourceVideoTrackMissing
         }
 
         let assetDuration = try await asset.load(.duration)
@@ -65,7 +153,7 @@ enum BrandingOverlayProcessor {
         guard let compositionVideoTrack = composition.addMutableTrack(
             withMediaType: .video,
             preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else { return sourceURL }
+        ) else { throw CompositionError.videoCompositionTrackCreationFailed }
 
         try compositionVideoTrack.insertTimeRange(
             CMTimeRange(start: .zero, duration: assetDuration),
@@ -99,33 +187,111 @@ enum BrandingOverlayProcessor {
 
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: assetDuration)
-        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
-        layerInstruction.setTransform(preferredTransform, at: .zero)
-        instruction.layerInstructions = [layerInstruction]
-        videoComposition.instructions = [instruction]
+        let screenLayerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
+        screenLayerInstruction.setTransform(preferredTransform, at: .zero)
 
-        // Build layer tree for CoreAnimation overlay tool.
-        // parentLayer.isGeometryFlipped = true means y=0 is at the top (matching
-        // AVFoundation's expectations for the animation tool).
-        let parentLayer = CALayer()
-        parentLayer.frame = CGRect(origin: .zero, size: renderSize)
-        parentLayer.isGeometryFlipped = true
+        if let webcamOverlay, FileManager.default.fileExists(atPath: webcamOverlay.videoURL.path) {
+            let webcamAsset = AVURLAsset(url: webcamOverlay.videoURL)
+            guard let webcamTrack = try await webcamAsset.loadTracks(withMediaType: .video).first else {
+                throw CompositionError.webcamVideoTrackMissing(webcamOverlay.videoURL)
+            }
 
-        let videoLayer = CALayer()
-        videoLayer.frame = CGRect(origin: .zero, size: renderSize)
-        parentLayer.addSublayer(videoLayer)
+            let webcamDuration = try await webcamAsset.load(.duration)
+            let webcamPreferredTransform = try await webcamTrack.load(.preferredTransform)
+            let webcamNaturalSize = try await webcamTrack.load(.naturalSize)
+            let webcamOrientedSize = orientedSize(
+                for: webcamNaturalSize,
+                preferredTransform: webcamPreferredTransform
+            )
 
-        addBrandingLayer(to: parentLayer, renderSize: renderSize)
+            guard let compositionWebcamTrack = composition.addMutableTrack(
+                withMediaType: .video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw CompositionError.webcamCompositionTrackCreationFailed
+            }
 
-        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
-            postProcessingAsVideoLayer: videoLayer,
-            in: parentLayer
-        )
+            let webcamTimeRange = CMTimeRange(start: .zero, duration: min(assetDuration, webcamDuration))
+            try compositionWebcamTrack.insertTimeRange(
+                webcamTimeRange,
+                of: webcamTrack,
+                at: .zero
+            )
+
+            let webcamShape = WebcamOverlayShape(rawValue: webcamOverlay.shape)
+            let overlayFrame = webcamOverlayFrame(
+                renderSize: renderSize,
+                webcamSize: webcamOrientedSize,
+                shape: webcamShape,
+                preset: WebcamOverlaySizePreset(rawValue: webcamOverlay.size),
+                corner: WebcamOverlayCorner(rawValue: webcamOverlay.corner)
+            )
+
+            let scale = max(
+                overlayFrame.width / max(webcamOrientedSize.width, 1),
+                overlayFrame.height / max(webcamOrientedSize.height, 1)
+            )
+            let scaledSize = CGSize(
+                width: webcamOrientedSize.width * scale,
+                height: webcamOrientedSize.height * scale
+            )
+            let ciOverlayFrame = ciFrame(forTopLeftFrame: overlayFrame, renderSize: renderSize)
+            let webcamOffset = CGPoint(
+                x: ciOverlayFrame.midX - (scaledSize.width / 2),
+                y: ciOverlayFrame.midY - (scaledSize.height / 2)
+            )
+
+            let webcamTransform = normalizedTransform(
+                for: webcamPreferredTransform,
+                naturalSize: webcamNaturalSize
+            )
+                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                .concatenating(CGAffineTransform(translationX: webcamOffset.x, y: webcamOffset.y))
+
+            videoComposition.customVideoCompositorClass = WebcamOverlayCompositor.self
+            videoComposition.instructions = [
+                WebcamOverlayInstruction(
+                    timeRange: CMTimeRange(start: .zero, duration: assetDuration),
+                    screenTrackID: compositionVideoTrack.trackID,
+                    webcamTrackID: compositionWebcamTrack.trackID,
+                    renderSize: renderSize,
+                    webcamTransform: webcamTransform,
+                    webcamFrame: ciOverlayFrame,
+                    webcamShape: webcamShape,
+                    webcamCornerRadius: webcamCornerRadius(
+                        shape: webcamShape,
+                        bounds: CGRect(origin: .zero, size: overlayFrame.size),
+                        cornerRadiusOverride: webcamOverlay.cornerRadiusOverride
+                    ),
+                    includeBranding: includeBranding
+                )
+            ]
+        } else {
+            instruction.layerInstructions = [screenLayerInstruction]
+            videoComposition.instructions = [instruction]
+
+            let parentLayer = CALayer()
+            parentLayer.frame = CGRect(origin: .zero, size: renderSize)
+            parentLayer.isGeometryFlipped = true
+
+            let screenVideoLayer = CALayer()
+            screenVideoLayer.frame = CGRect(origin: .zero, size: renderSize)
+            parentLayer.addSublayer(screenVideoLayer)
+
+            if includeBranding {
+                addBrandingLayer(to: parentLayer, renderSize: renderSize)
+            }
+
+            videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+                postProcessingAsVideoLayer: screenVideoLayer,
+                in: parentLayer
+            )
+        }
 
         try? FileManager.default.removeItem(at: outputURL)
 
         guard let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
-            return sourceURL
+            throw CompositionError.exportSessionCreationFailed
         }
         exportSession.outputURL = outputURL
         exportSession.outputFileType = .mp4
@@ -269,6 +435,237 @@ enum BrandingOverlayProcessor {
         return CGSize(width: ceil(width), height: ceil(ascent + descent))
     }
 
+    private static func ciFrame(forTopLeftFrame frame: CGRect, renderSize: CGSize) -> CGRect {
+        CGRect(
+            x: frame.minX,
+            y: renderSize.height - frame.maxY,
+            width: frame.width,
+            height: frame.height
+        )
+    }
+
+    private static func applyBranding(to image: CIImage, renderSize: CGSize) -> CIImage {
+        let scale: CGFloat = 2.0
+        let fontSize = badgeFontSize(for: renderSize.height)
+        let ctFont = makeBadgeFont(size: fontSize)
+        let textSize = measureBadgeText(font: ctFont)
+        let (bgWidth, bgHeight, _, margin) = badgePillSize(textSize: textSize, fontSize: fontSize)
+
+        guard let badgeImage = renderBadgeImage(width: bgWidth, height: bgHeight, fontSize: fontSize, scale: scale) else {
+            return image
+        }
+
+        let badgeLayer = CIImage(cgImage: badgeImage)
+            .transformed(by: CGAffineTransform(scaleX: 1 / scale, y: 1 / scale))
+            .transformed(by: CGAffineTransform(
+                translationX: renderSize.width - bgWidth - margin,
+                y: margin
+            ))
+
+        return badgeLayer.composited(over: image)
+    }
+
+    private static func fillRenderExtent(with image: CIImage, renderSize: CGSize) -> CIImage {
+        let outputExtent = CGRect(origin: .zero, size: renderSize)
+        let extent = image.extent
+        guard extent.width > 0, extent.height > 0, renderSize.width > 0, renderSize.height > 0 else {
+            return CIImage(color: .black).cropped(to: outputExtent)
+        }
+
+        let scale = max(renderSize.width / extent.width, renderSize.height / extent.height)
+        let scaledSize = CGSize(width: extent.width * scale, height: extent.height * scale)
+        let transform = CGAffineTransform(translationX: -extent.minX, y: -extent.minY)
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(CGAffineTransform(
+                translationX: (renderSize.width - scaledSize.width) / 2,
+                y: (renderSize.height - scaledSize.height) / 2
+            ))
+
+        return image
+            .transformed(by: transform)
+            .cropped(to: outputExtent)
+    }
+
+    private static func webcamMaskImage(
+        renderSize: CGSize,
+        frame: CGRect,
+        shape: WebcamOverlayShape,
+        cornerRadius: CGFloat?
+    ) -> CIImage? {
+        guard shape != .rectangle else { return nil }
+
+        let width = Int(ceil(renderSize.width))
+        let height = Int(ceil(renderSize.height))
+        guard width > 0, height > 0 else { return nil }
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return nil
+        }
+
+        context.setFillColor(NSColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(NSColor.white.cgColor)
+
+        switch shape {
+        case .circle:
+            context.fillEllipse(in: frame)
+        case .rounded:
+            let radius = cornerRadius ?? min(frame.width, frame.height) * 0.12
+            let path = CGPath(
+                roundedRect: frame,
+                cornerWidth: max(0, min(radius, min(frame.width, frame.height) / 2)),
+                cornerHeight: max(0, min(radius, min(frame.width, frame.height) / 2)),
+                transform: nil
+            )
+            context.addPath(path)
+            context.fillPath()
+        case .rectangle:
+            return nil
+        }
+
+        guard let image = context.makeImage() else { return nil }
+        return CIImage(cgImage: image)
+    }
+
+    private final class WebcamOverlayInstruction: NSObject, AVVideoCompositionInstructionProtocol {
+        let timeRange: CMTimeRange
+        let enablePostProcessing = false
+        let containsTweening = false
+        let requiredSourceTrackIDs: [NSValue]?
+        let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
+        let screenTrackID: CMPersistentTrackID
+        let webcamTrackID: CMPersistentTrackID
+        let renderSize: CGSize
+        let webcamTransform: CGAffineTransform
+        let webcamFrame: CGRect
+        let webcamShape: WebcamOverlayShape
+        let webcamMask: CIImage?
+        let includeBranding: Bool
+
+        init(
+            timeRange: CMTimeRange,
+            screenTrackID: CMPersistentTrackID,
+            webcamTrackID: CMPersistentTrackID,
+            renderSize: CGSize,
+            webcamTransform: CGAffineTransform,
+            webcamFrame: CGRect,
+            webcamShape: WebcamOverlayShape,
+            webcamCornerRadius: CGFloat?,
+            includeBranding: Bool
+        ) {
+            self.timeRange = timeRange
+            self.screenTrackID = screenTrackID
+            self.webcamTrackID = webcamTrackID
+            self.renderSize = renderSize
+            self.webcamTransform = webcamTransform
+            self.webcamFrame = webcamFrame
+            self.webcamShape = webcamShape
+            self.webcamMask = BrandingOverlayProcessor.webcamMaskImage(
+                renderSize: renderSize,
+                frame: webcamFrame,
+                shape: webcamShape,
+                cornerRadius: webcamCornerRadius
+            )
+            self.includeBranding = includeBranding
+            self.requiredSourceTrackIDs = [
+                NSNumber(value: screenTrackID),
+                NSNumber(value: webcamTrackID),
+            ]
+            super.init()
+        }
+    }
+
+    private final class WebcamOverlayCompositor: NSObject, AVVideoCompositing {
+        private let context = CIContext()
+        private var renderContext: AVVideoCompositionRenderContext?
+        private let lock = NSLock()
+
+        var sourcePixelBufferAttributes: [String: Any]? {
+            [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+            ]
+        }
+
+        var requiredPixelBufferAttributesForRenderContext: [String: Any] {
+            [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+            ]
+        }
+
+        func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {
+            lock.lock()
+            renderContext = newRenderContext
+            lock.unlock()
+        }
+
+        func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+            guard
+                let instruction = request.videoCompositionInstruction as? WebcamOverlayInstruction,
+                let screenBuffer = request.sourceFrame(byTrackID: instruction.screenTrackID)
+            else {
+                request.finish(with: CompositionError.sourceVideoTrackMissing)
+                return
+            }
+
+            lock.lock()
+            let currentRenderContext = renderContext
+            lock.unlock()
+
+            guard let outputBuffer = currentRenderContext?.newPixelBuffer() else {
+                request.finish(with: CompositionError.exportSessionCreationFailed)
+                return
+            }
+
+            let outputExtent = CGRect(origin: .zero, size: instruction.renderSize)
+            var outputImage = BrandingOverlayProcessor.fillRenderExtent(
+                with: CIImage(cvPixelBuffer: screenBuffer),
+                renderSize: instruction.renderSize
+            )
+
+            if let webcamBuffer = request.sourceFrame(byTrackID: instruction.webcamTrackID) {
+                let webcamImage = CIImage(cvPixelBuffer: webcamBuffer)
+                    .transformed(by: instruction.webcamTransform)
+                    .cropped(to: instruction.webcamFrame)
+
+                if let mask = instruction.webcamMask {
+                    outputImage = webcamImage.applyingFilter(
+                        "CIBlendWithMask",
+                        parameters: [
+                            kCIInputBackgroundImageKey: outputImage,
+                            kCIInputMaskImageKey: mask,
+                        ]
+                    )
+                    .cropped(to: outputExtent)
+                } else {
+                    outputImage = webcamImage
+                        .composited(over: outputImage)
+                        .cropped(to: outputExtent)
+                }
+            }
+
+            if instruction.includeBranding {
+                outputImage = BrandingOverlayProcessor.applyBranding(
+                    to: outputImage,
+                    renderSize: instruction.renderSize
+                )
+                .cropped(to: outputExtent)
+            }
+
+            context.render(outputImage, to: outputBuffer, bounds: outputExtent, colorSpace: CGColorSpaceCreateDeviceRGB())
+            request.finish(withComposedVideoFrame: outputBuffer)
+        }
+
+        func cancelAllPendingVideoCompositionRequests() {}
+    }
+
     private static func badgePillSize(
         textSize: CGSize,
         fontSize: CGFloat
@@ -277,5 +674,88 @@ enum BrandingOverlayProcessor {
         let paddingV = fontSize * 0.45
         let margin = fontSize
         return (textSize.width + paddingH * 2, textSize.height + paddingV * 2, paddingH, margin)
+    }
+
+    private static func webcamOverlayFrame(
+        renderSize: CGSize,
+        webcamSize: CGSize,
+        shape: WebcamOverlayShape,
+        preset: WebcamOverlaySizePreset,
+        corner: WebcamOverlayCorner
+    ) -> CGRect {
+        let minDimension = min(renderSize.width, renderSize.height)
+        let targetWidth = minDimension * webcamScale(for: preset)
+        let aspectRatio = webcamSize.height / max(webcamSize.width, 1)
+        let maxHeight = renderSize.height * 0.45
+        let width: CGFloat
+        let height: CGFloat
+        if shape == .circle {
+            let diameter = min(targetWidth, renderSize.width * 0.45, maxHeight)
+            width = diameter
+            height = diameter
+        } else {
+            width = min(targetWidth, renderSize.width * 0.45)
+            height = min(width * aspectRatio, maxHeight)
+        }
+        let margin = max(16, minDimension * 0.03)
+
+        let x: CGFloat
+        let y: CGFloat
+        switch corner {
+        case .topLeft:
+            x = margin
+            y = margin
+        case .topRight:
+            x = renderSize.width - width - margin
+            y = margin
+        case .bottomLeft:
+            x = margin
+            y = renderSize.height - height - margin
+        case .bottomRight:
+            x = renderSize.width - width - margin
+            y = renderSize.height - height - margin
+        }
+
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private static func webcamScale(for preset: WebcamOverlaySizePreset) -> CGFloat {
+        switch preset {
+        case .small: return 0.18
+        case .medium: return 0.24
+        case .large: return 0.30
+        }
+    }
+
+    private static func webcamCornerRadius(
+        shape: WebcamOverlayShape,
+        bounds: CGRect,
+        cornerRadiusOverride: CGFloat?
+    ) -> CGFloat? {
+        switch shape {
+        case .rectangle:
+            return nil
+        case .circle:
+            return min(bounds.width, bounds.height) / 2
+        case .rounded:
+            let radius = cornerRadiusOverride ?? (min(bounds.width, bounds.height) * 0.12)
+            return max(0, min(radius, min(bounds.width, bounds.height) / 2))
+        }
+    }
+
+    private static func orientedSize(
+        for naturalSize: CGSize,
+        preferredTransform: CGAffineTransform
+    ) -> CGSize {
+        let rect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        return CGSize(width: abs(rect.width), height: abs(rect.height))
+    }
+
+    private static func normalizedTransform(
+        for transform: CGAffineTransform,
+        naturalSize: CGSize
+    ) -> CGAffineTransform {
+        let transformedRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
+        return transform.translatedBy(x: -transformedRect.minX, y: -transformedRect.minY)
     }
 }

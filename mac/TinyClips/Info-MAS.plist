@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>TinyClips needs microphone access to record your voice alongside screen recordings.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>TinyClips needs camera access to record your camera alongside screen recordings.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

@@ -110,6 +110,10 @@ enum CaptureError: LocalizedError {
     case microphoneUnavailable
     case microphoneConnectionFailed
     case microphoneReadFailed
+    case webcamPermissionDenied
+    case webcamUnavailable
+    case webcamConnectionFailed
+    case webcamReadFailed
 
     var errorDescription: String? {
         switch self {
@@ -120,6 +124,10 @@ enum CaptureError: LocalizedError {
         case .microphoneUnavailable: return "The selected microphone is unavailable. Choose another input device in Settings."
         case .microphoneConnectionFailed: return "Could not connect to the selected microphone."
         case .microphoneReadFailed: return "Could not read audio from the selected microphone."
+        case .webcamPermissionDenied: return "Camera permission is required to record webcam video."
+        case .webcamUnavailable: return "The selected webcam is unavailable. Choose another camera in Settings."
+        case .webcamConnectionFailed: return "Could not connect to the selected webcam."
+        case .webcamReadFailed: return "Could not read video from the selected webcam."
         }
     }
 }
@@ -246,6 +254,13 @@ class CaptureSettings: ObservableObject {
     @AppStorage("recordAudio") var recordAudio: Bool = false
     @AppStorage("recordMicrophone") var recordMicrophone: Bool = false
     @AppStorage("selectedMicrophoneID") var selectedMicrophoneID: String = ""
+    @AppStorage("webcamEnabled") var webcamEnabled: Bool = false
+    @AppStorage("selectedWebcamID") var selectedWebcamID: String = ""
+    @AppStorage("webcamShape") var webcamShape: String = "circle"
+    @AppStorage("webcamSize") var webcamSize: String = "medium"
+    @AppStorage("webcamCorner") var webcamCorner: String = "bottomRight"
+    // Negative values indicate no explicit corner radius/factor is set.
+    @AppStorage("webcamCornerRadius") var webcamCornerRadius: Double = -1
     @AppStorage("showScreenshotEditor") var showScreenshotEditor: Bool = true
     @AppStorage("showGifTrimmer") var showGifTrimmer: Bool = true
     @AppStorage("saveImmediatelyScreenshot") var saveImmediatelyScreenshot: Bool = true
@@ -417,7 +432,9 @@ class CaptureSettings: ObservableObject {
             "videoMouseClickColorHex", "videoMouseClickSize", "videoMouseClickStrokeWidth", "videoMouseClickOpacity", "videoMouseClickDuration",
             "gifMouseClickColorHex", "gifMouseClickSize", "gifMouseClickStrokeWidth", "gifMouseClickOpacity", "gifMouseClickDuration",
             "showTrimmer",
-            "recordAudio", "recordMicrophone", "selectedMicrophoneID", "showScreenshotEditor", "showGifTrimmer",
+            "recordAudio", "recordMicrophone", "selectedMicrophoneID",
+            "webcamEnabled", "selectedWebcamID", "webcamShape", "webcamSize", "webcamCorner", "webcamCornerRadius",
+            "showScreenshotEditor", "showGifTrimmer",
             "saveImmediatelyScreenshot", "saveImmediatelyVideo", "saveImmediatelyGif",
             "showScreenshotCapturePicker", "showScreenshotCapturePickerAfterCapture", "showVideoCapturePicker", "showGifCapturePicker",
             "screenshotFormat", "screenshotScale", "jpegQuality",

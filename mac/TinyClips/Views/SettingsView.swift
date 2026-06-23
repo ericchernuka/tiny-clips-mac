@@ -47,6 +47,7 @@ struct SettingsView: View {
     @State private var splitVisibility: NavigationSplitViewVisibility = .all
     @State private var showDisableDockWarning = false
     @State private var availableMicrophones: [MicrophoneDeviceOption] = []
+    @State private var availableWebcams: [WebcamDeviceOption] = []
 
     var body: some View {
         NavigationSplitView(columnVisibility: $splitVisibility) {
@@ -85,6 +86,7 @@ struct SettingsView: View {
                     VideoSettingsSection(
                         settings: settings,
                         availableMicrophones: availableMicrophones,
+                        availableWebcams: availableWebcams,
                         isPro: isAppStorePro,
                         selectedTab: $selectedTab
                     )
@@ -133,19 +135,19 @@ struct SettingsView: View {
         }
         .onAppear {
             PerformanceSignposts.endSettingsOpenIfNeeded()
-            refreshMicrophonesIfNeeded()
+            refreshCaptureDevicesIfNeeded()
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .video {
                 PerformanceSignposts.markVideoTabOpened()
             }
-            refreshMicrophonesIfNeeded()
+            refreshCaptureDevicesIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)) { _ in
-            refreshMicrophonesIfNeeded()
+            refreshCaptureDevicesIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)) { _ in
-            refreshMicrophonesIfNeeded()
+            refreshCaptureDevicesIfNeeded()
         }
     }
 
@@ -259,20 +261,23 @@ struct SettingsView: View {
         return components.url!
     }
 
-    private func refreshMicrophones() {
+    private func refreshCaptureDevices() {
         availableMicrophones = PerformanceSignposts.measureMicrophoneEnumeration {
             MicrophoneDeviceCatalog.availableOptions()
         }
-        guard !settings.selectedMicrophoneID.isEmpty else { return }
-        if availableMicrophones.contains(where: { $0.id == settings.selectedMicrophoneID }) {
-            return
+        availableWebcams = WebcamDeviceCatalog.availableOptions()
+        if !settings.selectedMicrophoneID.isEmpty,
+           !availableMicrophones.contains(where: { $0.id == settings.selectedMicrophoneID }) {
+            settings.selectedMicrophoneID = ""
         }
-        settings.selectedMicrophoneID = ""
+        if !settings.selectedWebcamID.isEmpty, !availableWebcams.contains(where: { $0.id == settings.selectedWebcamID }) {
+            settings.selectedWebcamID = ""
+        }
     }
 
-    private func refreshMicrophonesIfNeeded() {
+    private func refreshCaptureDevicesIfNeeded() {
         guard selectedTab == .video else { return }
-        refreshMicrophones()
+        refreshCaptureDevices()
     }
 
     private var gifMouseClickToggleBinding: Binding<Bool> {

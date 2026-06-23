@@ -21,6 +21,7 @@ public sealed class AudioCaptureService : IDisposable
     private readonly bool _captureMic;
     private readonly string? _micDeviceId;
     private readonly object _gate = new();
+    private readonly List<BufferedWaveProvider> _buffers = new();
 
     private WasapiLoopbackCapture? _loopback;
     private WasapiCapture? _mic;
@@ -96,6 +97,11 @@ public sealed class AudioCaptureService : IDisposable
             _mixer!.AddMixerInput(provider);
 
             capture.StartRecording();
+
+            lock (_gate)
+            {
+                _buffers.Add(buffer);
+            }
 
             if (isLoopback)
             {
@@ -182,6 +188,27 @@ public sealed class AudioCaptureService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Discards any audio captured during pipeline warm-up so the next read lines up with the
+    /// moment video frame emission begins. This keeps the audio and video tracks in sync — the
+    /// device keeps running, only the already-buffered pre-roll is dropped.
+    /// </summary>
+    public void FlushBuffers()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            foreach (var buffer in _buffers)
+            {
+                buffer.ClearBuffer();
+            }
+        }
+    }
+
     public void Stop()
     {
         try
@@ -222,5 +249,6 @@ public sealed class AudioCaptureService : IDisposable
         _mic = null;
         _output = null;
         _mixer = null;
+        _buffers.Clear();
     }
 }

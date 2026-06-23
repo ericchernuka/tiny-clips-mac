@@ -26,6 +26,194 @@ enum MicrophoneDeviceCatalog {
     }
 }
 
+struct WebcamDeviceOption: Identifiable, Hashable {
+    let id: String
+    let name: String
+}
+
+enum WebcamDeviceCatalog {
+    private static func videoDevices() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+    }
+
+    static func availableOptions() -> [WebcamDeviceOption] {
+        videoDevices()
+            .map { WebcamDeviceOption(id: $0.uniqueID, name: $0.localizedName) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    static func device(for uniqueID: String) -> AVCaptureDevice? {
+        guard !uniqueID.isEmpty else { return nil }
+        return videoDevices().first(where: { $0.uniqueID == uniqueID })
+    }
+}
+
+final class WebcamRecorder: NSObject, @unchecked Sendable {
+    private let recorderID = UUID().uuidString
+    private let writingQueue = DispatchQueue(label: "com.tinyclips.webcam-writing")
+    private let captureQueue = DispatchQueue(label: "com.tinyclips.webcam-capture")
+    private var session: AVCaptureSession?
+    private var writer: AVAssetWriter?
+    private var videoInput: AVAssetWriterInput?
+    private var outputURL: URL?
+    private var hasStartedWriting = false
+
+    var onWebcamDeviceName: ((String) -> Void)?
+    var onWebcamError: ((String) -> Void)?
+
+    func start(outputURL: URL, selectedWebcamID: String) async throws {
+        guard await PermissionManager.shared.requestCameraPermission() else {
+            throw CaptureError.webcamPermissionDenied
+        }
+
+        let device: AVCaptureDevice
+        if let selected = WebcamDeviceCatalog.device(for: selectedWebcamID) {
+            device = selected
+        } else if selectedWebcamID.isEmpty {
+            if let `default` = AVCaptureDevice.default(for: .video) {
+                device = `default`
+            } else if let first = WebcamDeviceCatalog.availableOptions().first,
+                      let resolved = WebcamDeviceCatalog.device(for: first.id) {
+                device = resolved
+            } else {
+                throw CaptureError.webcamUnavailable
+            }
+        } else {
+            throw CaptureError.webcamUnavailable
+        }
+
+        onWebcamDeviceName?(device.localizedName)
+        self.outputURL = outputURL
+
+        let writer = try AVAssetWriter(url: outputURL, fileType: .mp4)
+        let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        let width = max(1, Int(dimensions.width))
+        let height = max(1, Int(dimensions.height))
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+        ])
+        input.expectsMediaDataInRealTime = true
+        guard writer.canAdd(input) else {
+            throw CaptureError.saveFailed
+        }
+        writer.add(input)
+
+        let session = AVCaptureSession()
+        session.sessionPreset = .high
+        let cameraInput = try AVCaptureDeviceInput(device: device)
+        guard session.canAddInput(cameraInput) else {
+            throw CaptureError.webcamConnectionFailed
+        }
+        session.addInput(cameraInput)
+
+        let output = AVCaptureVideoDataOutput()
+        output.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+        ]
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(self, queue: writingQueue)
+        guard session.canAddOutput(output) else {
+            throw CaptureError.webcamReadFailed
+        }
+        session.addOutput(output)
+
+        self.writer = writer
+        self.videoInput = input
+        self.session = session
+        hasStartedWriting = false
+
+        captureQueue.sync {
+            session.startRunning()
+        }
+        debugLifecycle("session started")
+    }
+
+    func stop() async throws -> URL {
+        guard let outputURL else {
+            throw CaptureError.saveFailed
+        }
+
+        captureQueue.sync {
+            if let session, session.isRunning {
+                session.stopRunning()
+            }
+        }
+
+        guard let writer, let videoInput else {
+            reset()
+            throw CaptureError.saveFailed
+        }
+
+        if !hasStartedWriting {
+            writer.cancelWriting()
+            reset()
+            throw CaptureError.noFrames
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            writingQueue.async {
+                videoInput.markAsFinished()
+                writer.finishWriting {
+                    if writer.status == .completed {
+                        self.debugLifecycle("finishWriting completed")
+                        self.reset()
+                        continuation.resume(returning: outputURL)
+                    } else {
+                        let message = writer.error?.localizedDescription ?? CaptureError.saveFailed.localizedDescription
+                        self.onWebcamError?(message)
+                        self.debugLifecycle("finishWriting failed: \(message)")
+                        self.reset()
+                        continuation.resume(throwing: writer.error ?? CaptureError.saveFailed)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reset() {
+        session = nil
+        writer = nil
+        videoInput = nil
+        outputURL = nil
+        hasStartedWriting = false
+    }
+
+    private func debugLifecycle(_ message: String) {
+#if DEBUG
+        print("[WebcamRecorder \(recorderID)] \(message)")
+#endif
+    }
+}
+
+extension WebcamRecorder: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        guard sampleBuffer.isValid else { return }
+        guard let writer, let videoInput else { return }
+
+        if !hasStartedWriting {
+            guard writer.startWriting() else {
+                onWebcamError?(writer.error?.localizedDescription ?? CaptureError.saveFailed.localizedDescription)
+                return
+            }
+            writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+            hasStartedWriting = true
+        }
+
+        guard videoInput.isReadyForMoreMediaData else { return }
+        _ = videoInput.append(sampleBuffer)
+    }
+}
+
 class VideoRecorder: NSObject, @unchecked Sendable {
     private let recorderID = UUID().uuidString
     private let microphoneSignalThreshold = 0.01
