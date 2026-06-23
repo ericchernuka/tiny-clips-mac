@@ -31,6 +31,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _loading;
     private string _savedMicrophoneId = string.Empty;
+    private string _savedWebcamId = string.Empty;
 
     // Persistence stays suppressed until the Settings window has finished its first
     // layout/binding pass. WinUI TwoWay x:Bind targets (ComboBox.SelectedIndex,
@@ -185,8 +186,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool MicrophoneSelectorEnabled => RecordMicrophone && !IsMicrophonesLoading;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WebcamSettingsEnabled))]
-    [NotifyPropertyChangedFor(nameof(WebcamCornerRadiusEnabled))]
     private bool _webcamEnabled;
 
     /// <summary>Webcam devices for the picker (first entry is the system default).</summary>
@@ -195,7 +194,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WebcamLoadingVisibility))]
     [NotifyPropertyChangedFor(nameof(WebcamSelectorVisibility))]
-    [NotifyPropertyChangedFor(nameof(WebcamSettingsEnabled))]
+    [NotifyPropertyChangedFor(nameof(WebcamDeviceSelectorEnabled))]
     private bool _isWebcamsLoading = true;
 
     public Microsoft.UI.Xaml.Visibility WebcamLoadingVisibility => IsWebcamsLoading
@@ -206,10 +205,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         ? Microsoft.UI.Xaml.Visibility.Collapsed
         : Microsoft.UI.Xaml.Visibility.Visible;
 
-    public bool WebcamSettingsEnabled => WebcamEnabled && !IsWebcamsLoading;
+    public bool WebcamDeviceSelectorEnabled => !IsWebcamsLoading;
 
     [ObservableProperty]
-    private string _selectedWebcamId = string.Empty;
+    private WebcamDeviceInfo? _selectedWebcam;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WebcamCornerRadiusEnabled))]
@@ -224,7 +223,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private double _webcamCornerRadius = -1;
 
-    public bool WebcamCornerRadiusEnabled => WebcamSettingsEnabled && WebcamShapeIndex == 1;
+    public bool WebcamCornerRadiusEnabled => WebcamShapeIndex == 1;
 
     [ObservableProperty]
     private double _videoRecordingTimeLimitMinutes;
@@ -388,7 +387,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             _savedMicrophoneId = _settings.SelectedMicrophoneId ?? string.Empty;
             WebcamEnabled = _settings.WebcamEnabled;
-            SelectedWebcamId = _settings.SelectedWebcamId;
+            _savedWebcamId = _settings.SelectedWebcamId ?? string.Empty;
             WebcamShapeIndex = _settings.WebcamShape switch
             {
                 WebcamShape.Rectangle => 0,
@@ -551,10 +550,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 Webcams.Add(webcam);
             }
 
-            if (!Webcams.Any(device => device.Id == SelectedWebcamId))
-            {
-                SelectedWebcamId = Webcams[0].Id;
-            }
+            SelectedWebcam = Webcams.FirstOrDefault(device => device.Id == _savedWebcamId) ?? Webcams[0];
         }
         finally
         {
@@ -678,7 +674,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnWebcamEnabledChanged(bool value) => Persist(() => _settings.WebcamEnabled = value);
 
-    partial void OnSelectedWebcamIdChanged(string value) => Persist(() => _settings.SelectedWebcamId = value);
+    partial void OnSelectedWebcamChanged(WebcamDeviceInfo? value) =>
+        Persist(() => _settings.SelectedWebcamId = value?.Id ?? string.Empty);
 
     partial void OnWebcamShapeIndexChanged(int value) => Persist(() => _settings.WebcamShape = value switch
     {

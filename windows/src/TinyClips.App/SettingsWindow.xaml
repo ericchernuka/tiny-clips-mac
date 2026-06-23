@@ -641,17 +641,17 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enable webcam overlay" />
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Enable webcam by default" />
                             <TextBlock
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Include webcam overlay in video recordings (fixed position and size at start)." />
+                                Text="Start video recordings with the webcam overlay enabled. Device and layout options can be configured below." />
                         </StackPanel>
                         <ToggleSwitch
                             Grid.Column="1"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="EnableWebcamToggle"
-                            AutomationProperties.Name="Enable webcam overlay"
+                            AutomationProperties.Name="Enable webcam by default"
                             IsOn="{x:Bind ViewModel.WebcamEnabled, Mode=TwoWay}" />
                     </Grid>
                 </Border>
@@ -690,10 +690,9 @@
                             AutomationProperties.AutomationId="WebcamDeviceCombo"
                             AutomationProperties.Name="Webcam device"
                             DisplayMemberPath="Name"
-                            IsEnabled="{x:Bind ViewModel.WebcamSettingsEnabled, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.WebcamDeviceSelectorEnabled, Mode=OneWay}"
                             ItemsSource="{x:Bind ViewModel.Webcams, Mode=OneWay}"
-                            SelectedValue="{x:Bind ViewModel.SelectedWebcamId, Mode=TwoWay}"
-                            SelectedValuePath="Id"
+                            SelectedItem="{x:Bind ViewModel.SelectedWebcam, Mode=TwoWay}"
                             Visibility="{x:Bind ViewModel.WebcamSelectorVisibility, Mode=OneWay}" />
                     </Grid>
                 </Border>
@@ -713,7 +712,6 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="WebcamShapeCombo"
                             AutomationProperties.Name="Webcam shape"
-                            IsEnabled="{x:Bind ViewModel.WebcamSettingsEnabled, Mode=OneWay}"
                             SelectedIndex="{x:Bind ViewModel.WebcamShapeIndex, Mode=TwoWay}">
                             <ComboBoxItem Content="Rectangle" />
                             <ComboBoxItem Content="Rounded rectangle" />
@@ -737,7 +735,6 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="WebcamCornerPositionCombo"
                             AutomationProperties.Name="Webcam corner"
-                            IsEnabled="{x:Bind ViewModel.WebcamSettingsEnabled, Mode=OneWay}"
                             SelectedIndex="{x:Bind ViewModel.WebcamCornerPositionIndex, Mode=TwoWay}">
                             <ComboBoxItem Content="Top left" />
                             <ComboBoxItem Content="Top right" />
@@ -762,7 +759,6 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="WebcamSizePresetCombo"
                             AutomationProperties.Name="Webcam size"
-                            IsEnabled="{x:Bind ViewModel.WebcamSettingsEnabled, Mode=OneWay}"
                             SelectedIndex="{x:Bind ViewModel.WebcamSizePresetIndex, Mode=TwoWay}">
                             <ComboBoxItem Content="Small" />
                             <ComboBoxItem Content="Medium" />
