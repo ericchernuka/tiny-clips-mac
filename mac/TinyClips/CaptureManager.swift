@@ -35,6 +35,7 @@ class CaptureManager: ObservableObject {
     private var pendingRecordingType: CaptureType?
     private var pendingRecordingCountdownEnabled: Bool = true
     private var pendingRecordingCountdownDuration: Int = 3
+    private var pendingVideoTimeLimitMinutes: Int = 0
     private var activeRecordingRegion: CaptureRegion?
     private var recordPanelPosition: NSPoint?
     private var trimmerWindow: VideoTrimmerWindow?
@@ -153,7 +154,7 @@ class CaptureManager: ObservableObject {
             captureType: .screenshot,
             countdownEnabled: settings.screenshotCountdownEnabled,
             countdownDuration: settings.screenshotCountdownDuration,
-            onCapture: { [weak self] mode, countdownEnabled, countdownDuration in
+            onCapture: { [weak self] mode, countdownEnabled, countdownDuration, _ in
                 guard let self else { return }
                 self.dismissScreenshotPicker()
                 Task {
@@ -321,6 +322,7 @@ class CaptureManager: ObservableObject {
                     mode: .region,
                     countdownEnabled: settings.videoCountdownEnabled,
                     countdownDuration: settings.videoCountdownDuration,
+                    videoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
                     shouldReturnToPicker: false
                 )
             }
@@ -474,6 +476,7 @@ class CaptureManager: ObservableObject {
                     mode: .region,
                     countdownEnabled: settings.gifCountdownEnabled,
                     countdownDuration: settings.gifCountdownDuration,
+                    videoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
                     shouldReturnToPicker: false
                 )
             }
@@ -1005,6 +1008,7 @@ class CaptureManager: ObservableObject {
 
                 let countdownEnabled = self.pendingRecordingCountdownEnabled
                 let countdownDuration = self.pendingRecordingCountdownDuration
+                let videoTimeLimitMinutes = self.pendingVideoTimeLimitMinutes
 
                 self.pendingRecordingTarget = nil
                 self.pendingRecordingType = nil
@@ -1037,6 +1041,7 @@ class CaptureManager: ObservableObject {
             onCancel: { [weak self] in
                 self?.pendingRecordingTarget = nil
                 self?.pendingRecordingType = nil
+                self?.pendingVideoTimeLimitMinutes = CaptureSettings.shared.videoRecordingTimeLimitMinutes
                 self?.dismissStartPanel()
                 self?.dismissRegionIndicator()
             }
@@ -1251,15 +1256,20 @@ class CaptureManager: ObservableObject {
             captureType: type,
             countdownEnabled: countdownEnabled,
             countdownDuration: countdownDuration,
-            onCapture: { [weak self] mode, enabled, duration in
+            videoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
+            onCapture: { [weak self] mode, enabled, duration, videoTimeLimitMinutes in
                 guard let self else { return }
                 self.dismissRecordingPicker()
+                if type == .video {
+                    settings.videoRecordingTimeLimitMinutes = videoTimeLimitMinutes
+                }
                 Task {
                     await self.performRecordingSetup(
                         type: type,
                         mode: mode,
                         countdownEnabled: enabled,
                         countdownDuration: duration,
+                        videoTimeLimitMinutes: videoTimeLimitMinutes,
                         shouldReturnToPicker: true
                     )
                 }
@@ -1285,6 +1295,7 @@ class CaptureManager: ObservableObject {
         mode: CapturePickerMode,
         countdownEnabled: Bool,
         countdownDuration: Int,
+        videoTimeLimitMinutes: Int,
         shouldReturnToPicker: Bool
     ) async {
         guard let target = await chooseCaptureTarget(for: mode) else {
@@ -1298,6 +1309,7 @@ class CaptureManager: ObservableObject {
         pendingRecordingType = type
         pendingRecordingCountdownEnabled = countdownEnabled
         pendingRecordingCountdownDuration = countdownDuration
+        pendingVideoTimeLimitMinutes = videoTimeLimitMinutes
 
         dismissRegionIndicator()
 

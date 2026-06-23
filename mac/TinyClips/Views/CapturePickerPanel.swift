@@ -13,10 +13,12 @@ enum CapturePickerMode {
 private final class CapturePickerState: ObservableObject {
     @Published var countdownEnabled: Bool
     @Published var countdownDuration: Int
+    @Published var videoTimeLimitMinutes: Int
 
-    init(countdownEnabled: Bool, countdownDuration: Int) {
+    init(countdownEnabled: Bool, countdownDuration: Int, videoTimeLimitMinutes: Int) {
         self.countdownEnabled = countdownEnabled
         self.countdownDuration = countdownDuration
+        self.videoTimeLimitMinutes = videoTimeLimitMinutes
     }
 }
 
@@ -28,14 +30,14 @@ class CapturePickerPanel: NSPanel {
     private var didComplete = false
     private var localMonitor: Any?
     private var globalMonitor: Any?
-    private var onCapture: ((CapturePickerMode, Bool, Int) -> Void)?
+    private var onCapture: ((CapturePickerMode, Bool, Int, Int) -> Void)?
     private var onCancel: (() -> Void)?
     private let state: CapturePickerState
 
     override var canBecomeKey: Bool { true }
 
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing bufferingType: NSWindow.BackingStoreType, defer flag: Bool) {
-        self.state = CapturePickerState(countdownEnabled: false, countdownDuration: 0)
+        self.state = CapturePickerState(countdownEnabled: false, countdownDuration: 0, videoTimeLimitMinutes: 0)
         super.init(contentRect: contentRect, styleMask: style, backing: bufferingType, defer: flag)
     }
 
@@ -48,7 +50,8 @@ class CapturePickerPanel: NSPanel {
         captureType: CaptureType = .screenshot,
         countdownEnabled: Bool,
         countdownDuration: Int,
-        onCapture: @escaping (CapturePickerMode, Bool, Int) -> Void,
+        videoTimeLimitMinutes: Int = 0,
+        onCapture: @escaping (CapturePickerMode, Bool, Int, Int) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.init(
@@ -59,6 +62,7 @@ class CapturePickerPanel: NSPanel {
         )
         self.state.countdownEnabled = countdownEnabled
         self.state.countdownDuration = countdownDuration
+        self.state.videoTimeLimitMinutes = videoTimeLimitMinutes
         self.onCapture = onCapture
         self.onCancel = onCancel
         self.isReleasedWhenClosed = false
@@ -72,8 +76,13 @@ class CapturePickerPanel: NSPanel {
         let hostingView = NSHostingView(rootView: CapturePickerView(
             captureType: captureType,
             state: state,
-            onCapture: { [weak self] mode, enabled, duration in
-                self?.finishCapture(mode: mode, countdownEnabled: enabled, countdownDuration: duration)
+            onCapture: { [weak self] mode, enabled, duration, timeLimitMinutes in
+                self?.finishCapture(
+                    mode: mode,
+                    countdownEnabled: enabled,
+                    countdownDuration: duration,
+                    videoTimeLimitMinutes: timeLimitMinutes
+                )
             },
             onCancel: { [weak self] in
                 self?.finishCancel()
@@ -151,25 +160,45 @@ class CapturePickerPanel: NSPanel {
 
         switch key {
         case "r":
-            finishCapture(mode: .region, countdownEnabled: state.countdownEnabled, countdownDuration: state.countdownDuration)
+            finishCapture(
+                mode: .region,
+                countdownEnabled: state.countdownEnabled,
+                countdownDuration: state.countdownDuration,
+                videoTimeLimitMinutes: state.videoTimeLimitMinutes
+            )
             return true
         case "s":
-            finishCapture(mode: .screen, countdownEnabled: state.countdownEnabled, countdownDuration: state.countdownDuration)
+            finishCapture(
+                mode: .screen,
+                countdownEnabled: state.countdownEnabled,
+                countdownDuration: state.countdownDuration,
+                videoTimeLimitMinutes: state.videoTimeLimitMinutes
+            )
             return true
         case "w":
-            finishCapture(mode: .window, countdownEnabled: state.countdownEnabled, countdownDuration: state.countdownDuration)
+            finishCapture(
+                mode: .window,
+                countdownEnabled: state.countdownEnabled,
+                countdownDuration: state.countdownDuration,
+                videoTimeLimitMinutes: state.videoTimeLimitMinutes
+            )
             return true
         default:
             return false
         }
     }
 
-    private func finishCapture(mode: CapturePickerMode, countdownEnabled: Bool, countdownDuration: Int) {
+    private func finishCapture(
+        mode: CapturePickerMode,
+        countdownEnabled: Bool,
+        countdownDuration: Int,
+        videoTimeLimitMinutes: Int
+    ) {
         guard !didComplete else { return }
         didComplete = true
         removeKeyboardMonitors()
         orderOut(nil)
-        onCapture?(mode, countdownEnabled, countdownDuration)
+        onCapture?(mode, countdownEnabled, countdownDuration, videoTimeLimitMinutes)
         onCapture = nil
         onCancel = nil
     }
@@ -192,13 +221,13 @@ private struct CapturePickerView: View {
     let captureType: CaptureType
     @ObservedObject var state: CapturePickerState
 
-    let onCapture: (CapturePickerMode, Bool, Int) -> Void
+    let onCapture: (CapturePickerMode, Bool, Int, Int) -> Void
     let onCancel: () -> Void
 
     init(
         captureType: CaptureType,
         state: CapturePickerState,
-        onCapture: @escaping (CapturePickerMode, Bool, Int) -> Void,
+        onCapture: @escaping (CapturePickerMode, Bool, Int, Int) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.captureType = captureType
@@ -209,6 +238,10 @@ private struct CapturePickerView: View {
 
     private var timerLabel: String {
         state.countdownEnabled ? "\(state.countdownDuration)s" : "Off"
+    }
+
+    private var videoTimeLimitLabel: String {
+        state.videoTimeLimitMinutes == 0 ? "Unlimited" : "\(state.videoTimeLimitMinutes)m"
     }
 
     private var modeIcon: String {
@@ -242,7 +275,7 @@ private struct CapturePickerView: View {
             Divider()
                 .frame(height: 20)
                 .overlay(.primary.opacity(0.2))
-            Button { onCapture(.region, state.countdownEnabled, state.countdownDuration) } label: {
+            Button { onCapture(.region, state.countdownEnabled, state.countdownDuration, state.videoTimeLimitMinutes) } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "viewfinder.rectangular")
                         .font(.system(size: 12))
@@ -260,7 +293,7 @@ private struct CapturePickerView: View {
             .keyboardShortcut("r", modifiers: [])
             .accessibilityHint("Starts region capture.")
 
-            Button { onCapture(.screen, state.countdownEnabled, state.countdownDuration) } label: {
+            Button { onCapture(.screen, state.countdownEnabled, state.countdownDuration, state.videoTimeLimitMinutes) } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "display")
                         .font(.system(size: 12))
@@ -278,7 +311,7 @@ private struct CapturePickerView: View {
             .keyboardShortcut("s", modifiers: [])
             .accessibilityHint("Starts full screen capture.")
 
-            Button { onCapture(.window, state.countdownEnabled, state.countdownDuration) } label: {
+            Button { onCapture(.window, state.countdownEnabled, state.countdownDuration, state.videoTimeLimitMinutes) } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "macwindow")
                         .font(.system(size: 12))
@@ -332,6 +365,40 @@ private struct CapturePickerView: View {
             .accessibilityLabel("Countdown timer")
             .accessibilityValue(state.countdownEnabled ? "\(state.countdownDuration) seconds" : "Off")
             .accessibilityHint("Choose a delay before capture starts.")
+
+            if captureType == .video {
+                Menu {
+                    Button("Unlimited") {
+                        state.videoTimeLimitMinutes = 0
+                    }
+                    Divider()
+                    ForEach([1, 3, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                        Button("\(minutes) minute\(minutes == 1 ? "" : "s")") {
+                            state.videoTimeLimitMinutes = minutes
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "hourglass")
+                            .font(.system(size: 11))
+                        Text(videoTimeLimitLabel)
+                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(.primary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Auto-stop recording time limit")
+                .accessibilityLabel("Recording time limit")
+                .accessibilityValue(videoTimeLimitLabel)
+                .accessibilityHint("Choose when recording should automatically stop.")
+            }
 
             Button { onCancel() } label: {
                 Image(systemName: "xmark")

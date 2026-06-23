@@ -85,10 +85,8 @@ class StartRecordingPanel: NSPanel {
             webcamSize: settings.webcamSize,
             availableWebcams: availableWebcams,
             mouseClicksEnabled: defaultMouseClicksEnabled,
-            selectedVideoTimeLimitMinutes: settings.videoRecordingTimeLimitMinutes,
             allowsMouseClickToggle: allowsMouseClickToggle,
             onStart: { [weak self] systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes in
-                CaptureSettings.shared.videoRecordingTimeLimitMinutes = videoTimeLimitMinutes
                 guard let panel = self, let onStart = panel.onStart else { return }
                 panel.onStart = nil
                 panel.onCancel = nil
@@ -137,14 +135,9 @@ private struct StartRecordingView: View {
     @State var webcamSize: String
     let availableWebcams: [WebcamDeviceOption]
     @State var mouseClicksEnabled: Bool
-    @State var selectedVideoTimeLimitMinutes: Int
     let allowsMouseClickToggle: Bool
     let onStart: (Bool, StartRecordingPanel.MicrophoneSelection, StartRecordingPanel.WebcamSelection, Bool, Int) -> Void
     let onCancel: () -> Void
-
-    private var videoTimeLimitLabel: String {
-        selectedVideoTimeLimitMinutes == 0 ? "Unlimited" : "\(selectedVideoTimeLimitMinutes)m"
-    }
 
     private var webcamShapeLabel: String {
         switch webcamShape.lowercased() {
@@ -217,6 +210,18 @@ private struct StartRecordingView: View {
                 .accessibilityLabel("Microphone")
                 .accessibilityValue(microphone ? "On" : "Off")
                 .accessibilityHint("Toggles microphone recording.")
+
+                if microphone {
+                    Picker("Mic", selection: $selectedMicrophoneID) {
+                        Text("System Default").tag("")
+                        ForEach(availableMicrophones) { device in
+                            Text(device.name).tag(device.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 170)
+                    .help("Choose microphone input device.")
+                }
             }
 
             if captureType == .video {
@@ -238,6 +243,51 @@ private struct StartRecordingView: View {
                 .accessibilityLabel("Webcam overlay")
                 .accessibilityValue(webcamEnabled ? "On" : "Off")
                 .accessibilityHint("Toggles webcam overlay for this recording.")
+
+                if webcamEnabled {
+                    Menu {
+                        Picker("Webcam device", selection: $selectedWebcamID) {
+                            Text("System Default").tag("")
+                            ForEach(availableWebcams) { device in
+                                Text(device.name).tag(device.id)
+                            }
+                        }
+
+                        Divider()
+
+                        Picker("Shape", selection: $webcamShape) {
+                            Text("Circle").tag("circle")
+                            Text("Rounded rectangle").tag("rounded")
+                            Text("Rectangle").tag("rectangle")
+                        }
+
+                        Picker("Corner", selection: $webcamCorner) {
+                            Text("Top left").tag("topLeft")
+                            Text("Top right").tag("topRight")
+                            Text("Bottom left").tag("bottomLeft")
+                            Text("Bottom right").tag("bottomRight")
+                        }
+
+                        Picker("Size", selection: $webcamSize) {
+                            Text("Small").tag("small")
+                            Text("Medium").tag("medium")
+                            Text("Large").tag("large")
+                        }
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .frame(width: 28, height: 28)
+                            .background(.primary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Choose webcam overlay settings.")
+                    .accessibilityLabel("Webcam settings")
+                    .accessibilityValue("\(webcamShapeLabel), \(webcamCornerLabel), \(webcamSizeLabel)")
+                    .accessibilityHint("Opens webcam device, shape, corner, and size settings.")
+                }
             }
 
             if allowsMouseClickToggle {
@@ -259,113 +309,6 @@ private struct StartRecordingView: View {
                 .accessibilityHint("Toggles mouse click visuals for this recording.")
             }
 
-            if webcamEnabled && captureType == .video {
-                Picker("Webcam", selection: $selectedWebcamID) {
-                    Text("System Default").tag("")
-                    ForEach(availableWebcams) { device in
-                        Text(device.name).tag(device.id)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 170)
-                .help("Choose webcam input device.")
-
-                Menu {
-                    Button("Circle") { webcamShape = "circle" }
-                    Button("Rounded rectangle") { webcamShape = "rounded" }
-                    Button("Rectangle") { webcamShape = "rectangle" }
-                } label: {
-                    startPanelMenuLabel(
-                        icon: "square.on.circle",
-                        title: webcamShapeLabel
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Choose webcam overlay shape.")
-                .accessibilityLabel("Webcam shape")
-                .accessibilityValue(webcamShapeLabel)
-
-                Menu {
-                    Button("Top left") { webcamCorner = "topLeft" }
-                    Button("Top right") { webcamCorner = "topRight" }
-                    Button("Bottom left") { webcamCorner = "bottomLeft" }
-                    Button("Bottom right") { webcamCorner = "bottomRight" }
-                } label: {
-                    startPanelMenuLabel(
-                        icon: "arrow.up.left.and.arrow.down.right",
-                        title: webcamCornerLabel
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Choose webcam overlay corner.")
-                .accessibilityLabel("Webcam corner")
-                .accessibilityValue(webcamCornerLabel)
-
-                Menu {
-                    Button("Small") { webcamSize = "small" }
-                    Button("Medium") { webcamSize = "medium" }
-                    Button("Large") { webcamSize = "large" }
-                } label: {
-                    startPanelMenuLabel(
-                        icon: "ruler",
-                        title: webcamSizeLabel
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Choose webcam overlay size.")
-                .accessibilityLabel("Webcam size")
-                .accessibilityValue(webcamSizeLabel)
-            }
-
-            if microphone && captureType != .gif {
-                Picker("Mic", selection: $selectedMicrophoneID) {
-                    Text("System Default").tag("")
-                    ForEach(availableMicrophones) { device in
-                        Text(device.name).tag(device.id)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 170)
-                .help("Choose microphone input device.")
-            }
-
-            if captureType == .video {
-                Menu {
-                    Button("Unlimited") {
-                        selectedVideoTimeLimitMinutes = 0
-                    }
-                    Divider()
-                    ForEach([1, 3, 5, 10, 15, 30, 45, 60], id: \.self) { minutes in
-                        Button("\(minutes) minute\(minutes == 1 ? "" : "s")") {
-                            selectedVideoTimeLimitMinutes = minutes
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "hourglass")
-                            .font(.system(size: 11))
-                        Text(videoTimeLimitLabel)
-                            .font(.system(size: 12, weight: .medium))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.primary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Auto-stop recording time limit")
-                .accessibilityLabel("Recording time limit")
-                .accessibilityValue(videoTimeLimitLabel)
-                .accessibilityHint("Choose when recording should automatically stop.")
-            }
-
             Divider()
                 .frame(height: 20)
                 .overlay(.primary.opacity(0.2))
@@ -383,7 +326,7 @@ private struct StartRecordingView: View {
                         size: webcamSize
                     ),
                     mouseClicksEnabled,
-                    selectedVideoTimeLimitMinutes
+                    CaptureSettings.shared.videoRecordingTimeLimitMinutes
                 )
             } label: {
                 HStack(spacing: 5) {
@@ -434,19 +377,4 @@ private struct StartRecordingView: View {
         }
     }
 
-    private func startPanelMenuLabel(icon: String, title: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9))
-        }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.primary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
 }
