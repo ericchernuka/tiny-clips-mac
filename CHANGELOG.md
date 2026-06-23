@@ -9,6 +9,14 @@ All notable changes to this project will be documented in this file.
 - Added macOS webcam setup controls in recording start and video settings (enable toggle, device picker, shape/corner/size presets), plus start-panel plumbing so webcam selections flow into the video capture start path. Enabling webcam now auto-enables microphone by default (still manually overridable).
 - Added macOS export compositing support for recorded webcam artifacts, including corner placement, size presets, and shape masking (circle, rounded rectangle, rectangle) merged into the existing video post-processing pipeline alongside branding overlays.
 
+### Improved
+- Streamlined the macOS start recording panel by placing the microphone picker next to the mic toggle and moving webcam device/shape/corner/size choices into a compact settings popup.
+- Moved the macOS video recording time-limit picker to the initial capture picker next to the countdown control.
+- Reorganized macOS Video settings into clearer groups (Video Quality, Audio, Webcam Overlay, and Effects), and made webcam shape/corner/size settings configurable without first enabling the webcam overlay toggle.
+
+### Fixed
+- Fixed macOS webcam overlay exports so circular overlays keep a square crop instead of stretching the camera aspect ratio, and so the webcam track is clipped instead of the screen recording track.
+
 ## v1.4.1.0 - 2026-06-08
 
 ### Improved

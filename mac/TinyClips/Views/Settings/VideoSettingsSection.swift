@@ -8,22 +8,25 @@ struct VideoSettingsSection: View {
     let selectedTab: Binding<SettingsTab?>
 
     var body: some View {
-        Section("Capture Settings") {
-
+        Section("Video Quality") {
             Picker("Frame rate:", selection: $settings.videoFrameRate) {
                 Text("24 fps").tag(24)
                 Text("30 fps").tag(30)
                 Text("60 fps").tag(60)
             }
             .help("Choose the target frame rate for video recordings.")
+        }
 
+        Section("Audio") {
             Toggle("Record output audio", isOn: $settings.recordAudio)
                 .help("Include the current system output mix in the recording.")
             Text("Output audio records the current system mix. macOS does not provide a separate output-device picker here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
             Toggle("Record microphone", isOn: $settings.recordMicrophone)
                 .help("Include microphone input in the recording.")
+
             Picker("Microphone input:", selection: $settings.selectedMicrophoneID) {
                 Text("System Default").tag("")
                 ForEach(availableMicrophones) { device in
@@ -31,46 +34,52 @@ struct VideoSettingsSection: View {
                 }
             }
             .help("Choose which microphone to use for recordings.")
-            Toggle("Enable webcam overlay", isOn: $settings.webcamEnabled)
+        }
+
+        Section("Webcam Overlay") {
+            Toggle("Enable webcam overlay by default", isOn: $settings.webcamEnabled)
                 .help("Show a webcam picture-in-picture overlay while recording.")
                 .onChange(of: settings.webcamEnabled) { _, isEnabled in
                     if isEnabled {
                         settings.recordMicrophone = true
                     }
                 }
-            if settings.webcamEnabled {
-                Picker("Webcam device:", selection: $settings.selectedWebcamID) {
-                    Text("System Default").tag("")
-                    ForEach(availableWebcams) { device in
-                        Text(device.name).tag(device.id)
-                    }
-                }
-                .help("Choose which webcam to use for the overlay.")
 
-                Picker("Webcam shape:", selection: $settings.webcamShape) {
-                    Text("Circle").tag("circle")
-                    Text("Rounded rectangle").tag("rounded")
-                    Text("Rectangle").tag("rectangle")
+            Picker("Default camera:", selection: $settings.selectedWebcamID) {
+                Text("System Default").tag("")
+                ForEach(availableWebcams) { device in
+                    Text(device.name).tag(device.id)
                 }
-                .help("Choose the webcam overlay shape.")
-
-                Picker("Webcam corner:", selection: $settings.webcamCorner) {
-                    Text("Top left").tag("topLeft")
-                    Text("Top right").tag("topRight")
-                    Text("Bottom left").tag("bottomLeft")
-                    Text("Bottom right").tag("bottomRight")
-                }
-                .help("Choose the corner placement for the webcam overlay.")
-
-                Picker("Webcam size:", selection: $settings.webcamSize) {
-                    Text("Small").tag("small")
-                    Text("Medium").tag("medium")
-                    Text("Large").tag("large")
-                }
-                .help("Choose the webcam overlay size preset.")
             }
+            .help("Choose which webcam to use for the overlay.")
+
+            Picker("Webcam shape:", selection: $settings.webcamShape) {
+                Text("Circle").tag("circle")
+                Text("Rounded rectangle").tag("rounded")
+                Text("Rectangle").tag("rectangle")
+            }
+            .help("Choose the webcam overlay shape.")
+
+            Picker("Webcam corner:", selection: $settings.webcamCorner) {
+                Text("Top left").tag("topLeft")
+                Text("Top right").tag("topRight")
+                Text("Bottom left").tag("bottomLeft")
+                Text("Bottom right").tag("bottomRight")
+            }
+            .help("Choose the corner placement for the webcam overlay.")
+
+            Picker("Webcam size:", selection: $settings.webcamSize) {
+                Text("Small").tag("small")
+                Text("Medium").tag("medium")
+                Text("Large").tag("large")
+            }
+            .help("Choose the webcam overlay size preset.")
+        }
+
+        Section("Effects") {
             Toggle("Show capture region during recording", isOn: $settings.showRegionIndicator)
                 .help("Show a visible border around the selected capture area while recording.")
+
             VStack(alignment: .leading, spacing: 6) {
                 if isPro {
                     Toggle("Show mouse clicks in recording", isOn: $settings.showMouseClickVisualsInVideo)
