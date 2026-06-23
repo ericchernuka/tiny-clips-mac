@@ -89,6 +89,12 @@ public sealed class CaptureSettings : ICaptureSettings
         set => _settings.Set("videoFrameRate", value);
     }
 
+    public VideoEncoderProfile VideoEncoderProfile
+    {
+        get => ParseVideoEncoderProfile(_settings.Get("videoEncoderProfile", "high"));
+        set => _settings.Set("videoEncoderProfile", ToPersistedVideoEncoderProfile(value));
+    }
+
     public bool ShowMouseClickVisualsInVideo
     {
         get => _settings.Get("showMouseClickVisualsInVideo", false);
@@ -542,6 +548,7 @@ public sealed class CaptureSettings : ICaptureSettings
         VideoCountdownEnabled = true;
         VideoCountdownDuration = 3;
         VideoRecordingTimeLimitMinutes = 0;
+        VideoEncoderProfile = VideoEncoderProfile.High;
         GifCountdownEnabled = true;
         GifCountdownDuration = 3;
         ScreenshotCountdownEnabled = false;
@@ -559,8 +566,22 @@ public sealed class CaptureSettings : ICaptureSettings
         GifHotKeyModifiers = 6;
     }
 
-    private static WebcamShape ParseWebcamShape(string value) =>
+    private static VideoEncoderProfile ParseVideoEncoderProfile(string value) =>
         (value ?? string.Empty).ToLowerInvariant() switch
+        {
+            "baseline" => VideoEncoderProfile.Baseline,
+            "high" => VideoEncoderProfile.High,
+            _ => VideoEncoderProfile.High,
+        };
+
+    private static string ToPersistedVideoEncoderProfile(VideoEncoderProfile value) => value switch
+    {
+        VideoEncoderProfile.Baseline => "baseline",
+        VideoEncoderProfile.High => "high",
+        _ => "high",
+    };
+
+    private static WebcamShape ParseWebcamShape(string value) =>        (value ?? string.Empty).ToLowerInvariant() switch
         {
             "rectangle" => WebcamShape.Rectangle,
             "rounded" or "roundedrectangle" => WebcamShape.RoundedRectangle,

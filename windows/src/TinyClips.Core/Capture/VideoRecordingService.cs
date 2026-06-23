@@ -22,6 +22,12 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private readonly IWebcamCaptureService _webcamCapture;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    // MF_MT_MPEG2_PROFILE attribute + eAVEncH264VProfile values.
+    // Baseline (66) disables B-frames for max compatibility; High (100) is the default.
+    private static readonly Guid Mpeg2ProfileAttribute = new("ad76a80b-2d5c-4e0b-b375-64e520137036");
+    private const uint AvcBaselineProfile = 66;
+    private const uint AvcHighProfile = 100;
+
     private ContinuousCaptureSession? _capture;
     private Channel<TimestampedFrame>? _channel;
     private Task? _transcodeTask;
@@ -38,6 +44,9 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private BrandingOverlayCompositor? _branding;
     private WebcamOverlayCompositor? _webcamOverlay;
     private bool _webcamCaptureSubscribed;
+    private long _webcamCompositedFrames;
+    private long _webcamOverlayNullFrames;
+    private long _webcamNoFrameFrames;
 
     private AudioCaptureService? _audio;
     private AudioStreamDescriptor? _audioDescriptor;
@@ -59,6 +68,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
     public bool IsRecording { get; private set; }
 
     public event EventHandler<string?>? RecordingCompleted;
+
+    public event EventHandler<string>? WebcamCaptureFailed;
 
     public async Task StartAsync(CaptureTarget? target = null, PixelRect? region = null, double? timeLimitMinutesOverride = null, CancellationToken cancellationToken = default)
     {
@@ -117,6 +128,14 @@ public sealed class VideoRecordingService : IVideoRecordingService
                 profile.Video.PixelAspectRatio.Denominator = 1;
                 profile.Video.Bitrate = (uint)Math.Clamp((long)width * height * fps / 10, 2_000_000, 24_000_000);
 
+                // H.264 profile is configurable. High (default) enables B-frames + CABAC for the
+                // best quality/size. Baseline disables B-frames for maximum playback compatibility.
+                // (eAVEncH264VProfile_Base = 66, eAVEncH264VProfile_High = 100.)
+                profile.Video.Properties[Mpeg2ProfileAttribute] =
+                    _settings.VideoEncoderProfile == VideoEncoderProfile.Baseline
+                        ? AvcBaselineProfile
+                        : AvcHighProfile;
+
                 var videoProps = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
                 videoProps.FrameRate.Numerator = (uint)fps;
                 videoProps.FrameRate.Denominator = 1;
@@ -152,6 +171,17 @@ public sealed class VideoRecordingService : IVideoRecordingService
                     throw new InvalidOperationException($"Cannot encode video: {prepare.FailureReason}.");
                 }
 
+                // The encoder is now ready to consume frames. Wait briefly for the first webcam
+                // frame (camera warm-up) so the overlay is present from frame zero, then flush the
+                // stale pre-roll audio and start the frame pump together. This anchors the recorded
+                // timeline to the real "recording started" moment — without it, the capture clock,
+                // encoder prep and camera warm-up were baked in as several seconds of dead pre-roll
+                // (frozen screen, no webcam) at the front of every clip, and that pre-roll saturated
+                // the bounded frame channel so real frames near the end were dropped.
+                await WaitForFirstWebcamFrameAsync(cancellationToken).ConfigureAwait(false);
+                _audio?.FlushBuffers();
+                _capture.BeginEmitting();
+
                 _transcodeTask = prepare.TranscodeAsync().AsTask();
                 IsRecording = true;
 
@@ -182,11 +212,21 @@ public sealed class VideoRecordingService : IVideoRecordingService
         DrawClickOverlay(frame, pts);
         _branding?.Draw(frame.BgraPixels, frame.Width, frame.Height);
 
-        if (_webcamOverlay is not null &&
-            _webcamCapture.TryGetLatestFrame(out WebcamFrame? webcamFrame) &&
-            webcamFrame is not null)
+        if (_webcamOverlay is not null)
         {
-            _webcamOverlay.Draw(frame.BgraPixels, frame.Width, frame.Height, webcamFrame);
+            if (_webcamCapture.TryGetLatestFrame(out WebcamFrame? webcamFrame) && webcamFrame is not null)
+            {
+                _webcamOverlay.Draw(frame.BgraPixels, frame.Width, frame.Height, webcamFrame);
+                Interlocked.Increment(ref _webcamCompositedFrames);
+            }
+            else
+            {
+                Interlocked.Increment(ref _webcamNoFrameFrames);
+            }
+        }
+        else if (_settings.WebcamEnabled)
+        {
+            Interlocked.Increment(ref _webcamOverlayNullFrames);
         }
 
         _channel?.Writer.TryWrite(new TimestampedFrame(CreateBottomUpVideoBuffer(frame), pts));
@@ -289,8 +329,16 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private async Task StartWebcamOverlayAsync(CancellationToken cancellationToken)
     {
         _webcamOverlay = null;
+        Interlocked.Exchange(ref _webcamCompositedFrames, 0);
+        Interlocked.Exchange(ref _webcamOverlayNullFrames, 0);
+        Interlocked.Exchange(ref _webcamNoFrameFrames, 0);
+
+        WebcamDiagnostics.Reset();
+        WebcamDiagnostics.Log($"StartWebcamOverlay: WebcamEnabled={_settings.WebcamEnabled} deviceId='{(string.IsNullOrWhiteSpace(_settings.SelectedWebcamId) ? "(default)" : _settings.SelectedWebcamId)}' shape={_settings.WebcamShape} size={_settings.WebcamSizePreset} corner={_settings.WebcamCornerPosition}");
+
         if (!_settings.WebcamEnabled)
         {
+            WebcamDiagnostics.Log("Webcam is disabled in settings; no overlay will be composited.");
             return;
         }
 
@@ -319,11 +367,38 @@ public sealed class VideoRecordingService : IVideoRecordingService
             await _webcamCapture
                 .StartAsync(_settings.SelectedWebcamId, ResolveRequestedWebcamSize(_settings.WebcamSizePreset), cancellationToken)
                 .ConfigureAwait(false);
+            WebcamDiagnostics.Log($"StartWebcamOverlay: webcam capture start returned, IsRunning={_webcamCapture.IsRunning}");
         }
-        catch
+        catch (Exception ex)
         {
+            WebcamDiagnostics.Log($"StartWebcamOverlay: start threw 0x{(uint)ex.HResult:X8} {ex.GetType().Name}: {ex.Message}");
             await StopWebcamOverlayAsync().ConfigureAwait(false);
+            WebcamCaptureFailed?.Invoke(this, DescribeWebcamFailure(ex));
         }
+    }
+
+    private async Task WaitForFirstWebcamFrameAsync(CancellationToken cancellationToken)
+    {
+        // Only relevant when a webcam overlay is active and capture actually started.
+        if (_webcamOverlay is null || !_webcamCapture.IsRunning)
+        {
+            return;
+        }
+
+        // Cap the wait so a slow or unavailable camera can never block the recording start.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
+        {
+            if (_webcamCapture.TryGetLatestFrame(out var frame) && frame is not null)
+            {
+                WebcamDiagnostics.Log("First webcam frame ready; beginning emission with overlay present.");
+                return;
+            }
+
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        }
+
+        WebcamDiagnostics.Log("Webcam first frame not ready within budget; beginning emission anyway.");
     }
 
     private async Task StopWebcamOverlayAsync()
@@ -353,7 +428,23 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     private void OnWebcamCaptureFailed(object? sender, WebcamCaptureFailedEventArgs args)
     {
+        WebcamDiagnostics.Log($"OnWebcamCaptureFailed (mid-recording): code={args.Code} message='{args.Message}' — overlay disabled for the rest of this recording.");
         _webcamOverlay = null;
+        var detail = string.IsNullOrWhiteSpace(args.Message) ? null : args.Message;
+        WebcamCaptureFailed?.Invoke(this, detail is null
+            ? "The webcam stopped during recording. The screen recording continued without it."
+            : $"The webcam stopped during recording ({detail}). The screen recording continued without it.");
+    }
+
+    private static string DescribeWebcamFailure(Exception ex)
+    {
+        // 0x80070005 (E_ACCESSDENIED) surfaces when camera access is blocked in Privacy settings.
+        if (ex is UnauthorizedAccessException || (uint)ex.HResult == 0x80070005)
+        {
+            return "Camera access is blocked. Enable it in Settings > Privacy & security > Camera, then record again. The screen recording continued without the webcam.";
+        }
+
+        return $"The webcam couldn't start ({ex.Message}). The screen recording continued without it.";
     }
 
     private static BitmapSize ResolveRequestedWebcamSize(WebcamSizePreset preset) => preset switch
@@ -492,6 +583,10 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             _clickMonitor?.Dispose();
             _clickMonitor = null;
+            if (_settings.WebcamEnabled)
+            {
+                WebcamDiagnostics.Log($"Recording stopping — webcam composite summary: composited={Interlocked.Read(ref _webcamCompositedFrames)} noFrameYet={Interlocked.Read(ref _webcamNoFrameFrames)} overlayDisabled={Interlocked.Read(ref _webcamOverlayNullFrames)}");
+            }
             await StopWebcamOverlayAsync().ConfigureAwait(false);
 
             // Signal audio end-of-stream and stop the device before draining the encoder,

@@ -110,8 +110,8 @@ public sealed class WebcamOverlayCompositor
                 int sourceIndex = srcRow + (srcX * 4);
                 int destIndex = dstRow + (dstX * 4);
 
-                double srcAlpha = source[sourceIndex + 3] / 255.0;
-                double alpha = (maskAlpha / 255.0) * srcAlpha;
+                // Webcam frames are opaque, but camera drivers often leave BGRA alpha undefined.
+                double alpha = maskAlpha / 255.0;
                 if (alpha <= 0)
                 {
                     continue;

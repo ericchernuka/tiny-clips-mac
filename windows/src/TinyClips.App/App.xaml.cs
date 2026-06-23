@@ -457,7 +457,8 @@ public partial class App : Application
 
                 var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
                 var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
-                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, monitor, region);
+                var webcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
+                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, webcamDevices, monitor, region);
             }
             finally
             {
@@ -467,7 +468,8 @@ public partial class App : Application
 
         var setupMonitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
         var setupAudioDevices = Services.GetRequiredService<IAudioDeviceService>();
-        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupMonitor, region);
+        var setupWebcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
+        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupWebcamDevices, setupMonitor, region);
     }
 
     private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)
@@ -482,6 +484,8 @@ public partial class App : Application
         settings.RecordAudio = setup.RecordSystemAudio;
         settings.RecordMicrophone = setup.RecordMicrophone;
         settings.SelectedMicrophoneId = setup.SelectedMicrophoneId;
+        settings.WebcamEnabled = setup.WebcamEnabled;
+        settings.SelectedWebcamId = setup.SelectedWebcamId;
         settings.VideoRecordingTimeLimitMinutes = setup.VideoTimeLimitMinutes;
     }
 
@@ -677,6 +681,29 @@ public partial class App : Application
         var gif = Services.GetRequiredService<IGifRecordingService>();
         video.RecordingCompleted += OnRecordingCompleted;
         gif.RecordingCompleted += OnRecordingCompleted;
+        video.WebcamCaptureFailed += OnWebcamCaptureFailed;
+    }
+
+    private void OnWebcamCaptureFailed(object? sender, string reason)
+    {
+        _dispatcher?.TryEnqueue(() => ShowWebcamFailureNotification(reason));
+    }
+
+    private static void ShowWebcamFailureNotification(string reason)
+    {
+        try
+        {
+            var notification = new AppNotificationBuilder()
+                .AddText("Webcam unavailable")
+                .AddText(reason)
+                .BuildNotification();
+
+            AppNotificationManager.Default.Show(notification);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to show webcam failure notification: {ex}");
+        }
     }
 
     private void OnRecordingCompleted(object? sender, string? path)

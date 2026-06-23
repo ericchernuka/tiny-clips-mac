@@ -74,30 +74,74 @@
                     </Grid>
                 </ToggleButton>
 
-                <Grid x:Name="MicrophonePickerHost" MinWidth="210">
-                    <ComboBox
-                        x:Name="MicrophoneCombo"
-                        MinWidth="210"
-                        AutomationProperties.AutomationId="SetupMicrophoneDeviceCombo"
-                        AutomationProperties.Name="Microphone device"
-                        DisplayMemberPath="Name"
-                        SelectionChanged="OnMicrophoneSelectionChanged" />
-                    <StackPanel
-                        x:Name="MicrophoneLoadingPanel"
-                        Orientation="Horizontal"
-                        Spacing="8"
-                        Visibility="Collapsed">
-                        <ProgressRing
-                            Width="20"
-                            Height="20"
-                            IsActive="True" />
+                <DropDownButton
+                    x:Name="MicrophoneDeviceButton"
+                    AutomationProperties.AutomationId="SetupMicrophoneDeviceButton"
+                    AutomationProperties.Name="Microphone device"
+                    ToolTipService.ToolTip="Microphone device">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE720;" />
                         <TextBlock
+                            x:Name="MicrophoneDeviceLabel"
+                            Width="120"
                             VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="Loading..." />
+                            Text="System default"
+                            TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                </Grid>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="MicrophoneFlyout" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+
+                <ToggleButton
+                    x:Name="WebcamToggle"
+                    Width="34"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="SetupWebcamButton"
+                    AutomationProperties.Name="Webcam"
+                    Checked="OnWebcamToggled"
+                    Unchecked="OnWebcamToggled"
+                    ToolTipService.ToolTip="Webcam">
+                    <Grid Width="18" Height="18">
+                        <FontIcon
+                            x:Name="WebcamIcon"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Glyph="&#xE722;" />
+                        <Line
+                            x:Name="WebcamSlash"
+                            X1="3"
+                            X2="15"
+                            Y1="15"
+                            Y2="3"
+                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                            StrokeEndLineCap="Round"
+                            StrokeThickness="2"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </ToggleButton>
+
+                <DropDownButton
+                    x:Name="WebcamDeviceButton"
+                    AutomationProperties.AutomationId="SetupWebcamDeviceButton"
+                    AutomationProperties.Name="Webcam device"
+                    ToolTipService.ToolTip="Webcam device">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE722;" />
+                        <TextBlock
+                            x:Name="WebcamDeviceLabel"
+                            Width="120"
+                            VerticalAlignment="Center"
+                            Text="System default"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="WebcamFlyout" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
 
                 <ToggleButton
                     x:Name="MouseClicksToggle"

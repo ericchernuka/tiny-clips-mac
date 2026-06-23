@@ -68,6 +68,7 @@ public sealed class GifRecordingService : IGifRecordingService
             _capture = new ContinuousCaptureSession(captureTarget, region, (int)Math.Round(_fps), includeCursor: true);
             _capture.FrameReady += OnFrameReady;
             _capture.Start();
+            _capture.BeginEmitting();
 
             StartMouseClickOverlay(captureTarget, region);
             _branding = _settings.ShowBrandingOverlay ? new BrandingOverlayCompositor() : null;

@@ -1,8 +1,8 @@
-using System.Runtime.InteropServices;
 using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
 using Windows.Media.MediaProperties;
+using Windows.Storage.Streams;
 
 namespace TinyClips.Core.Capture;
 
@@ -19,6 +19,10 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
     private WebcamFrame? _latestFrame;
     private TimeSpan? _baseTimestamp;
+    private long _framesArrived;
+    private int _firstFrameLogged;
+    private int _firstCacheLogged;
+    private int _frameErrorLogged;
 
     public bool IsRunning { get; private set; }
 
@@ -43,10 +47,16 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
             _stopRequested = false;
             _baseTimestamp = null;
+            Interlocked.Exchange(ref _framesArrived, 0);
+            Interlocked.Exchange(ref _firstFrameLogged, 0);
+            Interlocked.Exchange(ref _firstCacheLogged, 0);
+            Interlocked.Exchange(ref _frameErrorLogged, 0);
             lock (_latestFrameGate)
             {
                 _latestFrame = null;
             }
+
+            WebcamDiagnostics.Log($"WebcamCaptureService.StartAsync deviceId='{(string.IsNullOrWhiteSpace(deviceId) ? "(default)" : deviceId)}' size={bitmapSize.Width}x{bitmapSize.Height}");
 
             var mediaCapture = new MediaCapture();
             MediaCaptureFailedEventHandler failedHandler = OnMediaCaptureFailed;
@@ -63,6 +73,7 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                 };
 
                 await mediaCapture.InitializeAsync(settings).AsTask(cancellationToken).ConfigureAwait(false);
+                WebcamDiagnostics.Log("InitializeAsync succeeded.");
 
                 if (_stopRequested)
                 {
@@ -73,6 +84,7 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
                 var source = SelectPreferredSource(mediaCapture.FrameSources)
                     ?? throw new InvalidOperationException("No color webcam frame source was available.");
+                WebcamDiagnostics.Log($"Selected frame source kind={source.Info.SourceKind} streamType={source.Info.MediaStreamType} id={source.Info.Id}");
 
                 var frameReader = await mediaCapture
                     .CreateFrameReaderAsync(source, MediaEncodingSubtypes.Bgra8, bitmapSize)
@@ -83,6 +95,7 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                 frameReader.FrameArrived += OnFrameArrived;
 
                 var startStatus = await frameReader.StartAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                WebcamDiagnostics.Log($"frameReader.StartAsync status={startStatus}");
                 if (startStatus != MediaFrameReaderStartStatus.Success)
                 {
                     frameReader.FrameArrived -= OnFrameArrived;
@@ -104,9 +117,11 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                 _frameReader = frameReader;
                 _failedHandler = failedHandler;
                 IsRunning = true;
+                WebcamDiagnostics.Log("Webcam capture is now running (IsRunning=true).");
             }
-            catch
+            catch (Exception ex)
             {
+                WebcamDiagnostics.Log($"StartAsync FAILED: 0x{(uint)ex.HResult:X8} {ex.GetType().Name}: {ex.Message}");
                 mediaCapture.Failed -= failedHandler;
                 mediaCapture.Dispose();
                 throw;
@@ -133,6 +148,11 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             _mediaCapture = null;
             _failedHandler = null;
             IsRunning = false;
+
+            if (mediaCapture is not null)
+            {
+                WebcamDiagnostics.Log($"WebcamCaptureService.StopAsync — total frames arrived={Interlocked.Read(ref _framesArrived)}");
+            }
 
             if (frameReader is not null)
             {
@@ -200,11 +220,21 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                 _baseTimestamp = timestamp;
             }
 
+            Interlocked.Increment(ref _framesArrived);
+            if (Interlocked.Exchange(ref _firstFrameLogged, 1) == 0)
+            {
+                WebcamDiagnostics.Log($"First frame arrived: {softwareBitmap.PixelWidth}x{softwareBitmap.PixelHeight} format={softwareBitmap.BitmapPixelFormat} alpha={softwareBitmap.BitmapAlphaMode}");
+            }
+
+            // The overlay compositor blends BGR using its own shape mask and ignores the
+            // webcam's source alpha, so when the camera already delivers Bgra8 we copy the
+            // raw bytes directly — avoiding a per-frame SoftwareBitmap.Convert that can fail
+            // in the packaged runtime. Only non-Bgra8 formats (e.g. Nv12/Yuy2) need a convert.
             SoftwareBitmap? convertedBitmap = null;
             var preparedBitmap = softwareBitmap;
-            if (softwareBitmap.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || softwareBitmap.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
+            if (softwareBitmap.BitmapPixelFormat != BitmapPixelFormat.Bgra8)
             {
-                convertedBitmap = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                convertedBitmap = SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore);
                 preparedBitmap = convertedBitmap;
             }
 
@@ -215,20 +245,30 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                 {
                     _latestFrame = frame;
                 }
+
+                if (Interlocked.Exchange(ref _firstCacheLogged, 1) == 0)
+                {
+                    WebcamDiagnostics.Log($"First webcam frame cached for compositing: {frame.Width}x{frame.Height} (converted={(convertedBitmap is not null)})");
+                }
             }
             finally
             {
                 convertedBitmap?.Dispose();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            if (Interlocked.Exchange(ref _frameErrorLogged, 1) == 0)
+            {
+                WebcamDiagnostics.Log($"OnFrameArrived FAILED (frame not cached): 0x{(uint)ex.HResult:X8} {ex.GetType().Name}: {ex.Message}");
+            }
             // A single failed frame should not stop webcam capture.
         }
     }
 
     private async void OnMediaCaptureFailed(MediaCapture sender, MediaCaptureFailedEventArgs args)
     {
+        WebcamDiagnostics.Log($"MediaCapture.Failed fired: code={args.Code} message='{args.Message}' (frames so far={Interlocked.Read(ref _framesArrived)})");
         try
         {
             await StopAsync().ConfigureAwait(false);
@@ -251,22 +291,45 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             .FirstOrDefault();
     }
 
-    private static unsafe WebcamFrame CopyFrame(SoftwareBitmap bitmap, TimeSpan timestamp)
+    private static WebcamFrame CopyFrame(SoftwareBitmap bitmap, TimeSpan timestamp)
     {
-        using var buffer = bitmap.LockBuffer(BitmapBufferAccessMode.Read);
-        using var reference = buffer.CreateReference();
-        ((IMemoryBufferByteAccess)reference).GetBuffer(out var sourceBytes, out _);
+        var width = bitmap.PixelWidth;
+        var height = bitmap.PixelHeight;
 
-        var plane = buffer.GetPlaneDescription(0);
-        var width = plane.Width;
-        var height = plane.Height;
-        var destination = new byte[width * height * 4];
+        // Read the frame's pixel bytes through a fully WinRT-projected path
+        // (CopyToBuffer + DataReader) rather than the IMemoryBufferByteAccess COM-interop
+        // interface. Under C#/WinRT that interface fails to QueryInterface (E_NOINTERFACE /
+        // "Specified cast is not valid"), so every frame was being dropped before compositing.
+        var pixelBuffer = new Windows.Storage.Streams.Buffer((uint)(width * height * 4));
+        bitmap.CopyToBuffer(pixelBuffer);
 
+        var raw = new byte[pixelBuffer.Length];
+        using (var reader = DataReader.FromBuffer(pixelBuffer))
+        {
+            reader.ReadBytes(raw);
+        }
+
+        var packedStride = width * 4;
+        var totalLength = raw.Length;
+
+        // CopyToBuffer packs Bgra8 rows with no inter-row padding (stride == width*4) for the
+        // formats this service requests, so the buffer is already the layout WebcamFrame expects.
+        if (totalLength == packedStride * height)
+        {
+            return new WebcamFrame(raw, width, height, timestamp);
+        }
+
+        // Defensive fallback: de-stride if a driver ever reports padded rows.
+        var stride = height > 0 ? totalLength / height : packedStride;
+        if (stride < packedStride || height <= 0)
+        {
+            return new WebcamFrame(raw, width, height, timestamp);
+        }
+
+        var destination = new byte[packedStride * height];
         for (var row = 0; row < height; row++)
         {
-            var sourceOffset = plane.StartIndex + (row * plane.Stride);
-            var destinationOffset = row * width * 4;
-            Marshal.Copy((nint)(sourceBytes + sourceOffset), destination, destinationOffset, width * 4);
+            Array.Copy(raw, row * stride, destination, row * packedStride, packedStride);
         }
 
         return new WebcamFrame(destination, width, height, timestamp);
@@ -290,13 +353,5 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
         _isDisposed = true;
         await StopAsync().ConfigureAwait(false);
         _stateGate.Dispose();
-    }
-
-    [ComImport]
-    [Guid("5B0D3235-4DBA-4D44-8650-BC5D5A8F715A")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private unsafe interface IMemoryBufferByteAccess
-    {
-        void GetBuffer(out byte* buffer, out uint capacity);
     }
 }
