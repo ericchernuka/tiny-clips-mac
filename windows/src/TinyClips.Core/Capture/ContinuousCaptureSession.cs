@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Windows.Graphics.Capture;
@@ -197,7 +198,12 @@ internal sealed class ContinuousCaptureSession : IDisposable
         int height;
         TimeSpan pts;
 
-        lock (_sync)
+        if (!Monitor.TryEnter(_sync))
+        {
+            return;
+        }
+
+        try
         {
             if (!_running || _latestPixels is null)
             {
@@ -218,6 +224,10 @@ internal sealed class ContinuousCaptureSession : IDisposable
             }
 
             _lastEmittedPts = pts;
+        }
+        finally
+        {
+            Monitor.Exit(_sync);
         }
 
         // Raise outside the lock so heavy per-frame compositing doesn't stall WGC delivery.

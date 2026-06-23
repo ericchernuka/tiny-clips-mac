@@ -999,7 +999,7 @@ class CaptureManager: ObservableObject {
     private func showStartPanel() {
         let panel = StartRecordingPanel(
             captureType: pendingRecordingType ?? .video,
-            onStart: { [weak self] systemAudio, microphoneSelection, webcamSelection, mouseClicksEnabled, videoTimeLimitMinutes in
+            onStart: { [weak self] systemAudio, microphoneSelection, webcamSelection, mouseClicksEnabled, _ in
                 guard
                     let self,
                     let target = self.pendingRecordingTarget,
