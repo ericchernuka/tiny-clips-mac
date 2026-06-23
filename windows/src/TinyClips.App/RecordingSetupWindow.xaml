@@ -124,24 +124,20 @@
                     </Grid>
                 </ToggleButton>
 
-                <DropDownButton
-                    x:Name="WebcamDeviceButton"
-                    AutomationProperties.AutomationId="SetupWebcamDeviceButton"
-                    AutomationProperties.Name="Webcam device"
-                    ToolTipService.ToolTip="Webcam device">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE722;" />
-                        <TextBlock
-                            x:Name="WebcamDeviceLabel"
-                            Width="120"
-                            VerticalAlignment="Center"
-                            Text="System default"
-                            TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout x:Name="WebcamFlyout" />
-                    </DropDownButton.Flyout>
-                </DropDownButton>
+                <Button
+                    x:Name="WebcamSettingsButton"
+                    Width="38"
+                    Height="34"
+                    MinWidth="0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="SetupWebcamSettingsButton"
+                    AutomationProperties.Name="Webcam settings"
+                    ToolTipService.ToolTip="Webcam settings">
+                    <FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE713;" />
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="WebcamSettingsFlyout" />
+                    </Button.Flyout>
+                </Button>
 
                 <ToggleButton
                     x:Name="MouseClicksToggle"

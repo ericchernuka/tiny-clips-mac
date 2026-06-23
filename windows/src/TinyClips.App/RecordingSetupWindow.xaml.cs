@@ -21,6 +21,10 @@ public sealed record RecordingSetupResult(
     string SelectedMicrophoneId,
     bool WebcamEnabled,
     string SelectedWebcamId,
+    WebcamShape WebcamShape,
+    WebcamSizePreset WebcamSizePreset,
+    WebcamCornerPosition WebcamCornerPosition,
+    double? WebcamCornerRadius,
     bool ShowMouseClicks);
 
 /// <summary>
@@ -35,6 +39,7 @@ public sealed partial class RecordingSetupWindow : Window
     private const string MicGlyph = "\uE720";
     private const string SystemAudioOnGlyph = "\uE767";
     private const string SystemAudioOffGlyph = "\uE74F";
+    private static readonly double[] WebcamCornerRadiusOptions = { -1d, 8d, 12d, 16d, 24d, 32d, 48d };
 
     private readonly TaskCompletionSource<RecordingSetupResult?> _result = new();
     private readonly CaptureType _captureType;
@@ -53,6 +58,10 @@ public sealed partial class RecordingSetupWindow : Window
     private string _selectedMicrophoneId;
     private bool _webcamEnabled;
     private string _selectedWebcamId;
+    private WebcamShape _webcamShape;
+    private WebcamSizePreset _webcamSizePreset;
+    private WebcamCornerPosition _webcamCornerPosition;
+    private double _webcamCornerRadius;
     private bool _showMouseClicks;
 
     private bool _dragging;
@@ -75,6 +84,10 @@ public sealed partial class RecordingSetupWindow : Window
         _selectedMicrophoneId = settings.SelectedMicrophoneId ?? string.Empty;
         _webcamEnabled = settings.WebcamEnabled;
         _selectedWebcamId = settings.SelectedWebcamId ?? string.Empty;
+        _webcamShape = settings.WebcamShape;
+        _webcamSizePreset = settings.WebcamSizePreset;
+        _webcamCornerPosition = settings.WebcamCornerPosition;
+        _webcamCornerRadius = settings.WebcamCornerRadius ?? -1;
         _showMouseClicks = settings.ShouldShowMouseClickVisuals(captureType);
 
         _microphones.Add(new AudioInputDevice(string.Empty, "System default"));
@@ -83,7 +96,7 @@ public sealed partial class RecordingSetupWindow : Window
         ConfigurePresenter();
         ConfigureForCaptureType();
         RebuildMicrophoneFlyout(loading: false);
-        RebuildWebcamFlyout(loading: false);
+        RebuildWebcamSettingsFlyout(loading: false);
         UpdateVisuals();
 
         Closed += OnClosed;
@@ -116,7 +129,7 @@ public sealed partial class RecordingSetupWindow : Window
             MicrophoneToggle.Visibility = Visibility.Collapsed;
             MicrophoneDeviceButton.Visibility = Visibility.Collapsed;
             WebcamToggle.Visibility = Visibility.Collapsed;
-            WebcamDeviceButton.Visibility = Visibility.Collapsed;
+            WebcamSettingsButton.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -238,8 +251,8 @@ public sealed partial class RecordingSetupWindow : Window
         finally
         {
             _suppressEvents = false;
-            RebuildWebcamFlyout(loading: false);
-            UpdateWebcamPickerEnabled();
+            RebuildWebcamSettingsFlyout(loading: false);
+            UpdateWebcamSettingsEnabled();
         }
     }
 
@@ -251,8 +264,8 @@ public sealed partial class RecordingSetupWindow : Window
         }
 
         _webcamsLoading = loading;
-        RebuildWebcamFlyout(loading);
-        UpdateWebcamPickerEnabled();
+        RebuildWebcamSettingsFlyout(loading);
+        UpdateWebcamSettingsEnabled();
     }
 
     private void ShowNear(MonitorInfo? monitor, PixelRect? regionInVirtualDesktop)
@@ -381,7 +394,7 @@ public sealed partial class RecordingSetupWindow : Window
         }
 
         UpdateWebcamVisual();
-        UpdateWebcamPickerEnabled();
+        UpdateWebcamSettingsEnabled();
         UpdateMicrophoneVisual();
         UpdateMicrophonePickerEnabled();
     }
@@ -416,7 +429,56 @@ public sealed partial class RecordingSetupWindow : Window
         }
 
         _selectedWebcamId = webcam.Id;
-        RebuildWebcamFlyout(loading: false);
+        RebuildWebcamSettingsFlyout(loading: false);
+        UpdateWebcamSettingsSummary();
+    }
+
+    private void SelectWebcamShape(WebcamShape shape)
+    {
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        _webcamShape = shape;
+        RebuildWebcamSettingsFlyout(loading: false);
+        UpdateWebcamSettingsSummary();
+    }
+
+    private void SelectWebcamCorner(WebcamCornerPosition corner)
+    {
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        _webcamCornerPosition = corner;
+        RebuildWebcamSettingsFlyout(loading: false);
+        UpdateWebcamSettingsSummary();
+    }
+
+    private void SelectWebcamSize(WebcamSizePreset size)
+    {
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        _webcamSizePreset = size;
+        RebuildWebcamSettingsFlyout(loading: false);
+        UpdateWebcamSettingsSummary();
+    }
+
+    private void SelectWebcamCornerRadius(double radius)
+    {
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        _webcamCornerRadius = radius;
+        RebuildWebcamSettingsFlyout(loading: false);
+        UpdateWebcamSettingsSummary();
     }
 
     private void OnStart(object sender, RoutedEventArgs e)
@@ -427,6 +489,10 @@ public sealed partial class RecordingSetupWindow : Window
             _selectedMicrophoneId,
             _captureType == CaptureType.Video && _webcamEnabled,
             _selectedWebcamId,
+            _webcamShape,
+            _webcamSizePreset,
+            _webcamCornerPosition,
+            _webcamCornerRadius < 0 ? null : _webcamCornerRadius,
             _showMouseClicks));
     }
 
@@ -500,7 +566,9 @@ public sealed partial class RecordingSetupWindow : Window
         UpdateWebcamVisual();
         UpdateMouseClicksVisual();
         UpdateMicrophonePickerEnabled();
-        UpdateWebcamPickerEnabled();
+        UpdateWebcamSettingsEnabled();
+        RebuildWebcamSettingsFlyout(_webcamsLoading);
+        UpdateWebcamSettingsSummary();
     }
 
     private void UpdateSystemAudioVisual()
@@ -540,9 +608,9 @@ public sealed partial class RecordingSetupWindow : Window
         MicrophoneDeviceButton.IsEnabled = _recordMicrophone && !_microphonesLoading && MicrophoneFlyout.Items.Count > 0;
     }
 
-    private void UpdateWebcamPickerEnabled()
+    private void UpdateWebcamSettingsEnabled()
     {
-        WebcamDeviceButton.IsEnabled = _webcamEnabled && !_webcamsLoading && WebcamFlyout.Items.Count > 0;
+        WebcamSettingsButton.IsEnabled = _captureType == CaptureType.Video;
     }
 
     private void RebuildMicrophoneFlyout(bool loading)
@@ -571,19 +639,22 @@ public sealed partial class RecordingSetupWindow : Window
         }
     }
 
-    private void RebuildWebcamFlyout(bool loading)
+    private void RebuildWebcamSettingsFlyout(bool loading)
     {
-        WebcamFlyout.Items.Clear();
+        WebcamSettingsFlyout.Items.Clear();
+
+        var cameraMenu = new MenuFlyoutSubItem { Text = "Camera" };
         if (loading)
         {
-            WebcamDeviceLabel.Text = "Loading...";
-            WebcamFlyout.Items.Add(new MenuFlyoutItem { Text = "Loading webcams...", IsEnabled = false });
+            cameraMenu.Items.Add(new MenuFlyoutItem { Text = "Loading webcams...", IsEnabled = false });
+            WebcamSettingsFlyout.Items.Add(cameraMenu);
+            AddWebcamLayoutItems();
+            UpdateWebcamSettingsSummary();
             return;
         }
 
         var selected = _webcams.FirstOrDefault(w => w.Id == _selectedWebcamId) ?? _webcams[0];
-        WebcamDeviceLabel.Text = selected.Name;
-        ToolTipService.SetToolTip(WebcamDeviceButton, $"Webcam device: {selected.Name}");
+        _selectedWebcamId = selected.Id;
 
         foreach (var webcam in _webcams)
         {
@@ -593,9 +664,114 @@ public sealed partial class RecordingSetupWindow : Window
                 IsChecked = webcam.Id == _selectedWebcamId,
             };
             item.Click += (_, _) => SelectWebcam(webcam);
-            WebcamFlyout.Items.Add(item);
+            cameraMenu.Items.Add(item);
         }
+
+        WebcamSettingsFlyout.Items.Add(cameraMenu);
+        AddWebcamLayoutItems();
+        UpdateWebcamSettingsSummary();
     }
+
+    private void AddWebcamLayoutItems()
+    {
+        WebcamSettingsFlyout.Items.Add(new MenuFlyoutSeparator());
+
+        var shapeMenu = new MenuFlyoutSubItem { Text = "Shape" };
+        AddShapeItem(shapeMenu, "Rectangle", WebcamShape.Rectangle);
+        AddShapeItem(shapeMenu, "Rounded rectangle", WebcamShape.RoundedRectangle);
+        AddShapeItem(shapeMenu, "Circle", WebcamShape.Circle);
+        WebcamSettingsFlyout.Items.Add(shapeMenu);
+
+        var cornerMenu = new MenuFlyoutSubItem { Text = "Corner" };
+        AddCornerItem(cornerMenu, "Top left", WebcamCornerPosition.TopLeft);
+        AddCornerItem(cornerMenu, "Top right", WebcamCornerPosition.TopRight);
+        AddCornerItem(cornerMenu, "Bottom left", WebcamCornerPosition.BottomLeft);
+        AddCornerItem(cornerMenu, "Bottom right", WebcamCornerPosition.BottomRight);
+        WebcamSettingsFlyout.Items.Add(cornerMenu);
+
+        var sizeMenu = new MenuFlyoutSubItem { Text = "Size" };
+        AddSizeItem(sizeMenu, "Small", WebcamSizePreset.Small);
+        AddSizeItem(sizeMenu, "Medium", WebcamSizePreset.Medium);
+        AddSizeItem(sizeMenu, "Large", WebcamSizePreset.Large);
+        WebcamSettingsFlyout.Items.Add(sizeMenu);
+
+        var radiusMenu = new MenuFlyoutSubItem
+        {
+            Text = "Rounded corner value",
+            IsEnabled = _webcamShape == WebcamShape.RoundedRectangle,
+        };
+        foreach (var radius in WebcamCornerRadiusOptions)
+        {
+            AddCornerRadiusItem(radiusMenu, FormatCornerRadius(radius), radius);
+        }
+
+        WebcamSettingsFlyout.Items.Add(radiusMenu);
+    }
+
+    private void AddShapeItem(MenuFlyoutSubItem menu, string text, WebcamShape shape)
+    {
+        var item = new ToggleMenuFlyoutItem
+        {
+            Text = text,
+            IsChecked = _webcamShape == shape,
+        };
+        item.Click += (_, _) => SelectWebcamShape(shape);
+        menu.Items.Add(item);
+    }
+
+    private void AddCornerItem(MenuFlyoutSubItem menu, string text, WebcamCornerPosition corner)
+    {
+        var item = new ToggleMenuFlyoutItem
+        {
+            Text = text,
+            IsChecked = _webcamCornerPosition == corner,
+        };
+        item.Click += (_, _) => SelectWebcamCorner(corner);
+        menu.Items.Add(item);
+    }
+
+    private void AddSizeItem(MenuFlyoutSubItem menu, string text, WebcamSizePreset size)
+    {
+        var item = new ToggleMenuFlyoutItem
+        {
+            Text = text,
+            IsChecked = _webcamSizePreset == size,
+        };
+        item.Click += (_, _) => SelectWebcamSize(size);
+        menu.Items.Add(item);
+    }
+
+    private void AddCornerRadiusItem(MenuFlyoutSubItem menu, string text, double radius)
+    {
+        var item = new ToggleMenuFlyoutItem
+        {
+            Text = text,
+            IsChecked = Math.Abs(_webcamCornerRadius - radius) < 0.1,
+        };
+        item.Click += (_, _) => SelectWebcamCornerRadius(radius);
+        menu.Items.Add(item);
+    }
+
+    private void UpdateWebcamSettingsSummary()
+    {
+        var selected = _webcams.FirstOrDefault(w => w.Id == _selectedWebcamId);
+        var deviceName = selected?.Name ?? (_webcamsLoading ? "Loading webcams..." : "System default");
+        var state = _webcamEnabled ? "On" : "Off";
+        var summary = $"Webcam settings: {state}, {deviceName}, {_webcamShape}, {_webcamSizePreset}, {FormatCorner(_webcamCornerPosition)}";
+        ToolTipService.SetToolTip(WebcamSettingsButton, summary);
+        AutomationProperties.SetName(WebcamSettingsButton, summary);
+    }
+
+    private static string FormatCorner(WebcamCornerPosition corner) => corner switch
+    {
+        WebcamCornerPosition.TopLeft => "top left",
+        WebcamCornerPosition.TopRight => "top right",
+        WebcamCornerPosition.BottomLeft => "bottom left",
+        WebcamCornerPosition.BottomRight => "bottom right",
+        _ => "bottom right",
+    };
+
+    private static string FormatCornerRadius(double radius) => radius < 0 ? "Default" : $"{radius:0} px";
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {

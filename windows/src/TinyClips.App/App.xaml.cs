@@ -487,6 +487,10 @@ public partial class App : Application
         settings.SelectedMicrophoneId = setup.SelectedMicrophoneId;
         settings.WebcamEnabled = setup.WebcamEnabled;
         settings.SelectedWebcamId = setup.SelectedWebcamId;
+        settings.WebcamShape = setup.WebcamShape;
+        settings.WebcamSizePreset = setup.WebcamSizePreset;
+        settings.WebcamCornerPosition = setup.WebcamCornerPosition;
+        settings.WebcamCornerRadius = setup.WebcamCornerRadius;
     }
 
     private async Task<TargetSelection?> ResolveTargetAsync(CapturePickerMode mode)

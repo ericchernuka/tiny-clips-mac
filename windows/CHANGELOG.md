@@ -25,6 +25,7 @@ own `CHANGELOG.md` at the repository root.
 - **Settings are now grouped under clear sub-headings** — each Settings section now clusters related options under labeled groups (for example General → Appearance / Files & saving / Startup / Capture behavior; Video → Video quality / Audio / Webcam overlay / Recording & output; plus Screenshot, GIF, and Mouse Clicks), making it easier to see which options belong together.
 - **Settings now show separate effective save paths for screenshots and video/GIF** — the Save locations card now displays both paths side-by-side while still using one optional custom folder override for all capture types.
 - **Webcam overlay Settings can be configured while disabled by default** — the video webcam toggle now only controls whether the webcam starts on by default; device, shape, corner, size, and rounded-corner settings stay editable and persist independently.
+- **Webcam pre-record options now live in a compact gear menu** — the Windows recording setup bar keeps the webcam on/off toggle visible, while camera, shape, corner, size, and rounded-corner controls move into a single settings flyout to free horizontal space.
 
 ### Fixed
 - **Default save locations are split by media type** — screenshots now default to `Pictures\TinyClips`, while video/GIF recordings default to `Videos\TinyClips` (reducing recording-related Controlled Folder Access prompts). A custom Save location still overrides all capture types.
