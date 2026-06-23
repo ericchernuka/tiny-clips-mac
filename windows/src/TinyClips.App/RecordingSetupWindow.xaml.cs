@@ -21,16 +21,13 @@ public sealed record RecordingSetupResult(
     string SelectedMicrophoneId,
     bool WebcamEnabled,
     string SelectedWebcamId,
-    bool ShowMouseClicks,
-    int VideoTimeLimitMinutes);
+    bool ShowMouseClicks);
 
 /// <summary>
 /// Pre-recording setup panel shown after target selection and before countdown.
 /// </summary>
 public sealed partial class RecordingSetupWindow : Window
 {
-    private static readonly int[] LimitOptions = { 0, 1, 2, 3, 5, 10, 15, 30, 45, 60 };
-
     private const int TopOffsetDip = 24;
     private const int RegionOutsideOffsetDip = 12;
     private const uint WdaExcludeFromCapture = 0x11;
@@ -57,7 +54,6 @@ public sealed partial class RecordingSetupWindow : Window
     private bool _webcamEnabled;
     private string _selectedWebcamId;
     private bool _showMouseClicks;
-    private int _videoTimeLimitMinutes;
 
     private bool _dragging;
     private POINT _dragCursorStart;
@@ -80,14 +76,12 @@ public sealed partial class RecordingSetupWindow : Window
         _webcamEnabled = settings.WebcamEnabled;
         _selectedWebcamId = settings.SelectedWebcamId ?? string.Empty;
         _showMouseClicks = settings.ShouldShowMouseClickVisuals(captureType);
-        _videoTimeLimitMinutes = Math.Max(0, settings.VideoRecordingTimeLimitMinutes);
 
         _microphones.Add(new AudioInputDevice(string.Empty, "System default"));
         _webcams.Add(new WebcamDeviceInfo(string.Empty, "System default"));
 
         ConfigurePresenter();
         ConfigureForCaptureType();
-        BuildLimitFlyout();
         RebuildMicrophoneFlyout(loading: false);
         RebuildWebcamFlyout(loading: false);
         UpdateVisuals();
@@ -123,7 +117,6 @@ public sealed partial class RecordingSetupWindow : Window
             MicrophoneDeviceButton.Visibility = Visibility.Collapsed;
             WebcamToggle.Visibility = Visibility.Collapsed;
             WebcamDeviceButton.Visibility = Visibility.Collapsed;
-            LimitButton.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -260,20 +253,6 @@ public sealed partial class RecordingSetupWindow : Window
         _webcamsLoading = loading;
         RebuildWebcamFlyout(loading);
         UpdateWebcamPickerEnabled();
-    }
-
-    private void BuildLimitFlyout()
-    {
-        foreach (var minutes in LimitOptions)
-        {
-            var item = new MenuFlyoutItem { Text = minutes == 0 ? "No limit" : $"{minutes} min" };
-            item.Click += (_, _) =>
-            {
-                _videoTimeLimitMinutes = minutes;
-                UpdateLimitLabel();
-            };
-            LimitFlyout.Items.Add(item);
-        }
     }
 
     private void ShowNear(MonitorInfo? monitor, PixelRect? regionInVirtualDesktop)
@@ -448,8 +427,7 @@ public sealed partial class RecordingSetupWindow : Window
             _selectedMicrophoneId,
             _captureType == CaptureType.Video && _webcamEnabled,
             _selectedWebcamId,
-            _showMouseClicks,
-            _videoTimeLimitMinutes));
+            _showMouseClicks));
     }
 
     private void OnCancel(object sender, RoutedEventArgs e) => Complete(null);
@@ -523,7 +501,6 @@ public sealed partial class RecordingSetupWindow : Window
         UpdateMouseClicksVisual();
         UpdateMicrophonePickerEnabled();
         UpdateWebcamPickerEnabled();
-        UpdateLimitLabel();
     }
 
     private void UpdateSystemAudioVisual()
@@ -618,14 +595,6 @@ public sealed partial class RecordingSetupWindow : Window
             item.Click += (_, _) => SelectWebcam(webcam);
             WebcamFlyout.Items.Add(item);
         }
-    }
-
-    private void UpdateLimitLabel()
-    {
-        LimitLabel.Text = _videoTimeLimitMinutes <= 0 ? "No limit" : $"{_videoTimeLimitMinutes} min";
-        AutomationProperties.SetName(
-            LimitButton,
-            $"Recording time limit, {(_videoTimeLimitMinutes <= 0 ? "no limit" : _videoTimeLimitMinutes + " minutes")}");
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)

@@ -139,11 +139,21 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save location" />
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save locations" />
                             <TextBlock
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{x:Bind ViewModel.SaveLocationDisplay, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.ScreenshotSaveLocationDisplay, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.VideoGifSaveLocationDisplay, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.SaveLocationModeDisplay, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                         <Button

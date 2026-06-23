@@ -160,20 +160,6 @@
                         Glyph="&#xE962;" />
                 </ToggleButton>
 
-                <DropDownButton
-                    x:Name="LimitButton"
-                    AutomationProperties.AutomationId="SetupTimeLimitButton"
-                    AutomationProperties.Name="Recording time limit"
-                    ToolTipService.ToolTip="Recording time limit">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE823;" />
-                        <TextBlock x:Name="LimitLabel" Text="No limit" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout x:Name="LimitFlyout" />
-                    </DropDownButton.Flyout>
-                </DropDownButton>
-
                 <Rectangle
                     Width="1"
                     Height="24"

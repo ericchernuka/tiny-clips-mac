@@ -66,7 +66,16 @@ public sealed partial class CapturePickerWindow : Window
         BuildTimerFlyout();
         UpdateTimerLabel();
 
-        LimitButton.Visibility = Visibility.Collapsed;
+        if (captureType == CaptureType.Video)
+        {
+            LimitButton.Visibility = Visibility.Visible;
+            BuildLimitFlyout();
+            UpdateLimitLabel();
+        }
+        else
+        {
+            LimitButton.Visibility = Visibility.Collapsed;
+        }
 
         ConfigurePresenter();
 

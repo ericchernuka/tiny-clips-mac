@@ -19,13 +19,14 @@ public sealed class ClipStorageServiceTests
     }
 
     [Fact]
-    public void OutputDirectory_UsesSaveDirectoryOrDefaultsToPicturesTinyClips()
+    public void OutputDirectory_UsesSaveDirectoryOrTypeSpecificDefaults()
     {
         var fakeFileSystem = new FakeFileSystem
         {
             FolderPaths =
             {
                 [Environment.SpecialFolder.MyPictures] = "C:\\Users\\Test\\Pictures",
+                [Environment.SpecialFolder.MyVideos] = "C:\\Users\\Test\\Videos",
             },
         };
 
@@ -38,10 +39,11 @@ public sealed class ClipStorageServiceTests
         settings.SaveDirectory = string.Empty;
         var defaultService = CreateService(settings, fakeFileSystem);
 
-        var expected = Path.Combine("C:\\Users\\Test\\Pictures", "TinyClips");
-        Assert.Equal(expected, defaultService.OutputDirectory(CaptureType.Screenshot));
-        Assert.Equal(expected, defaultService.OutputDirectory(CaptureType.Gif));
-        Assert.Equal(expected, defaultService.OutputDirectory(CaptureType.Video));
+        var expectedVideos = Path.Combine("C:\\Users\\Test\\Videos", "TinyClips");
+        var expectedPictures = Path.Combine("C:\\Users\\Test\\Pictures", "TinyClips");
+        Assert.Equal(expectedPictures, defaultService.OutputDirectory(CaptureType.Screenshot));
+        Assert.Equal(expectedVideos, defaultService.OutputDirectory(CaptureType.Gif));
+        Assert.Equal(expectedVideos, defaultService.OutputDirectory(CaptureType.Video));
     }
 
     [Fact]

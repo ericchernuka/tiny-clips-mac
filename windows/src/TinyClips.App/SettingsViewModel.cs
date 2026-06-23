@@ -66,13 +66,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         _ = RefreshLaunchAtLoginAsync();
     }
 
-    /// <summary>
-    /// The folder clips are actually written to. When the user has not picked a
-    /// custom location this resolves to the default Pictures\TinyClips folder so
-    /// the Settings UI always shows a real path instead of a blank line.
-    /// </summary>
-    public string SaveLocationDisplay => string.IsNullOrWhiteSpace(SaveDirectory)
-        ? $"{_storage.OutputDirectory(CaptureType.Screenshot)} (default)"
+    public string ScreenshotSaveLocationDisplay => $"Screenshot: {ResolveEffectiveSaveLocation(CaptureType.Screenshot)}";
+
+    public string VideoGifSaveLocationDisplay => $"Video/GIF: {ResolveEffectiveSaveLocation(CaptureType.Video)}";
+
+    public string SaveLocationModeDisplay => string.IsNullOrWhiteSpace(SaveDirectory)
+        ? "Using defaults by capture type."
+        : "Custom save location override applies to all capture types.";
+
+    private string ResolveEffectiveSaveLocation(CaptureType type) => string.IsNullOrWhiteSpace(SaveDirectory)
+        ? $"{_storage.OutputDirectory(type)} (default)"
         : SaveDirectory;
 
     // General
@@ -80,6 +83,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private int _themeIndex;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ScreenshotSaveLocationDisplay))]
+    [NotifyPropertyChangedFor(nameof(VideoGifSaveLocationDisplay))]
+    [NotifyPropertyChangedFor(nameof(SaveLocationModeDisplay))]
     private string _saveDirectory = string.Empty;
 
     [ObservableProperty]
@@ -576,7 +582,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSaveDirectoryChanged(string value)
     {
         Persist(() => _settings.SaveDirectory = value);
-        OnPropertyChanged(nameof(SaveLocationDisplay));
     }
 
     partial void OnFileNameTemplateChanged(string value) => Persist(() => _settings.FileNameTemplate = value);

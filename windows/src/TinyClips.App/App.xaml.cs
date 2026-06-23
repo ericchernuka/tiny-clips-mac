@@ -406,13 +406,14 @@ public partial class App : Application
                     break;
 
                 case CaptureType.Video:
+                    settings.VideoRecordingTimeLimitMinutes = (int)Math.Round(Math.Max(0, pick.VideoTimeLimitMinutes));
                     _activeRecordingSelection = selection;
                     ShowRecordingRegionIndicator(selection);
                     if (!showDisabledStopDuringCountdown)
                     {
                         ShowRecordingIndicator(CaptureType.Video, selection);
                     }
-                    await Services.GetRequiredService<IVideoRecordingService>().StartAsync(selection.Target, selection.Region, recordingSetup?.VideoTimeLimitMinutes);
+                    await Services.GetRequiredService<IVideoRecordingService>().StartAsync(selection.Target, selection.Region, pick.VideoTimeLimitMinutes);
                     ActivateRecordingIndicatorForStartedCapture();
                     UpdateRecordingState();
                     break;
@@ -486,7 +487,6 @@ public partial class App : Application
         settings.SelectedMicrophoneId = setup.SelectedMicrophoneId;
         settings.WebcamEnabled = setup.WebcamEnabled;
         settings.SelectedWebcamId = setup.SelectedWebcamId;
-        settings.VideoRecordingTimeLimitMinutes = setup.VideoTimeLimitMinutes;
     }
 
     private async Task<TargetSelection?> ResolveTargetAsync(CapturePickerMode mode)
