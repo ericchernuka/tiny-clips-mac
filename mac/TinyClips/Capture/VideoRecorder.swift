@@ -61,6 +61,10 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
     private var videoInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var hasStartedWriting = false
+    /// Presentation timestamp (host-clock based) of the first webcam frame written.
+    /// Compared against the screen recorder's first sample time to align the webcam
+    /// overlay with the audio timeline. Intentionally preserved across `reset()`.
+    private(set) var firstSampleTime: CMTime?
 
     var onWebcamDeviceName: ((String) -> Void)?
     var onWebcamError: ((String) -> Void)?
@@ -206,6 +210,7 @@ extension WebcamRecorder: AVCaptureVideoDataOutputSampleBufferDelegate {
                 return
             }
             writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+            firstSampleTime = sampleBuffer.presentationTimeStamp
             hasStartedWriting = true
         }
 
@@ -233,6 +238,9 @@ class VideoRecorder: NSObject, @unchecked Sendable {
     private var selectedMicrophoneID = ""
     private var outputURL: URL?
     private var recordingStartedAtUptime: TimeInterval?
+    /// Presentation timestamp (host-clock based) of the first screen frame written.
+    /// Used to align the separately-recorded webcam track to the audio timeline.
+    private(set) var firstScreenSampleTime: CMTime?
     private let writingQueue = DispatchQueue(label: "com.tinyclips.video-writing")
     private let microphoneQueue = DispatchQueue(label: "com.tinyclips.microphone-capture")
     var onMicrophoneLevel: ((Double) -> Void)?
@@ -609,6 +617,7 @@ extension VideoRecorder: SCStreamOutput {
             if !hasStartedWriting {
                 guard writer.startWriting() else { return }
                 writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+                firstScreenSampleTime = sampleBuffer.presentationTimeStamp
                 hasStartedWriting = true
             }
 

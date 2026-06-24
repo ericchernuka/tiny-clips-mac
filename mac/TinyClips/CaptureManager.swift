@@ -687,12 +687,23 @@ class CaptureManager: ObservableObject {
                         ? CGFloat(webcamCornerRadiusSetting)
                         : nil
 
+                    // Align the webcam track to the audio/screen timeline using the
+                    // host-clock timestamps of each source's first captured frame. The
+                    // webcam camera typically warms up later than ScreenCaptureKit, so
+                    // without this offset the overlay drifts out of sync with the audio.
+                    var webcamStartOffset = CMTime.zero
+                    if let webcamFirst = webcamRecorderAtStop?.firstSampleTime,
+                       let screenFirst = videoRecorderAtStop?.firstScreenSampleTime {
+                        webcamStartOffset = CMTimeSubtract(webcamFirst, screenFirst)
+                    }
+
                     return BrandingOverlayProcessor.WebcamOverlayOptions(
                         videoURL: savedWebcamURL,
                         shape: shape,
                         corner: corner,
                         size: size,
-                        cornerRadiusOverride: cornerRadiusOverride
+                        cornerRadiusOverride: cornerRadiusOverride,
+                        startOffset: webcamStartOffset
                     )
                 }()
 

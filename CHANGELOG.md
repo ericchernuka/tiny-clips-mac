@@ -10,11 +10,13 @@ All notable changes to this project will be documented in this file.
 - Added macOS export compositing support for recorded webcam artifacts, including corner placement, size presets, and shape masking (circle, rounded rectangle, rectangle) merged into the existing video post-processing pipeline alongside branding overlays.
 
 ### Improved
+- macOS now requests microphone and camera permission the moment you enable the mic or webcam in the start recording panel (and pre-warms them for already-enabled inputs), so the system prompt no longer interrupts the countdown or delays capture. If access was previously denied, the app opens the relevant System Settings pane and automatically re-enables the toggle once you return with permission granted.
 - Streamlined the macOS start recording panel by placing the microphone picker next to the mic toggle and moving webcam device/shape/corner/size choices into a compact settings popup.
 - Moved the macOS video recording time-limit picker to the initial capture picker next to the countdown control.
 - Reorganized macOS Video settings into clearer groups (Video Quality, Audio, Webcam Overlay, and Effects), and made webcam shape/corner/size settings configurable without first enabling the webcam overlay toggle.
 
 ### Fixed
+- Fixed macOS webcam overlay audio sync: the webcam track is now aligned to the screen/audio timeline using each source's first-frame timestamp, correcting drift caused by camera warm-up delivering its first frame later than ScreenCaptureKit. The leading screen-only/silent segment recorded while the camera and microphone warm up is now trimmed so the exported clip begins once everything is rolling.
 - Fixed macOS webcam overlay exports so circular overlays keep a square crop instead of stretching the camera aspect ratio, and so the webcam track is clipped instead of the screen recording track.
 
 ## v1.4.1.0 - 2026-06-08
