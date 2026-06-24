@@ -18,6 +18,11 @@ enum BrandingOverlayProcessor {
         let corner: String
         let size: String
         let cornerRadiusOverride: CGFloat?
+        /// Offset of the webcam's first frame relative to the screen/audio timeline
+        /// origin (webcamFirstPTS - screenFirstPTS). A positive value means the
+        /// webcam started recording later (e.g. camera warm-up) and must be shifted
+        /// forward so it stays in sync with the audio. Defaults to `.zero`.
+        var startOffset: CMTime = .zero
     }
 
     enum CompositionError: LocalizedError {
@@ -149,6 +154,21 @@ enum BrandingOverlayProcessor {
         let preferredTransform = try await videoTrack.load(.preferredTransform)
         onProgress?(0.25)
 
+        // When a webcam was recorded, ScreenCaptureKit typically starts capturing
+        // before the camera (and microphone) finish warming up, leaving a leading
+        // segment with screen-only video and silence. The webcam's positive start
+        // offset measures that gap, so trim it from the screen and audio tracks to
+        // begin the clip once everything is rolling.
+        let leadingTrim: CMTime = {
+            guard let webcamOverlay,
+                  FileManager.default.fileExists(atPath: webcamOverlay.videoURL.path),
+                  webcamOverlay.startOffset > .zero else {
+                return .zero
+            }
+            return CMTimeMinimum(webcamOverlay.startOffset, assetDuration)
+        }()
+        let trimmedDuration = CMTimeSubtract(assetDuration, leadingTrim)
+
         let composition = AVMutableComposition()
         guard let compositionVideoTrack = composition.addMutableTrack(
             withMediaType: .video,
@@ -156,7 +176,7 @@ enum BrandingOverlayProcessor {
         ) else { throw CompositionError.videoCompositionTrackCreationFailed }
 
         try compositionVideoTrack.insertTimeRange(
-            CMTimeRange(start: .zero, duration: assetDuration),
+            CMTimeRange(start: leadingTrim, duration: trimmedDuration),
             of: videoTrack,
             at: .zero
         )
@@ -168,7 +188,7 @@ enum BrandingOverlayProcessor {
                 preferredTrackID: kCMPersistentTrackID_Invalid
             ) {
                 try compositionAudioTrack.insertTimeRange(
-                    CMTimeRange(start: .zero, duration: assetDuration),
+                    CMTimeRange(start: leadingTrim, duration: trimmedDuration),
                     of: audioTrack,
                     at: .zero
                 )
@@ -186,7 +206,7 @@ enum BrandingOverlayProcessor {
         videoComposition.frameDuration = CMTime(value: 1, timescale: sourceTimescale)
 
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: assetDuration)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: trimmedDuration)
         let screenLayerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
         screenLayerInstruction.setTransform(preferredTransform, at: .zero)
 
@@ -211,12 +231,23 @@ enum BrandingOverlayProcessor {
                 throw CompositionError.webcamCompositionTrackCreationFailed
             }
 
-            let webcamTimeRange = CMTimeRange(start: .zero, duration: min(assetDuration, webcamDuration))
-            try compositionWebcamTrack.insertTimeRange(
-                webcamTimeRange,
-                of: webcamTrack,
-                at: .zero
-            )
+            // Place the webcam on the (already leading-trimmed) screen/audio timeline.
+            // For a positive offset the leading gap was trimmed from the screen and
+            // audio above, so the webcam now starts at composition time zero. For a
+            // negative offset the webcam led the screen, so trim its leading frames.
+            let offset = webcamOverlay.startOffset
+            let webcamSourceStart = offset < .zero ? CMTimeMultiply(offset, multiplier: -1) : .zero
+            let availableWebcam = CMTimeSubtract(webcamDuration, webcamSourceStart)
+            let webcamUsableDuration = CMTimeMinimum(trimmedDuration, availableWebcam)
+
+            if webcamUsableDuration > .zero {
+                let webcamTimeRange = CMTimeRange(start: webcamSourceStart, duration: webcamUsableDuration)
+                try compositionWebcamTrack.insertTimeRange(
+                    webcamTimeRange,
+                    of: webcamTrack,
+                    at: .zero
+                )
+            }
 
             let webcamShape = WebcamOverlayShape(rawValue: webcamOverlay.shape)
             let overlayFrame = webcamOverlayFrame(
@@ -251,7 +282,7 @@ enum BrandingOverlayProcessor {
             videoComposition.customVideoCompositorClass = WebcamOverlayCompositor.self
             videoComposition.instructions = [
                 WebcamOverlayInstruction(
-                    timeRange: CMTimeRange(start: .zero, duration: assetDuration),
+                    timeRange: CMTimeRange(start: .zero, duration: trimmedDuration),
                     screenTrackID: compositionVideoTrack.trackID,
                     webcamTrackID: compositionWebcamTrack.trackID,
                     renderSize: renderSize,

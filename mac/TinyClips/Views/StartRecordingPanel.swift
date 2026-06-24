@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import AVFoundation
 
 class StartRecordingPanel: NSPanel {
     struct MicrophoneSelection {
@@ -139,6 +140,12 @@ private struct StartRecordingView: View {
     let onStart: (Bool, StartRecordingPanel.MicrophoneSelection, StartRecordingPanel.WebcamSelection, Bool, Int) -> Void
     let onCancel: () -> Void
 
+    /// Tracks that the user tried to enable an input but was blocked by a denied
+    /// permission. When the app regains focus (e.g. after granting access in System
+    /// Settings) the toggle is re-applied automatically.
+    @State private var pendingMicrophoneEnable = false
+    @State private var pendingWebcamEnable = false
+
     private var webcamShapeLabel: String {
         switch webcamShape.lowercased() {
         case "rectangle":
@@ -196,7 +203,11 @@ private struct StartRecordingView: View {
 
                 // Microphone toggle
                 Button {
-                    microphone.toggle()
+                    if microphone {
+                        microphone = false
+                    } else {
+                        enableMicrophoneRequestingPermission(openSettingsIfDenied: true)
+                    }
                 } label: {
                     Image(systemName: microphone ? "mic.fill" : "mic.slash.fill")
                         .font(.system(size: 13))
@@ -226,9 +237,10 @@ private struct StartRecordingView: View {
 
             if captureType == .video {
                 Button {
-                    webcamEnabled.toggle()
                     if webcamEnabled {
-                        microphone = true
+                        webcamEnabled = false
+                    } else {
+                        enableWebcamRequestingPermission()
                     }
                 } label: {
                     Image(systemName: webcamEnabled ? "video.fill.badge.checkmark" : "video.slash.fill")
@@ -366,6 +378,21 @@ private struct StartRecordingView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .fixedSize()
+        .onAppear {
+            // Pre-warm permissions for any inputs that are already enabled (e.g. from
+            // saved settings) so the system prompt doesn't interrupt the countdown.
+            if microphone {
+                prewarmMicrophonePermission()
+            }
+            if webcamEnabled {
+                prewarmCameraPermission()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // The user may have flipped a permission in System Settings; re-apply any
+            // toggle they intended to enable once access has been granted.
+            reapplyPendingPermissionsOnReturn()
+        }
         .background {
             RoundedRectangle(cornerRadius: 10)
                 .fill(colorScheme == .dark ? Color.black.opacity(0.8) : Color.white.opacity(0.9))
@@ -374,6 +401,93 @@ private struct StartRecordingView: View {
                     RoundedRectangle(cornerRadius: 10)
                         .strokeBorder(.primary.opacity(0.15), lineWidth: 0.5)
                 }
+        }
+    }
+
+    // MARK: - Permission Handling
+
+    /// Enables the microphone toggle, requesting permission first. If access was
+    /// previously denied, optionally routes the user to System Settings since the
+    /// system can no longer present the prompt.
+    private func enableMicrophoneRequestingPermission(openSettingsIfDenied: Bool) {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            microphone = true
+        case .notDetermined:
+            Task { @MainActor in
+                microphone = await PermissionManager.shared.requestMicrophonePermission()
+            }
+        case .denied, .restricted:
+            microphone = false
+            if openSettingsIfDenied {
+                pendingMicrophoneEnable = true
+                PermissionManager.shared.openMicrophoneSettings()
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    /// Enables the webcam overlay, requesting camera permission first. Webcam
+    /// recordings include the microphone by default, so this also ensures
+    /// microphone permission once the camera is authorized.
+    private func enableWebcamRequestingPermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            webcamEnabled = true
+            enableMicrophoneRequestingPermission(openSettingsIfDenied: false)
+        case .notDetermined:
+            Task { @MainActor in
+                guard await PermissionManager.shared.requestCameraPermission() else { return }
+                webcamEnabled = true
+                enableMicrophoneRequestingPermission(openSettingsIfDenied: false)
+            }
+        case .denied, .restricted:
+            webcamEnabled = false
+            pendingWebcamEnable = true
+            PermissionManager.shared.openCameraSettings()
+        @unknown default:
+            break
+        }
+    }
+
+    /// Re-applies any input the user intended to enable but that was blocked by a
+    /// denied permission, now that the app is active again and the permission may
+    /// have been granted in System Settings.
+    private func reapplyPendingPermissionsOnReturn() {
+        if pendingWebcamEnable,
+           AVCaptureDevice.authorizationStatus(for: .video) == .authorized {
+            pendingWebcamEnable = false
+            webcamEnabled = true
+            enableMicrophoneRequestingPermission(openSettingsIfDenied: false)
+        }
+
+        if pendingMicrophoneEnable,
+           AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+            pendingMicrophoneEnable = false
+            microphone = true
+        }
+    }
+
+    /// Requests microphone permission ahead of time when the toggle is already on,
+    /// without nudging the user to System Settings on appear.
+    private func prewarmMicrophonePermission() {
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            Task { @MainActor in
+                microphone = await PermissionManager.shared.requestMicrophonePermission()
+            }
+        }
+    }
+
+    /// Requests camera permission ahead of time when the webcam toggle is already on.
+    private func prewarmCameraPermission() {
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            Task { @MainActor in
+                webcamEnabled = await PermissionManager.shared.requestCameraPermission()
+                if webcamEnabled {
+                    prewarmMicrophonePermission()
+                }
+            }
         }
     }
 
