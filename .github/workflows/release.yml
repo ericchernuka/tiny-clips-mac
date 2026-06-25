@@ -467,9 +467,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update release metadata for ${{ env.RELEASE_TAG }}"
-          file_pattern: |
-            docs/appcast.xml
-            Casks/tiny-clips.rb
+          file_pattern: "docs/appcast.xml Casks/tiny-clips.rb"
           branch: main
 
       - name: Cleanup keychain
