@@ -6,7 +6,7 @@ usage() {
 Usage: scripts/create-release-tags.sh <version> [--mac] [--windows] [--push] [--dry-run]
 
 Creates selected release tags:
-- --mac: <version> (example: v1.0.8)
+- --mac: <version>-mac (example: v1.0.8-mac)
 - --windows: <version>-windows (example: v1.0.8-windows)
 
 Options:
@@ -74,8 +74,8 @@ if [[ -z "$version" ]]; then
   exit 1
 fi
 
-if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Version must match v<major>.<minor>.<patch> (example: v1.0.8)." >&2
+if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "Version must match v<major>.<minor>.<patch> or v<major>.<minor>.<patch>.<revision> (example: v1.0.8 or v1.0.8.1)." >&2
   exit 1
 fi
 
@@ -91,7 +91,7 @@ fi
 
 selected_tags=()
 if [[ "$create_mac" == "true" ]]; then
-  selected_tags+=("$version")
+  selected_tags+=("${version}-mac")
 fi
 if [[ "$create_windows" == "true" ]]; then
   selected_tags+=("${version}-windows")

@@ -3,12 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - '!*-windows'
+      - 'v*-mac'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., v1.0.0)'
+        description: 'macOS release tag (e.g., v1.0.0-mac or v1.0.0.1-mac)'
         required: true
         type: string
 
@@ -24,7 +23,6 @@ permissions:
 
 jobs:
   build-and-release:
-    if: ${{ github.event_name != 'push' || !endsWith(github.ref_name, '-windows') }}
     runs-on: macos-26
 
     steps:
@@ -80,12 +78,13 @@ jobs:
             TAG="${{ github.ref_name }}"
           fi
 
-          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){2,3}$ ]]; then
-            echo "macOS release tags must look like v1.2.3 or v1.2.3.4. Got '$TAG'."
+          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){2,3}-mac$ ]]; then
+            echo "macOS release tags must look like v1.2.3-mac or v1.2.3.4-mac. Got '$TAG'."
             exit 1
           fi
 
           VERSION="${TAG#v}"
+          VERSION="${VERSION%-mac}"
           BUILD_NUMBER="${{ github.run_number }}"
 
           echo "Setting MARKETING_VERSION to: $VERSION"
@@ -219,7 +218,7 @@ jobs:
       - name: Generate Changelog
         run: |
           git fetch --tags --force
-          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+(\.[0-9]+){2,3}$' | grep -vx "${{ env.RELEASE_TAG }}" | head -n 1)
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+(\.[0-9]+){2,3}-mac$' | grep -vx "${{ env.RELEASE_TAG }}" | head -n 1)
           export PREVIOUS_TAG
           echo "PREVIOUS_TAG=$PREVIOUS_TAG" >> $GITHUB_ENV
 
@@ -231,6 +230,7 @@ jobs:
           import subprocess
 
           release_tag = os.environ["RELEASE_TAG"]
+          release_tag_base = re.sub(r"-mac$", "", release_tag)
           previous_tag = os.environ.get("PREVIOUS_TAG", "").strip()
           repo = os.environ["GITHUB_REPOSITORY"]
           run_temp = pathlib.Path(os.environ["RUNNER_TEMP"])
@@ -245,7 +245,12 @@ jobs:
             changelog_lines = []
 
           start_index = next(
-            (index for index, line in enumerate(changelog_lines) if re.match(rf"^##\\s+{re.escape(release_tag)}(?:\\s+-.*)?$", line)),
+            (
+              index
+              for index, line in enumerate(changelog_lines)
+              if re.match(rf"^##\\s+{re.escape(release_tag)}(?:\\s+-.*)?$", line)
+              or re.match(rf"^##\\s+{re.escape(release_tag_base)}(?:\\s+-.*)?$", line)
+            ),
             None,
           )
 
@@ -334,8 +339,32 @@ jobs:
             else f"https://github.com/{repo}/releases/tag/{release_tag}"
           )
           compare_label = "Full Changelog" if previous_tag else "Release Details"
+          download_url = f"https://github.com/{repo}/releases/download/{release_tag}/TinyClips-{release_tag}.zip"
 
-          markdown_output = markdown_lines + ["", f"**{compare_label}**: {compare_url}"]
+          markdown_output = list(markdown_lines)
+          markdown_output += [
+            "",
+            "## Install",
+            "Install Tiny Clips for macOS with Homebrew:",
+            "",
+            "```text",
+            "brew install --cask tiny-clips",
+            "```",
+            "",
+            "Already installed? Update with `brew upgrade --cask tiny-clips`.",
+            "",
+            f"Or download directly from this release: {download_url}",
+            "",
+            "## Release validation",
+            "- Apple notarization completed successfully.",
+            "- Notarized app staple completed successfully.",
+            "- Signature verification passed (`spctl` and `codesign`).",
+            "",
+            "## Update feed",
+            "- Sparkle appcast generated and published to `docs/appcast.xml`.",
+            "",
+            f"**{compare_label}**: {compare_url}",
+          ]
           (run_temp / "changelog.md").write_text("\n".join(markdown_output).strip() + "\n", encoding="utf-8")
 
           html_chunks.append(f'<p><a href="{html.escape(compare_url, quote=True)}">{compare_label}</a></p>')
@@ -411,6 +440,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          name: Tiny Clips for macOS ${{ env.RELEASE_TAG }}
           files: |
             ${{ runner.temp }}/${{ env.PRODUCT_NAME }}-${{ env.RELEASE_TAG }}.zip
             ${{ runner.temp }}/release-files/*.delta
@@ -428,6 +458,7 @@ jobs:
         run: |
           RELEASE_VERSION="${{ env.RELEASE_TAG }}"
           RELEASE_VERSION="${RELEASE_VERSION#v}"
+          RELEASE_VERSION="${RELEASE_VERSION%-mac}"
           RELEASE_SHA=$(shasum -a 256 "$RUNNER_TEMP/${{ env.PRODUCT_NAME }}-${{ env.RELEASE_TAG }}.zip" | awk '{print $1}')
           sed -i '' "s/version \".*\"/version \"$RELEASE_VERSION\"/" Casks/tiny-clips.rb
           sed -i '' "s/sha256 \".*\"/sha256 \"$RELEASE_SHA\"/" Casks/tiny-clips.rb

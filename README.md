@@ -205,10 +205,12 @@ Create one or both release tags by selecting platforms (`--mac`, `--windows`):
 
 ```powershell
 pwsh -File scripts/create-release-tags.ps1 v1.0.8 -Mac -Windows -Push
+# creates: v1.0.8-mac and v1.0.8-windows
 ```
 
 ```bash
 scripts/create-release-tags.sh v1.0.8 --mac --windows --push
+# creates: v1.0.8-mac and v1.0.8-windows
 ```
 
 Copilot extension tool is also available in this repo:

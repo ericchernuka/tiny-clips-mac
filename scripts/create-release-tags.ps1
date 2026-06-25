@@ -11,8 +11,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-if ($Version -notmatch '^v\d+\.\d+\.\d+$') {
-    throw "Version must match v<major>.<minor>.<patch> (example: v1.0.8)."
+if ($Version -notmatch '^v\d+\.\d+\.\d+(\.\d+)?$') {
+    throw "Version must match v<major>.<minor>.<patch> or v<major>.<minor>.<patch>.<revision> (example: v1.0.8 or v1.0.8.1)."
 }
 
 if (-not $Mac -and -not $Windows) {
@@ -21,7 +21,7 @@ if (-not $Mac -and -not $Windows) {
 
 $selectedTags = @()
 if ($Mac) {
-    $selectedTags += $Version
+    $selectedTags += "$Version-mac"
 }
 if ($Windows) {
     $selectedTags += "$Version-windows"
@@ -56,7 +56,7 @@ foreach ($tag in $selectedTags) {
 }
 
 foreach ($tag in $selectedTags) {
-    $label = if ($tag -like "*-windows") { "Windows" } else { "macOS" }
+    $label = if ($tag -like "*-windows") { "Windows" } elseif ($tag -like "*-mac") { "macOS" } else { "Release" }
     if ($PSCmdlet.ShouldProcess($tag, "Create annotated $label tag")) {
         git tag -a $tag -m "Release $tag"
     }
