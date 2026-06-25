@@ -11,24 +11,24 @@
         <item>
             
             
-            <title>1.4.0.3</title>
+            <title>1.4.0.4</title>
             
             
-            <pubDate>Wed, 27 May 2026 21:16:33 +0000</pubDate>
+            <pubDate>Thu, 25 Jun 2026 05:49:38 +0000</pubDate>
             
             
-            <sparkle:version>35</sparkle:version>
+            <sparkle:version>46</sparkle:version>
             
             
-            <sparkle:shortVersionString>1.4.0.3</sparkle:shortVersionString>
+            <sparkle:shortVersionString>1.4.0.4</sparkle:shortVersionString>
             
             
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             
             
-            <description><![CDATA[<h3>What's Changed</h3><ul><li>chore: update CHANGELOG for v1.4.0.3 release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.4.0.2...v1.4.0.3">Full Changelog</a></p>]]></description>
-            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.4.0.3</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.4.0.3/TinyClips-v1.4.0.3.zip" length="3151026" type="application/octet-stream" sparkle:edSignature="Jwt6HMMjj0If94hOmbGqWS7xu5Zfe+nLD31VzgcEYwDoCC2ezMMPY/9jh5RAUYVasWkGBS4zw/QWqSbnZUcLAg=="/>
+            <description><![CDATA[<h3>What's Changed</h3><ul><li>Merge pull request #116 from jamesmontemagno/webcam-overlay-cross-platform</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.4.0.3...v1.4.0.4">Full Changelog</a></p>]]></description>
+            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.4.0.4</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.4.0.4/TinyClips-v1.4.0.4.zip" length="3394997" type="application/octet-stream" sparkle:edSignature="M12llmh9k6Nvczze9IWs1Qc1oLaHCt7J0eGVLqRGcmuPWaZ4f2tgEeLPx04Kd7MQDr+8DqydyczB5P1OeK9nCA=="/>
             
         
         </item>
