@@ -28,5 +28,21 @@
 	<string>TinyClips needs camera access to record your camera alongside screen recordings.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Tiny Clips Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.png</string>
+				<string>public.jpeg</string>
+				<string>public.heic</string>
+				<string>org.webmproject.webp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

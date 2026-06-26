@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Added a capture-device catalog layer for macOS that now includes webcam discovery (built-in wide-angle, external, Continuity Camera, and Desk View where available) with stable IDs, user-friendly stable sorting, and reusable connect/disconnect/interruption notification hooks.
 - Added macOS webcam setup controls in recording start and video settings (enable toggle, device picker, shape/corner/size presets), plus start-panel plumbing so webcam selections flow into the video capture start path. Enabling webcam now auto-enables microphone by default (still manually overridable).
 - Added macOS export compositing support for recorded webcam artifacts, including corner placement, size presets, and shape masking (circle, rounded rectangle, rectangle) merged into the existing video post-processing pipeline alongside branding overlays.
+- Added macOS Finder "Open With Tiny Clips" support for image files so opening PNG/JPG/JPEG (plus HEIC/WebP when decodable by the current macOS runtime) launches directly into the screenshot editor.
 
 ### Improved
 - macOS now requests microphone and camera permission the moment you enable the mic or webcam in the start recording panel (and pre-warms them for already-enabled inputs), so the system prompt no longer interrupts the countdown or delays capture. If access was previously denied, the app opens the relevant System Settings pane and automatically re-enables the toggle once you return with permission granted.
