@@ -15,16 +15,16 @@ enum ProPlan: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .monthly: return "Monthly"
-        case .yearly: return "Yearly"
-        case .lifetime: return "Lifetime"
+        case .monthly: return "Monthly Tip"
+        case .yearly: return "Yearly Tip"
+        case .lifetime: return "One-Time Tip"
         }
     }
 
     var badge: String? {
         switch self {
         case .yearly: return "Best Value"
-        case .lifetime: return "One-Time"
+        case .lifetime: return "Most Generous"
         default: return nil
         }
     }
@@ -42,7 +42,7 @@ class StoreService: ObservableObject {
 
     static let allProductIDs: Set<String> = Set(ProPlan.allCases.map(\.rawValue))
 
-    @Published var isPro = false
+    @Published var hasProTip = false
     @Published var activeProPlan: ProPlan?
     @Published var products: [Product] = []
     @Published var isPurchasing = false
@@ -124,7 +124,7 @@ class StoreService: ObservableObject {
         do {
             try await AppStore.sync()
             await updatePurchaseStatus()
-            if !isPro {
+            if !hasProTip {
                 showNoPurchasesRestoredAlert()
             }
         } catch {
@@ -144,25 +144,25 @@ class StoreService: ObservableObject {
     // MARK: - Entitlement Check
 
     func updatePurchaseStatus() async {
-        var foundPro = false
+        var foundProTip = false
         var foundPlan: ProPlan?
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                Self.allProductIDs.contains(transaction.productID),
                transaction.revocationDate == nil {
-                foundPro = true
+                foundProTip = true
                 foundPlan = ProPlan(rawValue: transaction.productID)
                 break
             }
         }
-        isPro = foundPro
+        hasProTip = foundProTip
         activeProPlan = foundPlan
     }
 
     private func showNoPurchasesRestoredAlert() {
         let alert = NSAlert()
         alert.messageText = "No Purchases Found"
-        alert.informativeText = "We couldn't find any TinyClips Pro purchases to restore for this App Store account. If you bought Pro with a different Apple Account, sign in with that account and try again."
+        alert.informativeText = "We couldn't find any TinyClips Pro tips to restore for this App Store account. If you tipped with a different Apple Account, sign in with that account and try again."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
