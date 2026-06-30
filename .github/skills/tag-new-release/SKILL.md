@@ -30,6 +30,12 @@ Or run the script directly from the repository root:
 bash .github/skills/tag-new-release/tag-new-release.sh --platform mac --version v1.5.0-mac
 ```
 
+On Windows, use PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .github/skills/tag-new-release/tag-new-release.ps1 -Platform windows -Version v1.0.9-windows
+```
+
 If `--version` is omitted:
 - macOS defaults to `v<Info.plist CFBundleShortVersionString>.0-mac` (for example, `v1.5.0-mac`)
 - Windows defaults to incrementing patch from the latest `v*-windows` tag.
@@ -82,3 +88,4 @@ The tag message should include cleanly formatted release notes from the selected
 ## Files included
 
 - `tag-new-release.sh` - Script that automates changelog release marking, commit creation, and annotated tagging for macOS or Windows.
+- `tag-new-release.ps1` - PowerShell equivalent for running the same release-tag workflow natively on Windows.
