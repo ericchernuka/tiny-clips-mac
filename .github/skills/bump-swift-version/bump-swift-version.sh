@@ -6,6 +6,11 @@
 
 set -e
 
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo "❌ This script must be run on macOS because it uses PlistBuddy and BSD sed."
+    exit 1
+fi
+
 if [ -z "$1" ]; then
     echo "Usage: $0 <new-version>"
     echo "Example: $0 1.6"

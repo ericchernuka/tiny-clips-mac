@@ -102,7 +102,7 @@ class StoreService: ObservableObject {
             let result = try await product.purchase()
             switch result {
             case .success(let verification):
-                let transaction = try checkVerified(verification)
+                let transaction = try Self.checkVerified(verification)
                 await updatePurchaseStatus()
                 await transaction.finish()
             case .userCancelled, .pending:
@@ -146,23 +146,29 @@ class StoreService: ObservableObject {
     func updatePurchaseStatus() async {
         var foundProTip = false
         var foundPlan: ProPlan?
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result,
-               Self.allProductIDs.contains(transaction.productID),
-               transaction.revocationDate == nil {
-                foundProTip = true
-                foundPlan = ProPlan(rawValue: transaction.productID)
-                break
+        do {
+            for await result in Transaction.currentEntitlements {
+                let transaction = try Self.checkVerified(result)
+                if Self.allProductIDs.contains(transaction.productID),
+                   transaction.revocationDate == nil {
+                    foundProTip = true
+                    foundPlan = ProPlan(rawValue: transaction.productID)
+                    break
+                }
             }
+            hasProTip = foundProTip
+            activeProPlan = foundPlan
+        } catch {
+            hasProTip = false
+            activeProPlan = nil
+            purchaseError = error.localizedDescription
         }
-        hasProTip = foundProTip
-        activeProPlan = foundPlan
     }
 
     private func showNoPurchasesRestoredAlert() {
         let alert = NSAlert()
         alert.messageText = "No Purchases Found"
-        alert.informativeText = "We couldn't find any TinyClips Pro tips to restore for this App Store account. If you tipped with a different Apple Account, sign in with that account and try again."
+        alert.informativeText = "We couldn't find any Tiny Clips supporter tips to restore for this App Store account. If you tipped with a different Apple Account, sign in with that account and try again."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
@@ -170,7 +176,7 @@ class StoreService: ObservableObject {
 
     // MARK: - Helpers
 
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+    nonisolated private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .unverified:
             throw StoreServiceError.failedVerification
@@ -182,9 +188,14 @@ class StoreService: ObservableObject {
     private func listenForTransactions() -> Task<Void, Never> {
         Task.detached { [weak self] in
             for await result in Transaction.updates {
-                if case .verified(let transaction) = result {
+                do {
+                    let transaction = try Self.checkVerified(result)
                     await self?.updatePurchaseStatus()
                     await transaction.finish()
+                } catch {
+                    await MainActor.run {
+                        self?.purchaseError = error.localizedDescription
+                    }
                 }
             }
         }
@@ -193,8 +204,15 @@ class StoreService: ObservableObject {
 
 // MARK: - Error
 
-enum StoreServiceError: Error {
+enum StoreServiceError: LocalizedError {
     case failedVerification
+
+    var errorDescription: String? {
+        switch self {
+        case .failedVerification:
+            return "The App Store could not verify this purchase. Please try again."
+        }
+    }
 }
 
 #endif
