@@ -23,7 +23,7 @@ enum ProPlan: String, CaseIterable, Identifiable {
 
     var badge: String? {
         switch self {
-        case .yearly: return "Best Value"
+        case .yearly: return "Amazing"
         case .lifetime: return "Most Generous"
         default: return nil
         }
