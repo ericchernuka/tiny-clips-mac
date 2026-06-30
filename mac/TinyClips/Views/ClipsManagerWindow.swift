@@ -4,7 +4,7 @@ import AVFoundation
 import SwiftData
 import ImageIO
 
-// MARK: - Root View (Pro gating)
+// MARK: - Root View
 
 private struct ClipsManagerRootView: View {
     var body: some View {

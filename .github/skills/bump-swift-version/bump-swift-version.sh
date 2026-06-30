@@ -36,7 +36,7 @@ echo ""
 
 # Update Info.plist
 if [ -f "$INFO_PLIST" ]; then
-    sed -i '' "s/<string>1\.[0-9]\+<\/string>/<string>$NEW_VERSION<\/string>/g" "$INFO_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
     echo "✓ Updated $INFO_PLIST"
 else
     echo "❌ File not found: $INFO_PLIST"
@@ -45,7 +45,7 @@ fi
 
 # Update Info-MAS.plist
 if [ -f "$INFO_MAS_PLIST" ]; then
-    sed -i '' "s/<string>1\.[0-9]\+<\/string>/<string>$NEW_VERSION<\/string>/g" "$INFO_MAS_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_MAS_PLIST"
     echo "✓ Updated $INFO_MAS_PLIST"
 else
     echo "❌ File not found: $INFO_MAS_PLIST"
@@ -54,7 +54,7 @@ fi
 
 # Update project.pbxproj
 if [ -f "$PROJECT_PBXPROJ" ]; then
-    sed -i '' "s/MARKETING_VERSION = 1\.[0-9]\+/MARKETING_VERSION = $NEW_VERSION/g" "$PROJECT_PBXPROJ"
+    sed -E -i '' "s/(MARKETING_VERSION = )[0-9]+\.[0-9]+/\1$NEW_VERSION/g" "$PROJECT_PBXPROJ"
     echo "✓ Updated $PROJECT_PBXPROJ"
 else
     echo "❌ File not found: $PROJECT_PBXPROJ"

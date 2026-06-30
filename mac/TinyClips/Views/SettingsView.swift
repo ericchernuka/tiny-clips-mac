@@ -270,8 +270,4 @@ struct SettingsView: View {
             set: { settings.setShowMouseClickVisuals($0, for: .gif) }
         )
     }
-
-    private var isAppStorePro: Bool {
-        return true
-    }
 }
