@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v1.5.0-mac - 2026-06-30
+
 ### Changed
 - **macOS in-app purchase model:** Refactored from feature-gated Pro subscription to all-features-free model with optional Pro "tip" support. All previously Pro-only features (batch actions, clip organization/tagging, editing, mouse click effects, Uploadcare uploads) are now available to all users. Users can optionally tip via monthly/yearly subscription or one-time Pro purchase to show their support; Pro supporters see a "Pro Supporter" badge in settings. This emphasizes the app-first experience while allowing users to contribute.
 - **macOS Pro gating removed:** Removed Pro checks from mouse clicks settings, video/GIF settings sections, Clips Manager toolbar buttons (Select/Settings), Clips Manager content editing, and start recording panel mouse click toggle. Renamed `StoreService.isPro` to `hasProTip` to reflect badge-only status.
