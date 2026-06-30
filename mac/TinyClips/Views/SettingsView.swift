@@ -41,6 +41,7 @@ struct SettingsView: View {
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
 #if APPSTORE
     @ObservedObject private var storeService = StoreService.shared
+    @ObservedObject private var settingsWindowManager = SettingsWindowManager.shared
 #endif
     @Environment(\.openWindow) private var openWindow
     @State private var selectedTab: SettingsTab? = .general
@@ -52,19 +53,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $splitVisibility) {
             List(SettingsTab.displayCases, id: \.self, selection: $selectedTab) { tab in
-#if APPSTORE
-                if tab == .mouseClicks && !storeService.isPro {
-                    Label(tab.rawValue, systemImage: tab.icon)
-                        .badge("PRO")
-                        .tag(tab as SettingsTab?)
-                } else {
-                    Label(tab.rawValue, systemImage: tab.icon)
-                        .tag(tab as SettingsTab?)
-                }
-#else
                 Label(tab.rawValue, systemImage: tab.icon)
                     .tag(tab as SettingsTab?)
-#endif
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
@@ -87,21 +77,16 @@ struct SettingsView: View {
                         settings: settings,
                         availableMicrophones: availableMicrophones,
                         availableWebcams: availableWebcams,
-                        isPro: isAppStorePro,
                         selectedTab: $selectedTab
                     )
                 case .gif:
                     GifSettingsSection(
                         settings: settings,
-                        isPro: isAppStorePro,
                         selectedTab: $selectedTab,
                         gifMouseClickToggleBinding: gifMouseClickToggleBinding
                     )
                 case .mouseClicks:
-                    MouseClicksSettingsSection(
-                        settings: settings,
-                        isPro: isAppStorePro
-                    )
+                    MouseClicksSettingsSection(settings: settings)
                 case .shortcuts:
                     ShortcutsSettingsSection(settings: settings)
                 case .pro:
@@ -136,6 +121,12 @@ struct SettingsView: View {
         .onAppear {
             PerformanceSignposts.endSettingsOpenIfNeeded()
             refreshCaptureDevicesIfNeeded()
+#if APPSTORE
+            if let requestedTab = settingsWindowManager.selectedTab {
+                selectedTab = requestedTab
+                settingsWindowManager.selectedTab = nil
+            }
+#endif
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .video {
@@ -285,13 +276,5 @@ struct SettingsView: View {
             get: { settings.shouldShowMouseClickVisuals(for: .gif) },
             set: { settings.setShowMouseClickVisuals($0, for: .gif) }
         )
-    }
-
-    private var isAppStorePro: Bool {
-#if APPSTORE
-        return storeService.isPro
-#else
-        return true
-#endif
     }
 }

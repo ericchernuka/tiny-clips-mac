@@ -2,19 +2,10 @@ import SwiftUI
 
 struct MouseClicksSettingsSection: View {
     @ObservedObject var settings: CaptureSettings
-    let isPro: Bool
     private let clickLightURL = URL(string: "https://github.com/aurorascharff/ClickLight")!
 
     var body: some View {
-#if APPSTORE
-        if isPro {
-            mouseClicksControls
-        } else {
-            ProSubscriptionView()
-        }
-#else
         mouseClicksControls
-#endif
     }
 
     @ViewBuilder

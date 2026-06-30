@@ -13,17 +13,17 @@ struct ProSubscriptionView: View {
         ScrollView {
             VStack(spacing: 24) {
                 heroSection
-                if storeService.isPro {
+                if storeService.hasProTip {
                     ProActiveView()
                     accountActions
                 } else {
-                    featureList
+                    tipMessage
                     planCards
                     purchaseButton
                     restoreLink
                 }
                 errorMessage
-                if !storeService.isPro {
+                if !storeService.hasProTip {
                     legalLinks
                 }
             }
@@ -44,10 +44,10 @@ struct ProSubscriptionView: View {
                     .cornerRadius(16)
             }
 
-            Text("Tiny Clips Pro")
+            Text("Support Tiny Clips")
                 .font(.largeTitle.bold())
 
-            Text("Unlock the full power of your captures.")
+            Text("Tiny Clips is always free. Consider tipping to support independent development.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -55,29 +55,22 @@ struct ProSubscriptionView: View {
         }
     }
 
-    // MARK: - Features
+    // MARK: - Tip Message
 
-    private var featureList: some View {
+    private var tipMessage: some View {
         VStack(alignment: .leading, spacing: 12) {
-            featureRow(icon: "photo.stack", text: "Clips Manager power tools for screenshots, videos, and GIFs")
-            featureRow(icon: "tag", text: "Custom names, tags, notes, collections, and favorites")
-            featureRow(icon: "checkmark.circle", text: "Batch actions: select multiple clips, then favorite, tag, or delete")
-            featureRow(icon: "wand.and.stars", text: "Edit screenshots and trim videos/GIFs right from the manager")
-            featureRow(icon: "icloud.and.arrow.up", text: "Upload to Uploadcare and copy shareable links instantly")
-            featureRow(icon: "heart.fill", text: "Support independent development")
-        }
-        .padding(20)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
+            VStack(alignment: .leading, spacing: 8) {
+                Label("All Features Included", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
 
-    private func featureRow(icon: String, text: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(.tint)
-                .frame(width: 24)
-            Text(text)
-                .font(.callout)
+                Text("Every feature in Tiny Clips is completely free and available to all users. Your tip simply shows your support and appreciation for the work that goes into keeping Tiny Clips great.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -129,7 +122,7 @@ struct ProSubscriptionView: View {
                 .controlSize(.large)
                 .disabled(storeService.isPurchasing)
             } else {
-                Button("Subscribe") {}
+                Button("Leave a Tip") {}
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(true)
@@ -139,9 +132,9 @@ struct ProSubscriptionView: View {
 
     private func purchaseButtonTitle(for product: Product) -> String {
         if selectedPlan == .lifetime {
-            return "Unlock Pro — \(product.displayPrice)"
+            return "Leave a Tip — \(product.displayPrice)"
         }
-        return "Subscribe — \(product.displayPrice)/\(selectedPlan == .yearly ? "year" : "month")"
+        return "Tip — \(product.displayPrice)/\(selectedPlan == .yearly ? "year" : "month")"
     }
 
     // MARK: - Restore
@@ -286,22 +279,23 @@ struct ProActiveView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Label("Tiny Clips Pro", systemImage: "checkmark.seal.fill")
+            Label("Pro Supporter", systemImage: "star.fill")
                 .font(.headline)
-                .foregroundStyle(.green)
+                .foregroundStyle(.orange)
 
             if let plan = storeService.activeProPlan {
                 Text("Plan: \(plan.label)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                Text("Active — thank you for your support!")
+                Text("Thank you for supporting independent development!")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

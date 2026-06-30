@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+- **macOS in-app purchase model:** Refactored from feature-gated Pro subscription to all-features-free model with optional Pro "tip" support. All previously Pro-only features (batch actions, clip organization/tagging, editing, mouse click effects, Uploadcare uploads) are now available to all users. Users can optionally tip via monthly/yearly subscription or one-time Pro purchase to show their support; Pro supporters see a "Pro Supporter" badge in settings. This emphasizes the app-first experience while allowing users to contribute.
+- **macOS Pro gating removed:** Removed Pro checks from mouse clicks settings, video/GIF settings sections, Clips Manager toolbar buttons (Select/Settings), Clips Manager content editing, and start recording panel mouse click toggle. Renamed `StoreService.isPro` to `hasProTip` to reflect badge-only status.
+
 ### Added
 - Added a capture-device catalog layer for macOS that now includes webcam discovery (built-in wide-angle, external, Continuity Camera, and Desk View where available) with stable IDs, user-friendly stable sorting, and reusable connect/disconnect/interruption notification hooks.
 - Added macOS webcam setup controls in recording start and video settings (enable toggle, device picker, shape/corner/size presets), plus start-panel plumbing so webcam selections flow into the video capture start path. Enabling webcam now auto-enables microphone by default (still manually overridable).

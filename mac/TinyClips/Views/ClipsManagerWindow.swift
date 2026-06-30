@@ -4,20 +4,12 @@ import AVFoundation
 import SwiftData
 import ImageIO
 
-// MARK: - Root View (Pro gating)
+// MARK: - Root View
 
 private struct ClipsManagerRootView: View {
-#if APPSTORE
-    @ObservedObject private var storeService = StoreService.shared
-
     var body: some View {
-        ClipsManagerContentView(isPro: storeService.isPro)
+        ClipsManagerContentView()
     }
-#else
-    var body: some View {
-        ClipsManagerContentView(isPro: true)
-    }
-#endif
 }
 
 @MainActor
@@ -1022,7 +1014,6 @@ private class ClipsViewModel: ObservableObject {
 // MARK: - Clips Manager Content View
 
 private struct ClipsManagerContentView: View {
-    let isPro: Bool
     @ObservedObject private var settings = CaptureSettings.shared
     @StateObject private var viewModel = ClipsViewModel()
     @State private var renameClip: ClipItem?
@@ -1047,10 +1038,7 @@ private struct ClipsManagerContentView: View {
                 .navigationSplitViewColumnWidth(min: 140, ideal: 160, max: 200)
         } detail: {
             VStack(spacing: 0) {
-                if !isPro {
-                    proUpsellBanner
-                }
-                if viewModel.selectionMode && isPro {
+                if viewModel.selectionMode {
                     batchToolbar
                 }
                 content
@@ -1130,35 +1118,26 @@ private struct ClipsManagerContentView: View {
                 .accessibilityLabel("Refresh clips")
                 .accessibilityHint("Reloads clips from disk.")
 
-                if isPro {
-                    Button(viewModel.selectionMode ? "Done" : "Select") {
-                        viewModel.selectionMode.toggle()
-                        if !viewModel.selectionMode {
-                            viewModel.clearSelection()
-                        }
+                Button(viewModel.selectionMode ? "Done" : "Select") {
+                    viewModel.selectionMode.toggle()
+                    if !viewModel.selectionMode {
+                        viewModel.clearSelection()
                     }
-                    .help(viewModel.selectionMode ? "Exit selection mode." : "Select multiple clips.")
                 }
+                .help(viewModel.selectionMode ? "Exit selection mode." : "Select multiple clips.")
 
-                if isPro {
-                    Button {
-                        showUploadcareSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .help("Clip Manager settings")
-                    .accessibilityLabel("Clip Manager settings")
+                Button {
+                    showUploadcareSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
                 }
+                .help("Clip Manager settings")
+                .accessibilityLabel("Clip Manager settings")
             }
         }
         .onAppear {
             viewModel.applyStatePreferences()
             viewModel.load()
-        }
-        .onChange(of: isPro) { _, upgraded in
-            if upgraded {
-                showProUpsell = false
-            }
         }
         .task(id: settings.clipsManagerAutoRefreshSeconds) {
             let interval = settings.clipsManagerAutoRefreshSeconds
@@ -1246,19 +1225,17 @@ private struct ClipsManagerContentView: View {
                 collection: viewModel.collection(for: item),
                 uploadcareLink: viewModel.uploadcareLink(for: item),
                 isFavorite: viewModel.isFavorite(item),
-                onToggleFavorite: requiresPro { viewModel.toggleFavorite(item) },
+                onToggleFavorite: { viewModel.toggleFavorite(item) },
                 tagSuggestions: viewModel.availableTags,
                 collectionSuggestions: viewModel.availableCollections,
                 onSaveMetadata: { name, tags, notes, collection in
-                    requiresPro {
-                        viewModel.setDisplayName(item, name: name)
-                        viewModel.setTags(item, tags: tags)
-                        viewModel.setNotes(item, notes: notes)
-                        viewModel.setCollection(item, collection: collection)
-                        viewModel.load()
-                    }()
+                    viewModel.setDisplayName(item, name: name)
+                    viewModel.setTags(item, tags: tags)
+                    viewModel.setNotes(item, notes: notes)
+                    viewModel.setCollection(item, collection: collection)
+                    viewModel.load()
                 },
-                onEditMedia: requiresPro { viewModel.editClip(item) },
+                onEditMedia: { viewModel.editClip(item) },
                 onReveal: { viewModel.revealInFinder(item) },
                 onCopyUploadcareLink: { viewModel.copyUploadcareLink(item) }
             )
@@ -1302,36 +1279,12 @@ private struct ClipsManagerContentView: View {
         }
     }
 
-    // MARK: - Pro Gating Helpers
-
-    private func requiresPro(_ action: @escaping () -> Void) -> () -> Void {
-        isPro ? action : { showProUpsell = true }
-    }
-
     private func confirmDelete(_ item: ClipItem) {
         if settings.clipsManagerConfirmDelete {
             pendingDeleteClip = item
         } else {
             viewModel.delete(item)
         }
-    }
-
-    private var proUpsellBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "star.fill")
-                .foregroundStyle(.yellow)
-            Text("Upgrade to Pro to organize, tag, and manage your clips.")
-                .font(.caption)
-            Spacer()
-            Button("Upgrade") {
-                showProUpsell = true
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.yellow.opacity(0.08))
     }
 
     private func colorForTag(_ tag: String) -> Color {
@@ -1519,18 +1472,18 @@ private struct ClipsManagerContentView: View {
                         isSelected: viewModel.isSelected(item),
                         rowTapSelectsInSelectionMode: settings.clipsManagerSelectionRowTapSelects,
                         thumbnail: viewModel.thumbnails[item.id],
-                        onDelete: requiresPro { confirmDelete(item) },
+                        onDelete: { confirmDelete(item) },
                         onCopy: { viewModel.copyToClipboard(item) },
                         onReveal: { viewModel.revealInFinder(item) },
-                        onToggleFavorite: requiresPro { viewModel.toggleFavorite(item) },
-                        onRename: requiresPro { renameClip = item },
-                        onEditTags: requiresPro { tagEditorClip = item },
-                        onEditNotes: requiresPro { notesClip = item },
-                        onEditCollection: requiresPro { collectionClip = item },
+                        onToggleFavorite: { viewModel.toggleFavorite(item) },
+                        onRename: { renameClip = item },
+                        onEditTags: { tagEditorClip = item },
+                        onEditNotes: { notesClip = item },
+                        onEditCollection: { collectionClip = item },
                         onOpenDetails: { detailClip = item },
-                        onEditMedia: requiresPro { viewModel.editClip(item) },
+                        onEditMedia: { viewModel.editClip(item) },
                         onCopyUploadcareLink: { viewModel.copyUploadcareLink(item) },
-                        onUpload: requiresPro {
+                        onUpload: {
                             if viewModel.canUploadToUploadcare {
                                 viewModel.uploadToUploadcare(item)
                             } else {
@@ -1570,18 +1523,18 @@ private struct ClipsManagerContentView: View {
                 isSelectionMode: viewModel.selectionMode,
                 isSelected: viewModel.isSelected(item),
                 thumbnail: viewModel.thumbnails[item.id],
-                onDelete: requiresPro { confirmDelete(item) },
+                onDelete: { confirmDelete(item) },
                 onCopy: { viewModel.copyToClipboard(item) },
                 onReveal: { viewModel.revealInFinder(item) },
-                onToggleFavorite: requiresPro { viewModel.toggleFavorite(item) },
-                onRename: requiresPro { renameClip = item },
-                onEditTags: requiresPro { tagEditorClip = item },
-                onEditNotes: requiresPro { notesClip = item },
-                onEditCollection: requiresPro { collectionClip = item },
+                onToggleFavorite: { viewModel.toggleFavorite(item) },
+                onRename: { renameClip = item },
+                onEditTags: { tagEditorClip = item },
+                onEditNotes: { notesClip = item },
+                onEditCollection: { collectionClip = item },
                 onOpenDetails: { detailClip = item },
-                onEditMedia: requiresPro { viewModel.editClip(item) },
+                onEditMedia: { viewModel.editClip(item) },
                 onCopyUploadcareLink: { viewModel.copyUploadcareLink(item) },
-                onUpload: requiresPro {
+                onUpload: {
                     if viewModel.canUploadToUploadcare {
                         viewModel.uploadToUploadcare(item)
                     } else {

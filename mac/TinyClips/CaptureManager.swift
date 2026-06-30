@@ -1447,9 +1447,6 @@ class CaptureManager: ObservableObject {
     }
 
     private func shouldCaptureMouseClicks(for type: CaptureType) -> Bool {
-#if APPSTORE
-        guard StoreService.shared.isPro else { return false }
-#endif
         if let activeMouseClickCaptureEnabledOverride {
             return activeMouseClickCaptureEnabledOverride
         }

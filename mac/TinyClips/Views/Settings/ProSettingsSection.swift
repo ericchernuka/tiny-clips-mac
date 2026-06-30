@@ -6,25 +6,25 @@ struct ProSettingsSection: View {
     @ObservedObject private var storeService = StoreService.shared
 
     var body: some View {
-        if storeService.isPro {
+        if storeService.hasProTip {
             Section {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("TinyClips Pro")
+                        Text("Pro Supporter")
                             .font(.headline)
                         if let plan = storeService.activeProPlan {
                             Text("Plan: \(plan.label) — thank you for your support!")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Active — thank you for your support!")
+                            Text("Thank you for supporting independent development!")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    Label("Active", systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
+                    Label("Pro", systemImage: "star.fill")
+                        .foregroundStyle(.orange)
                         .font(.callout)
                 }
 

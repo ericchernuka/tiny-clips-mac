@@ -4,7 +4,6 @@ struct VideoSettingsSection: View {
     @ObservedObject var settings: CaptureSettings
     let availableMicrophones: [MicrophoneDeviceOption]
     let availableWebcams: [WebcamDeviceOption]
-    let isPro: Bool
     let selectedTab: Binding<SettingsTab?>
 
     var body: some View {
@@ -80,33 +79,13 @@ struct VideoSettingsSection: View {
             Toggle("Show capture region during recording", isOn: $settings.showRegionIndicator)
                 .help("Show a visible border around the selected capture area while recording.")
 
-            VStack(alignment: .leading, spacing: 6) {
-                if isPro {
-                    Toggle("Show mouse clicks in recording", isOn: $settings.showMouseClickVisualsInVideo)
-                        .help("Adds a subtle pulse at click positions in saved video recordings.")
-                        .accessibilityHint("When enabled, mouse clicks are shown as a pulse effect in saved video recordings.")
-                    Button("Customize mouse click effect…") {
-                        selectedTab.wrappedValue = .mouseClicks
-                    }
-                    .buttonStyle(.link)
-                } else {
-#if APPSTORE
-                    Toggle(isOn: .constant(false)) {
-                        HStack(spacing: 8) {
-                            Text("Show mouse clicks in recording")
-                            Image(systemName: "lock.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .disabled(true)
-                    .help("Requires TinyClips Pro.")
-                    Button("Unlock with Pro…") {
-                        selectedTab.wrappedValue = .mouseClicks
-                    }
-                    .buttonStyle(.link)
-#endif
-                }
+            Toggle("Show mouse clicks in recording", isOn: $settings.showMouseClickVisualsInVideo)
+                .help("Adds a subtle pulse at click positions in saved video recordings.")
+                .accessibilityHint("When enabled, mouse clicks are shown as a pulse effect in saved video recordings.")
+            Button("Customize mouse click effect…") {
+                selectedTab.wrappedValue = .mouseClicks
             }
+            .buttonStyle(.link)
         }
         
         Section("Before Capture") {

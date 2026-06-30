@@ -2,7 +2,6 @@ import SwiftUI
 
 struct GifSettingsSection: View {
     @ObservedObject var settings: CaptureSettings
-    let isPro: Bool
     let selectedTab: Binding<SettingsTab?>
     let gifMouseClickToggleBinding: Binding<Bool>
 
@@ -34,48 +33,26 @@ struct GifSettingsSection: View {
             .help("Limit GIF output width to reduce file size.")
             Toggle("Show capture region during recording", isOn: $settings.showRegionIndicator)
                 .help("Show a visible border around the selected capture area while recording.")
-            VStack(alignment: .leading, spacing: 6) {
-                if isPro {
-                    Toggle(
-                        settings.gifMouseClicksUseVideoSettings
-                            ? "Show mouse clicks in recording (mirrors Video)"
-                            : "Show mouse clicks in recording",
-                        isOn: gifMouseClickToggleBinding
-                    )
-                    .help(
-                        settings.gifMouseClicksUseVideoSettings
-                            ? "Uses the Video mouse click on/off setting for GIF recordings."
-                            : "Adds a subtle pulse at click positions in saved GIF recordings."
-                    )
-                    .accessibilityHint(
-                        settings.gifMouseClicksUseVideoSettings
-                            ? "When enabled, GIF recordings use the same mouse click visibility setting as Video recordings."
-                            : "When enabled, mouse clicks are shown as a pulse effect in saved GIF recordings."
-                    )
-                    Button("Customize mouse click effect…") {
-                        selectedTab.wrappedValue = .mouseClicks
-                    }
-                    .buttonStyle(.link)
-                } else {
-#if APPSTORE
-                    Toggle(isOn: .constant(false)) {
-                        HStack(spacing: 8) {
-                            Text(settings.gifMouseClicksUseVideoSettings
-                                ? "Show mouse clicks in recording (mirrors Video)"
-                                : "Show mouse clicks in recording")
-                            Image(systemName: "lock.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .disabled(true)
-                    .help("Requires TinyClips Pro.")
-                    Button("Unlock with Pro…") {
-                        selectedTab.wrappedValue = .mouseClicks
-                    }
-                    .buttonStyle(.link)
-#endif
-                }
+            Toggle(
+                settings.gifMouseClicksUseVideoSettings
+                    ? "Show mouse clicks in recording (mirrors Video)"
+                    : "Show mouse clicks in recording",
+                isOn: gifMouseClickToggleBinding
+            )
+            .help(
+                settings.gifMouseClicksUseVideoSettings
+                    ? "Uses the Video mouse click on/off setting for GIF recordings."
+                    : "Adds a subtle pulse at click positions in saved GIF recordings."
+            )
+            .accessibilityHint(
+                settings.gifMouseClicksUseVideoSettings
+                    ? "When enabled, GIF recordings use the same mouse click visibility setting as Video recordings."
+                    : "When enabled, mouse clicks are shown as a pulse effect in saved GIF recordings."
+            )
+            Button("Customize mouse click effect…") {
+                selectedTab.wrappedValue = .mouseClicks
             }
+            .buttonStyle(.link)
         }
         
         Section("Before Capture") {
