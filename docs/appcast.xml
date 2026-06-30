@@ -11,24 +11,24 @@
         <item>
             
             
-            <title>1.4.0.4</title>
+            <title>1.5.0</title>
             
             
-            <pubDate>Thu, 25 Jun 2026 06:01:50 +0000</pubDate>
+            <pubDate>Tue, 30 Jun 2026 14:03:51 +0000</pubDate>
             
             
-            <sparkle:version>48</sparkle:version>
+            <sparkle:version>49</sparkle:version>
             
             
-            <sparkle:shortVersionString>1.4.0.4</sparkle:shortVersionString>
+            <sparkle:shortVersionString>1.5.0</sparkle:shortVersionString>
             
             
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             
             
-            <description><![CDATA[<h3>What's Changed</h3><ul><li>Update release workflow and scripts for macOS tagging and installation instructions</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.4.0.4-mac">Release Details</a></p>]]></description>
-            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.4.0.4-mac</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.4.0.4-mac/TinyClips-v1.4.0.4-mac.zip" length="3395017" type="application/octet-stream" sparkle:edSignature="5/cXLMlfbbhmvs1yxeburnJtZ8d1NT/8xKCNZsXu7480QwvAstnb6zgTSSglqzfj8uG3u9scC2OWBkFIW1oGBg=="/>
+            <description><![CDATA[<h3>What's Changed</h3><ul><li>Mark v1.5.0 mac release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.4.0.4-mac...v1.5.0-mac">Full Changelog</a></p>]]></description>
+            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.0-mac</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.5.0-mac/TinyClips-v1.5.0-mac.zip" length="3397730" type="application/octet-stream" sparkle:edSignature="TNGVuYzD+7gfzlnZ/xzKCy/ptp7wlP9INMxT2mSv7qfxQG0eN+PTrdfH3CD0cwuqnNMDuQqXmt3rF9VLKi1vBw=="/>
             
         
         </item>
