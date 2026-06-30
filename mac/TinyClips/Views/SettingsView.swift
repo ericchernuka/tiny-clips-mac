@@ -41,6 +41,7 @@ struct SettingsView: View {
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
 #if APPSTORE
     @ObservedObject private var storeService = StoreService.shared
+    @ObservedObject private var settingsWindowManager = SettingsWindowManager.shared
 #endif
     @Environment(\.openWindow) private var openWindow
     @State private var selectedTab: SettingsTab? = .general
@@ -120,6 +121,12 @@ struct SettingsView: View {
         .onAppear {
             PerformanceSignposts.endSettingsOpenIfNeeded()
             refreshCaptureDevicesIfNeeded()
+#if APPSTORE
+            if let requestedTab = settingsWindowManager.selectedTab {
+                selectedTab = requestedTab
+                settingsWindowManager.selectedTab = nil
+            }
+#endif
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .video {

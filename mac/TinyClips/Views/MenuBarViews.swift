@@ -4,6 +4,15 @@ import os
 import StoreKit
 #endif
 
+// MARK: - Settings Window Manager
+
+class SettingsWindowManager: ObservableObject {
+    static let shared = SettingsWindowManager()
+    @Published var selectedTab: SettingsTab? = nil
+    
+    private init() {}
+}
+
 // MARK: - Menu Bar Content
 
 struct MenuBarContentView: View {
@@ -74,6 +83,15 @@ struct MenuBarContentView: View {
         Button("Guide…") {
             captureManager.showGuide()
         }
+
+#if APPSTORE
+        Button("Support Tiny Clips…") {
+            SettingsWindowManager.shared.selectedTab = .pro
+            openWindow(id: "settings-window")
+            bringSettingsWindowToFront()
+        }
+        .accessibilityHint("Opens support and tip options.")
+#endif
 
         Button("Settings…") {
             PerformanceSignposts.beginSettingsOpen()
