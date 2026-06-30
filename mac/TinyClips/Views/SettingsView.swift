@@ -10,7 +10,7 @@ enum SettingsTab: String, CaseIterable {
     case gif = "GIF"
     case mouseClicks = "Mouse Clicks"
     case shortcuts = "Shortcuts"
-    case pro = "Pro"
+    case pro = "Support Tiny Clips"
     case about = "About"
 
     var icon: String {

@@ -1,48 +1,58 @@
 ---
 name: tag-new-release
-description: Create a new annotated git tag with release notes extracted from CHANGELOG.md. Use this skill when preparing or tagging a new TinyClips release.
-argument-hint: "[version] (optional, e.g., v1.2.3)"
+description: Create a new annotated git tag with release notes extracted from changelog files. Supports both macOS and Windows TinyClips release flows.
+argument-hint: "--platform <mac|windows> [--version <tag>] (e.g., --platform mac --version v1.5.0-mac)"
 user-invocable: true
 ---
 
 # Tag New Release
 
-Create a new annotated git tag for a release based on the current project's changelog.
+Create a new annotated git tag for a release based on the project's platform changelog.
 
 ## When to use
 
-- When preparing a new TinyClips release tag.
+- When preparing a new TinyClips release tag for macOS or Windows.
 - When the user asks to tag a release.
-- When the user provides a version to tag, such as `v1.2.3`.
-- When the user wants release notes extracted from `CHANGELOG.md` and included in the tag message.
+- When the user provides a version to tag, such as `v1.5.0-mac` or `v1.0.9-windows`.
+- When the user wants release notes extracted from the relevant changelog and included in the tag message.
 
 ## How to use
 
-Request the release tag in chat:
+Request the release tag in chat (platform is required):
 
 ```text
-/tag-new-release v1.2.3
+/tag-new-release --platform mac --version v1.5.0-mac
 ```
 
-The version argument is optional. If no version is provided, determine the release version from the latest unreleased entry in `CHANGELOG.md` and the current app version settings.
+Or run the script directly from the repository root:
+
+```bash
+bash .github/skills/tag-new-release/tag-new-release.sh --platform mac --version v1.5.0-mac
+```
+
+If `--version` is omitted:
+- macOS defaults to `v<Info.plist CFBundleShortVersionString>.0-mac` (for example, `v1.5.0-mac`)
+- Windows defaults to incrementing patch from the latest `v*-windows` tag.
 
 ## Step-by-step procedure
 
 When asked to tag a new release:
 
-1. **Check existing tags** - Inspect the most recent git tags to understand the repository's versioning scheme.
-2. **Check the app version** - Inspect the app's version setting, such as project settings, build configuration, or `Info.plist`.
-   - Only increment to a new minor version, such as `1.3.x` to `1.4.0`, if the app version has been updated in the codebase.
-   - Otherwise, stay on a patch version, such as `1.3.2`.
-3. **Read `CHANGELOG.md`** - Identify the latest unreleased version and its release notes.
-   - If release notes do not exist for the target version, create them from the unreleased changes.
-4. **Update `CHANGELOG.md`** - Mark the version as released and add the release date if it is not already present.
-5. **Verify the working directory** - Ensure there are no uncommitted changes before creating the tag.
-6. **Create an annotated git tag** with:
-   - A tag name matching the version, such as `v1.2.3`.
-   - A tag message containing the version and formatted release notes from `CHANGELOG.md`.
-7. **Confirm the tag** - Show the created tag details to verify the tag name and message.
-8. **Suggest pushing the tag** - Tell the user they can push with:
+1. **Check existing tags** - Inspect recent git tags for the selected platform.
+2. **Determine release version**:
+   - macOS: Validate against `mac/TinyClips/Info.plist` `CFBundleShortVersionString`
+   - Windows: Use provided tag or infer by incrementing the latest `-windows` patch tag
+3. **Read platform changelog**:
+   - macOS: root `CHANGELOG.md`
+   - Windows: `windows/CHANGELOG.md`
+4. **Update changelog** - Insert the release heading with today's date below Unreleased.
+5. **Verify the working directory** - Ensure there are no uncommitted changes before creating commit/tag.
+6. **Create commit** - Commit the changelog release marker.
+7. **Create an annotated git tag** with:
+   - A tag name matching the platform version (for example `v1.5.0-mac`, `v1.0.9-windows`)
+   - A tag message containing the version and formatted release notes from the platform changelog
+8. **Confirm the tag** - Show the created tag details to verify the tag name and message.
+9. **Suggest pushing the tag** - Tell the user they can push with:
 
    ```bash
    git push origin <tag-name>
@@ -52,7 +62,7 @@ When asked to tag a new release:
 
 ## Release notes format
 
-The tag message should include cleanly formatted release notes from the `CHANGELOG.md` entry for the release. Include all relevant sections, such as:
+The tag message should include cleanly formatted release notes from the selected changelog entry for the release. Include all relevant sections, such as:
 
 - Added
 - Improved
@@ -67,4 +77,8 @@ The tag message should include cleanly formatted release notes from the `CHANGEL
 - Do not create a release tag from a dirty working directory.
 - Do not overwrite an existing tag.
 - Do not push tags without explicit user approval.
-- If the requested version conflicts with the changelog, app version, or existing tags, stop and ask the user how to proceed.
+- If the requested version conflicts with app version or existing tags, stop and ask the user how to proceed.
+
+## Files included
+
+- `tag-new-release.sh` - Script that automates changelog release marking, commit creation, and annotated tagging for macOS or Windows.
