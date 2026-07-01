@@ -8,6 +8,10 @@ final class SessionRecentCaptureRegionStore {
         regionsByDisplayID[displayID]
     }
 
+    func regionsByDisplayIDSnapshot() -> [CGDirectDisplayID: CaptureRegion] {
+        regionsByDisplayID
+    }
+
     func save(_ region: CaptureRegion) {
         regionsByDisplayID[region.displayID] = region
     }

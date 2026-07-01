@@ -4,13 +4,13 @@ import AppKit
 class RegionSelector {
     private static var activeSelector: RegionSelectorController?
 
-    static func selectRegion(recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
-        return await selectRegion(on: nil, recentRegion: recentRegion)
+    static func selectRegion(recentRegionsByDisplayID: [CGDirectDisplayID: CaptureRegion] = [:]) async -> CaptureRegion? {
+        return await selectRegion(on: nil, recentRegionsByDisplayID: recentRegionsByDisplayID)
     }
 
-    static func selectRegion(on screen: NSScreen?, recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
+    static func selectRegion(on screen: NSScreen?, recentRegionsByDisplayID: [CGDirectDisplayID: CaptureRegion] = [:]) async -> CaptureRegion? {
         return await withCheckedContinuation { continuation in
-            let selector = RegionSelectorController(screen: screen, recentRegion: recentRegion, completion: { region in
+            let selector = RegionSelectorController(screen: screen, recentRegionsByDisplayID: recentRegionsByDisplayID, completion: { region in
                 Self.activeSelector = nil
                 continuation.resume(returning: region)
             })
@@ -27,11 +27,11 @@ private class RegionSelectorController {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private let targetScreen: NSScreen?
-    private let recentRegion: CaptureRegion?
+    private let recentRegionsByDisplayID: [CGDirectDisplayID: CaptureRegion]
 
-    init(screen: NSScreen? = nil, recentRegion: CaptureRegion? = nil, completion: @escaping (CaptureRegion?) -> Void) {
+    init(screen: NSScreen? = nil, recentRegionsByDisplayID: [CGDirectDisplayID: CaptureRegion] = [:], completion: @escaping (CaptureRegion?) -> Void) {
         self.targetScreen = screen
-        self.recentRegion = recentRegion
+        self.recentRegionsByDisplayID = recentRegionsByDisplayID
         self.completion = completion
     }
 
@@ -54,6 +54,8 @@ private class RegionSelectorController {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             let view = RegionSelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+            let recentRegion = displayID.flatMap { recentRegionsByDisplayID[$0] }
             view.preselect(recentRegion, on: screen)
             view.onComplete = { [weak self] region in
                 self?.finish(with: region)

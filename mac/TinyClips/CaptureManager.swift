@@ -193,7 +193,7 @@ class CaptureManager: ObservableObject {
     ) async {
         switch mode {
         case .region:
-            guard let region = await RegionSelector.selectRegion(recentRegion: recentRegionForCurrentDisplay()) else {
+            guard let region = await RegionSelector.selectRegion(recentRegionsByDisplayID: recentRegionStore.regionsByDisplayIDSnapshot()) else {
                 recentRegionStore.clear()
                 if shouldReturnToPicker {
                     showScreenshotPicker()
@@ -1390,7 +1390,7 @@ class CaptureManager: ObservableObject {
     private func chooseCaptureTarget(for mode: CapturePickerMode) async -> CaptureTarget? {
         switch mode {
         case .region:
-            guard let region = await RegionSelector.selectRegion(recentRegion: recentRegionForCurrentDisplay()) else {
+            guard let region = await RegionSelector.selectRegion(recentRegionsByDisplayID: recentRegionStore.regionsByDisplayIDSnapshot()) else {
                 recentRegionStore.clear()
                 return nil
             }
@@ -1473,16 +1473,6 @@ class CaptureManager: ObservableObject {
     private func screenUnderMouseCursor() -> NSScreen? {
         let mouseLocation = NSEvent.mouseLocation
         return NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
-    }
-
-    private func recentRegionForCurrentDisplay() -> CaptureRegion? {
-        guard let screen = screenUnderMouseCursor() ?? NSScreen.main,
-              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-        else {
-            return nil
-        }
-
-        return recentRegionStore.region(for: displayID)
     }
 
     private func startMouseClickMonitoringIfNeeded(for type: CaptureType, region: CaptureRegion) {
