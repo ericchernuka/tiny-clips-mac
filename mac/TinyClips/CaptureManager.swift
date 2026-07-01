@@ -202,7 +202,6 @@ class CaptureManager: ObservableObject {
         switch mode {
         case .region:
             guard let region = await RegionSelector.selectRegion(recentRegionsByDisplayID: recentRegionStore.regionsByDisplayIDSnapshot()) else {
-                recentRegionStore.clear()
                 if shouldReturnToPicker {
                     showScreenshotPicker()
                 }
@@ -1059,9 +1058,6 @@ class CaptureManager: ObservableObject {
             },
             onCancel: { [weak self] in
                 guard let self else { return }
-                if setup.isRegion {
-                    self.recentRegionStore.clear()
-                }
                 self.clearPendingRecordingSetup()
                 self.dismissStartPanel()
                 self.dismissRegionIndicator()
@@ -1090,8 +1086,9 @@ class CaptureManager: ObservableObject {
         dismissRegionIndicator()
 
         guard let target = await chooseCaptureTarget(for: .region) else {
-            recentRegionStore.clear()
-            clearPendingRecordingSetup()
+            pendingRecordingSetup = setup
+            showPendingRecordingRegionIndicator()
+            showStartPanel()
             return
         }
 
@@ -1389,7 +1386,6 @@ class CaptureManager: ObservableObject {
         switch mode {
         case .region:
             guard let region = await RegionSelector.selectRegion(recentRegionsByDisplayID: recentRegionStore.regionsByDisplayIDSnapshot()) else {
-                recentRegionStore.clear()
                 return nil
             }
             return CaptureTarget(region: region)
