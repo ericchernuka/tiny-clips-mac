@@ -27,6 +27,17 @@ public sealed record RecordingSetupResult(
     double? WebcamCornerRadius,
     bool ShowMouseClicks);
 
+public enum RecordingSetupOutcomeKind
+{
+    Start,
+    Cancel,
+    Reselect
+}
+
+public sealed record RecordingSetupOutcome(
+    RecordingSetupOutcomeKind Kind,
+    RecordingSetupResult? Setup);
+
 /// <summary>
 /// Pre-recording setup panel shown after target selection and before countdown.
 /// </summary>
@@ -41,10 +52,11 @@ public sealed partial class RecordingSetupWindow : Window
     private const string SystemAudioOffGlyph = "\uE74F";
     private static readonly double[] WebcamCornerRadiusOptions = { -1d, 8d, 12d, 16d, 24d, 32d, 48d };
 
-    private readonly TaskCompletionSource<RecordingSetupResult?> _result = new();
+    private readonly TaskCompletionSource<RecordingSetupOutcome> _result = new();
     private readonly CaptureType _captureType;
     private readonly IAudioDeviceService _audioDevices;
     private readonly IWebcamDeviceEnumerator _webcamDevices;
+    private readonly bool _canReselectRegion;
     private readonly ObservableCollection<AudioInputDevice> _microphones = new();
     private readonly ObservableCollection<WebcamDeviceInfo> _webcams = new();
 
@@ -72,23 +84,26 @@ public sealed partial class RecordingSetupWindow : Window
         CaptureType captureType,
         ICaptureSettings settings,
         IAudioDeviceService audioDevices,
-        IWebcamDeviceEnumerator webcamDevices)
+        IWebcamDeviceEnumerator webcamDevices,
+        bool canReselectRegion,
+        RecordingSetupResult? initialSetup)
     {
         InitializeComponent();
 
         _captureType = captureType;
         _audioDevices = audioDevices;
         _webcamDevices = webcamDevices;
-        _recordSystemAudio = settings.RecordAudio;
-        _recordMicrophone = settings.RecordMicrophone;
-        _selectedMicrophoneId = settings.SelectedMicrophoneId ?? string.Empty;
-        _webcamEnabled = settings.WebcamEnabled;
-        _selectedWebcamId = settings.SelectedWebcamId ?? string.Empty;
-        _webcamShape = settings.WebcamShape;
-        _webcamSizePreset = settings.WebcamSizePreset;
-        _webcamCornerPosition = settings.WebcamCornerPosition;
-        _webcamCornerRadius = settings.WebcamCornerRadius ?? -1;
-        _showMouseClicks = settings.ShouldShowMouseClickVisuals(captureType);
+        _canReselectRegion = canReselectRegion;
+        _recordSystemAudio = initialSetup?.RecordSystemAudio ?? settings.RecordAudio;
+        _recordMicrophone = initialSetup?.RecordMicrophone ?? settings.RecordMicrophone;
+        _selectedMicrophoneId = initialSetup?.SelectedMicrophoneId ?? settings.SelectedMicrophoneId ?? string.Empty;
+        _webcamEnabled = initialSetup?.WebcamEnabled ?? settings.WebcamEnabled;
+        _selectedWebcamId = initialSetup?.SelectedWebcamId ?? settings.SelectedWebcamId ?? string.Empty;
+        _webcamShape = initialSetup?.WebcamShape ?? settings.WebcamShape;
+        _webcamSizePreset = initialSetup?.WebcamSizePreset ?? settings.WebcamSizePreset;
+        _webcamCornerPosition = initialSetup?.WebcamCornerPosition ?? settings.WebcamCornerPosition;
+        _webcamCornerRadius = initialSetup?.WebcamCornerRadius ?? settings.WebcamCornerRadius ?? -1;
+        _showMouseClicks = initialSetup?.ShowMouseClicks ?? settings.ShouldShowMouseClickVisuals(captureType);
 
         _microphones.Add(new AudioInputDevice(string.Empty, "System default"));
         _webcams.Add(new WebcamDeviceInfo(string.Empty, "System default"));
@@ -102,15 +117,23 @@ public sealed partial class RecordingSetupWindow : Window
         Closed += OnClosed;
     }
 
-    public static Task<RecordingSetupResult?> RunAsync(
+    public static Task<RecordingSetupOutcome> RunAsync(
         CaptureType captureType,
         ICaptureSettings settings,
         IAudioDeviceService audioDevices,
         IWebcamDeviceEnumerator webcamDevices,
         MonitorInfo? monitor,
-        PixelRect? regionInVirtualDesktop)
+        PixelRect? regionInVirtualDesktop,
+        bool canReselectRegion = false,
+        RecordingSetupResult? initialSetup = null)
     {
-        var window = new RecordingSetupWindow(captureType, settings, audioDevices, webcamDevices);
+        var window = new RecordingSetupWindow(
+            captureType,
+            settings,
+            audioDevices,
+            webcamDevices,
+            canReselectRegion,
+            initialSetup);
         window.ShowNear(monitor, regionInVirtualDesktop);
         if (captureType == CaptureType.Video)
         {
@@ -131,6 +154,10 @@ public sealed partial class RecordingSetupWindow : Window
             WebcamToggle.Visibility = Visibility.Collapsed;
             WebcamSettingsButton.Visibility = Visibility.Collapsed;
         }
+
+        ReselectRegionButton.Visibility = _canReselectRegion
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private async Task LoadMicrophonesAsync()
@@ -483,7 +510,19 @@ public sealed partial class RecordingSetupWindow : Window
 
     private void OnStart(object sender, RoutedEventArgs e)
     {
-        Complete(new RecordingSetupResult(
+        Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Start, CurrentSetup()));
+    }
+
+    private void OnReselectRegion(object sender, RoutedEventArgs e)
+    {
+        if (_canReselectRegion)
+        {
+            Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Reselect, CurrentSetup()));
+        }
+    }
+
+    private RecordingSetupResult CurrentSetup() =>
+        new(
             _captureType == CaptureType.Video && _recordSystemAudio,
             _captureType == CaptureType.Video && _recordMicrophone,
             _selectedMicrophoneId,
@@ -493,10 +532,10 @@ public sealed partial class RecordingSetupWindow : Window
             _webcamSizePreset,
             _webcamCornerPosition,
             _webcamCornerRadius < 0 ? null : _webcamCornerRadius,
-            _showMouseClicks));
-    }
+            _showMouseClicks);
 
-    private void OnCancel(object sender, RoutedEventArgs e) => Complete(null);
+    private void OnCancel(object sender, RoutedEventArgs e) =>
+        Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Cancel, null));
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -507,13 +546,20 @@ public sealed partial class RecordingSetupWindow : Window
                 e.Handled = true;
                 break;
             case VirtualKey.Escape:
-                Complete(null);
+                if (_canReselectRegion)
+                {
+                    Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Reselect, CurrentSetup()));
+                }
+                else
+                {
+                    Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Cancel, null));
+                }
                 e.Handled = true;
                 break;
         }
     }
 
-    private void Complete(RecordingSetupResult? result)
+    private void Complete(RecordingSetupOutcome result)
     {
         if (_completed)
         {
@@ -542,7 +588,7 @@ public sealed partial class RecordingSetupWindow : Window
         if (!_completed)
         {
             _completed = true;
-            _result.TrySetResult(null);
+            _result.TrySetResult(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Cancel, null));
         }
     }
 

@@ -16,13 +16,23 @@ class StartRecordingPanel: NSPanel {
         let size: String
     }
 
-    private var onStart: ((Bool, MicrophoneSelection, WebcamSelection, Bool, Int) -> Void)?
+    struct RecordingSetupOptions {
+        let systemAudio: Bool
+        let microphoneSelection: MicrophoneSelection
+        let webcamSelection: WebcamSelection
+        let mouseClicksEnabled: Bool
+    }
+
+    private var onStart: ((RecordingSetupOptions) -> Void)?
     private var onCancel: (() -> Void)?
+    private var onReselectRegion: ((RecordingSetupOptions) -> Void)?
 
     convenience init(
         captureType: CaptureType,
-        onStart: @escaping (Bool, MicrophoneSelection, WebcamSelection, Bool, Int) -> Void,
-        onCancel: @escaping () -> Void
+        onStart: @escaping (RecordingSetupOptions) -> Void,
+        onCancel: @escaping () -> Void,
+        onReselectRegion: ((RecordingSetupOptions) -> Void)? = nil,
+        initialOptions: RecordingSetupOptions? = nil
     ) {
         self.init(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 44),
@@ -32,6 +42,7 @@ class StartRecordingPanel: NSPanel {
         )
         self.onStart = onStart
         self.onCancel = onCancel
+        self.onReselectRegion = onReselectRegion
         self.isReleasedWhenClosed = false
         self.level = .floating
         self.isOpaque = false
@@ -70,29 +81,40 @@ class StartRecordingPanel: NSPanel {
         defaultMouseClicksEnabled = settings.shouldShowMouseClickVisuals(for: captureType)
         let hostingView = NSHostingView(rootView: StartRecordingView(
             captureType: captureType,
-            systemAudio: settings.recordAudio,
-            microphone: settings.recordMicrophone,
-            selectedMicrophoneID: resolvedMicrophoneID,
+            systemAudio: initialOptions?.systemAudio ?? settings.recordAudio,
+            microphone: initialOptions?.microphoneSelection.enabled ?? settings.recordMicrophone,
+            selectedMicrophoneID: initialOptions?.microphoneSelection.deviceID ?? resolvedMicrophoneID,
             availableMicrophones: availableMicrophones,
-            webcamEnabled: settings.webcamEnabled,
-            selectedWebcamID: resolvedWebcamID,
-            webcamShape: settings.webcamShape,
-            webcamCorner: settings.webcamCorner,
-            webcamSize: settings.webcamSize,
+            webcamEnabled: initialOptions?.webcamSelection.enabled ?? settings.webcamEnabled,
+            selectedWebcamID: initialOptions?.webcamSelection.deviceID ?? resolvedWebcamID,
+            webcamShape: initialOptions?.webcamSelection.shape ?? settings.webcamShape,
+            webcamCorner: initialOptions?.webcamSelection.corner ?? settings.webcamCorner,
+            webcamSize: initialOptions?.webcamSelection.size ?? settings.webcamSize,
             availableWebcams: availableWebcams,
-            mouseClicksEnabled: defaultMouseClicksEnabled,
+            mouseClicksEnabled: initialOptions?.mouseClicksEnabled ?? defaultMouseClicksEnabled,
             allowsMouseClickToggle: allowsMouseClickToggle,
-            onStart: { [weak self] systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes in
+            onStart: { [weak self] options in
                 guard let panel = self, let onStart = panel.onStart else { return }
                 panel.onStart = nil
                 panel.onCancel = nil
-                onStart(systemAudio, microphone, webcam, mouseClicksEnabled, videoTimeLimitMinutes)
+                panel.onReselectRegion = nil
+                onStart(options)
             },
             onCancel: { [weak self] in
                 guard let panel = self, let onCancel = panel.onCancel else { return }
                 panel.onStart = nil
                 panel.onCancel = nil
+                panel.onReselectRegion = nil
                 onCancel()
+            },
+            onReselectRegion: onReselectRegion.map { _ in
+                { [weak self] options in
+                    guard let panel = self, let onReselectRegion = panel.onReselectRegion else { return }
+                    panel.onStart = nil
+                    panel.onCancel = nil
+                    panel.onReselectRegion = nil
+                    onReselectRegion(options)
+                }
             }
         ))
         let fittingSize = hostingView.fittingSize
@@ -132,8 +154,9 @@ private struct StartRecordingView: View {
     let availableWebcams: [WebcamDeviceOption]
     @State var mouseClicksEnabled: Bool
     let allowsMouseClickToggle: Bool
-    let onStart: (Bool, StartRecordingPanel.MicrophoneSelection, StartRecordingPanel.WebcamSelection, Bool, Int) -> Void
+    let onStart: (StartRecordingPanel.RecordingSetupOptions) -> Void
     let onCancel: () -> Void
+    let onReselectRegion: ((StartRecordingPanel.RecordingSetupOptions) -> Void)?
 
     /// Tracks that the user tried to enable an input but was blocked by a denied
     /// permission. When the app regains focus (e.g. after granting access in System
@@ -174,6 +197,21 @@ private struct StartRecordingView: View {
         default:
             return "Medium"
         }
+    }
+
+    private var currentOptions: StartRecordingPanel.RecordingSetupOptions {
+        StartRecordingPanel.RecordingSetupOptions(
+            systemAudio: systemAudio,
+            microphoneSelection: .init(enabled: microphone, deviceID: selectedMicrophoneID),
+            webcamSelection: .init(
+                enabled: webcamEnabled,
+                deviceID: selectedWebcamID,
+                shape: webcamShape,
+                corner: webcamCorner,
+                size: webcamSize
+            ),
+            mouseClicksEnabled: mouseClicksEnabled
+        )
     }
 
     var body: some View {
@@ -320,21 +358,32 @@ private struct StartRecordingView: View {
                 .frame(height: 20)
                 .overlay(.primary.opacity(0.2))
 
+            if let onReselectRegion {
+                Button {
+                    onReselectRegion(currentOptions)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "crop")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Reselect")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(.primary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Reselect region")
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel("Reselect recording region")
+                .accessibilityHint("Returns to region selection without changing the current recording options.")
+            }
+
             // Start button
             Button {
-                onStart(
-                    systemAudio,
-                    .init(enabled: microphone, deviceID: selectedMicrophoneID),
-                    .init(
-                        enabled: webcamEnabled,
-                        deviceID: selectedWebcamID,
-                        shape: webcamShape,
-                        corner: webcamCorner,
-                        size: webcamSize
-                    ),
-                    mouseClicksEnabled,
-                    CaptureSettings.shared.videoRecordingTimeLimitMinutes
-                )
+                onStart(currentOptions)
             } label: {
                 HStack(spacing: 5) {
                     Circle()
@@ -366,7 +415,7 @@ private struct StartRecordingView: View {
             }
             .buttonStyle(.plain)
             .help("Cancel")
-            .keyboardShortcut(.cancelAction)
+            .keyboardShortcut(onReselectRegion == nil ? .cancelAction : nil)
             .accessibilityLabel("Cancel recording setup")
             .accessibilityHint("Closes this panel without recording.")
         }

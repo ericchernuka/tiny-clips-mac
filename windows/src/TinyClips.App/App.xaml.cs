@@ -345,17 +345,17 @@ public partial class App : Application
                 return;
             }
 
-            RecordingSetupResult? recordingSetup = null;
             if (type is CaptureType.Video or CaptureType.Gif)
             {
-                recordingSetup = await ShowRecordingSetupAsync(type, selection, settings);
-                if (recordingSetup is null)
+                var ready = await ResolveRecordingSetupAsync(type, pick.Mode, selection, settings);
+                if (ready is null)
                 {
                     CloseRecordingRegionIndicator();
                     return;
                 }
 
-                ApplyRecordingSetup(type, recordingSetup, settings);
+                selection = ready.Selection;
+                ApplyRecordingSetup(type, ready.Setup, settings);
             }
 
             var showDisabledStopDuringCountdown = type is CaptureType.Video or CaptureType.Gif
@@ -442,7 +442,46 @@ public partial class App : Application
         }
     }
 
-    private async Task<RecordingSetupResult?> ShowRecordingSetupAsync(CaptureType type, TargetSelection selection, ICaptureSettings settings)
+    private async Task<RecordingReady?> ResolveRecordingSetupAsync(
+        CaptureType type,
+        CapturePickerMode mode,
+        TargetSelection initialSelection,
+        ICaptureSettings settings)
+    {
+        var selection = initialSelection;
+        RecordingSetupResult? setup = null;
+        var canReselectRegion = mode == CapturePickerMode.Region;
+
+        while (true)
+        {
+            var outcome = await ShowRecordingSetupAsync(type, selection, settings, canReselectRegion, setup);
+            switch (outcome.Kind)
+            {
+                case RecordingSetupOutcomeKind.Start when outcome.Setup is { } startSetup:
+                    return new RecordingReady(selection, startSetup);
+
+                case RecordingSetupOutcomeKind.Reselect when canReselectRegion:
+                    setup = outcome.Setup;
+                    if (await ResolveTargetAsync(CapturePickerMode.Region) is { } nextSelection)
+                    {
+                        selection = nextSelection;
+                        continue;
+                    }
+
+                    return null;
+
+                default:
+                    return null;
+            }
+        }
+    }
+
+    private async Task<RecordingSetupOutcome> ShowRecordingSetupAsync(
+        CaptureType type,
+        TargetSelection selection,
+        ICaptureSettings settings,
+        bool canReselectRegion,
+        RecordingSetupResult? initialSetup)
     {
         PixelRect? region = null;
         if (selection.Region is { } selectedRegion)
@@ -459,7 +498,15 @@ public partial class App : Application
                 var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
                 var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
                 var webcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, webcamDevices, monitor, region);
+                return await RecordingSetupWindow.RunAsync(
+                    type,
+                    settings,
+                    audioDevices,
+                    webcamDevices,
+                    monitor,
+                    region,
+                    canReselectRegion,
+                    initialSetup);
             }
             finally
             {
@@ -470,7 +517,15 @@ public partial class App : Application
         var setupMonitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
         var setupAudioDevices = Services.GetRequiredService<IAudioDeviceService>();
         var setupWebcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupWebcamDevices, setupMonitor, region);
+        return await RecordingSetupWindow.RunAsync(
+            type,
+            settings,
+            setupAudioDevices,
+            setupWebcamDevices,
+            setupMonitor,
+            region,
+            canReselectRegion,
+            initialSetup);
     }
 
     private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)
@@ -623,6 +678,8 @@ public partial class App : Application
     }
 
     private readonly record struct TargetSelection(CaptureTarget Target, PixelRect? Region, MonitorInfo? Monitor);
+
+    private readonly record struct RecordingReady(TargetSelection Selection, RecordingSetupResult Setup);
 
     private async Task ToggleVideoAsync()
     {

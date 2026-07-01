@@ -179,6 +179,21 @@
                 </Button>
 
                 <Button
+                    x:Name="ReselectRegionButton"
+                    MinWidth="0"
+                    Padding="10,0"
+                    AutomationProperties.AutomationId="ReselectRecordingRegionButton"
+                    AutomationProperties.Name="Reselect recording region"
+                    Click="OnReselectRegion"
+                    ToolTipService.ToolTip="Reselect region (Esc)"
+                    Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE8B7;" />
+                        <TextBlock Text="Reselect" />
+                    </StackPanel>
+                </Button>
+
+                <Button
                     x:Name="CancelButton"
                     Width="34"
                     Height="34"
