@@ -929,8 +929,7 @@ class CaptureManager: ObservableObject {
         countdownWindow = nil
         dismissRegionIndicator()
 
-        pendingRecordingTarget = nil
-        pendingRecordingType = nil
+        clearPendingRecordingSetup()
         lastVideoRecordingArtifacts = nil
         activeWebcamOverlaySelection = nil
 
