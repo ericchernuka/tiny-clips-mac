@@ -158,6 +158,9 @@ public sealed partial class RecordingSetupWindow : Window
         ReselectRegionButton.Visibility = _canReselectRegion
             ? Visibility.Visible
             : Visibility.Collapsed;
+        ToolTipService.SetToolTip(
+            CancelButton,
+            "Cancel (Esc)");
     }
 
     private async Task LoadMicrophonesAsync()
@@ -546,14 +549,7 @@ public sealed partial class RecordingSetupWindow : Window
                 e.Handled = true;
                 break;
             case VirtualKey.Escape:
-                if (_canReselectRegion)
-                {
-                    Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Reselect, CurrentSetup()));
-                }
-                else
-                {
-                    Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Cancel, null));
-                }
+                Complete(new RecordingSetupOutcome(RecordingSetupOutcomeKind.Cancel, null));
                 e.Handled = true;
                 break;
         }

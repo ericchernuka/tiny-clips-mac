@@ -7,7 +7,9 @@ public readonly record struct RegionSelectResult(nint HMonitor, PixelRect Region
 
 public static class RegionSelectController
 {
-    public static async Task<RegionSelectResult?> RunAsync(IReadOnlyList<MonitorInfo> monitors)
+    public static async Task<RegionSelectResult?> RunAsync(
+        IReadOnlyList<MonitorInfo> monitors,
+        IReadOnlyDictionary<nint, PixelRect>? recentRegionsByMonitor = null)
     {
         if (monitors.Count == 0)
         {
@@ -52,7 +54,14 @@ public static class RegionSelectController
 
         for (var i = 0; i < monitors.Count; i++)
         {
-            var window = new RegionSelectWindow(monitors[i], backdrops[i], Complete);
+            PixelRect? recentRegion = null;
+            if (recentRegionsByMonitor is not null &&
+                recentRegionsByMonitor.TryGetValue(monitors[i].HMonitor, out var savedRegion))
+            {
+                recentRegion = savedRegion;
+            }
+
+            var window = new RegionSelectWindow(monitors[i], backdrops[i], recentRegion, Complete);
             windows.Add(window);
         }
 

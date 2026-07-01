@@ -376,7 +376,6 @@ private struct StartRecordingView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Reselect region")
-                .keyboardShortcut(.cancelAction)
                 .accessibilityLabel("Reselect recording region")
                 .accessibilityHint("Returns to region selection without changing the current recording options.")
             }
@@ -415,7 +414,7 @@ private struct StartRecordingView: View {
             }
             .buttonStyle(.plain)
             .help("Cancel")
-            .keyboardShortcut(onReselectRegion == nil ? .cancelAction : nil)
+            .keyboardShortcut(.cancelAction)
             .accessibilityLabel("Cancel recording setup")
             .accessibilityHint("Closes this panel without recording.")
         }

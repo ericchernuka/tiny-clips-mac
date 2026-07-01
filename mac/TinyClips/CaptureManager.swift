@@ -60,6 +60,7 @@ class CaptureManager: ObservableObject {
     private var activeMouseClickCaptureEnabledOverride: Bool?
     private var activeWebcamOverlaySelection: StartRecordingPanel.WebcamSelection?
     private let hotKeyManager = HotKeyManager()
+    private let recentRegionStore = SessionRecentCaptureRegionStore()
     private var hotKeySettingsCancellable: AnyCancellable?
 
     init() {
@@ -192,12 +193,14 @@ class CaptureManager: ObservableObject {
     ) async {
         switch mode {
         case .region:
-            guard let region = await RegionSelector.selectRegion() else {
+            guard let region = await RegionSelector.selectRegion(recentRegion: recentRegionForCurrentDisplay()) else {
+                recentRegionStore.clear()
                 if shouldReturnToPicker {
                     showScreenshotPicker()
                 }
                 return
             }
+            recentRegionStore.save(region)
             doScreenshotCapture(
                 region: region,
                 window: nil,
@@ -1023,6 +1026,11 @@ class CaptureManager: ObservableObject {
                 let countdownEnabled = self.pendingRecordingCountdownEnabled
                 let countdownDuration = self.pendingRecordingCountdownDuration
                 let videoTimeLimitMinutes = self.pendingVideoTimeLimitMinutes
+                let mode = self.pendingRecordingMode
+
+                if mode == .region {
+                    self.recentRegionStore.save(target.region)
+                }
 
                 self.clearPendingRecordingSetup()
                 self.dismissStartPanel()
@@ -1052,9 +1060,13 @@ class CaptureManager: ObservableObject {
                 }
             },
             onCancel: { [weak self] in
-                self?.clearPendingRecordingSetup()
-                self?.dismissStartPanel()
-                self?.dismissRegionIndicator()
+                guard let self else { return }
+                if self.pendingRecordingMode == .region {
+                    self.recentRegionStore.clear()
+                }
+                self.clearPendingRecordingSetup()
+                self.dismissStartPanel()
+                self.dismissRegionIndicator()
             },
             onReselectRegion: pendingRecordingMode == .region ? { [weak self] options in
                 guard let self else { return }
@@ -1084,6 +1096,7 @@ class CaptureManager: ObservableObject {
         dismissRegionIndicator()
 
         guard let target = await chooseCaptureTarget(for: .region) else {
+            recentRegionStore.clear()
             clearPendingRecordingSetup()
             return
         }
@@ -1377,7 +1390,10 @@ class CaptureManager: ObservableObject {
     private func chooseCaptureTarget(for mode: CapturePickerMode) async -> CaptureTarget? {
         switch mode {
         case .region:
-            guard let region = await RegionSelector.selectRegion() else { return nil }
+            guard let region = await RegionSelector.selectRegion(recentRegion: recentRegionForCurrentDisplay()) else {
+                recentRegionStore.clear()
+                return nil
+            }
             return CaptureTarget(region: region)
         case .screen:
             let needsPicker = NSScreen.screens.count > 1 && !CaptureSettings.shared.alwaysCaptureMainDisplay
@@ -1457,6 +1473,16 @@ class CaptureManager: ObservableObject {
     private func screenUnderMouseCursor() -> NSScreen? {
         let mouseLocation = NSEvent.mouseLocation
         return NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
+    }
+
+    private func recentRegionForCurrentDisplay() -> CaptureRegion? {
+        guard let screen = screenUnderMouseCursor() ?? NSScreen.main,
+              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        else {
+            return nil
+        }
+
+        return recentRegionStore.region(for: displayID)
     }
 
     private func startMouseClickMonitoringIfNeeded(for type: CaptureType, region: CaptureRegion) {

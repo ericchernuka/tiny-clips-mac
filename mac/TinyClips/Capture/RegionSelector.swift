@@ -4,13 +4,13 @@ import AppKit
 class RegionSelector {
     private static var activeSelector: RegionSelectorController?
 
-    static func selectRegion() async -> CaptureRegion? {
-        return await selectRegion(on: nil)
+    static func selectRegion(recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
+        return await selectRegion(on: nil, recentRegion: recentRegion)
     }
 
-    static func selectRegion(on screen: NSScreen?) async -> CaptureRegion? {
+    static func selectRegion(on screen: NSScreen?, recentRegion: CaptureRegion? = nil) async -> CaptureRegion? {
         return await withCheckedContinuation { continuation in
-            let selector = RegionSelectorController(screen: screen, completion: { region in
+            let selector = RegionSelectorController(screen: screen, recentRegion: recentRegion, completion: { region in
                 Self.activeSelector = nil
                 continuation.resume(returning: region)
             })
@@ -27,9 +27,11 @@ private class RegionSelectorController {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private let targetScreen: NSScreen?
+    private let recentRegion: CaptureRegion?
 
-    init(screen: NSScreen? = nil, completion: @escaping (CaptureRegion?) -> Void) {
+    init(screen: NSScreen? = nil, recentRegion: CaptureRegion? = nil, completion: @escaping (CaptureRegion?) -> Void) {
         self.targetScreen = screen
+        self.recentRegion = recentRegion
         self.completion = completion
     }
 
@@ -52,6 +54,7 @@ private class RegionSelectorController {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             let view = RegionSelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
+            view.preselect(recentRegion, on: screen)
             view.onComplete = { [weak self] region in
                 self?.finish(with: region)
             }
@@ -112,6 +115,7 @@ private class RegionSelectionView: NSView {
 
     private var startPoint: NSPoint?
     private var currentPoint: NSPoint?
+    private var selectedRect: NSRect?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -123,29 +127,55 @@ private class RegionSelectionView: NSView {
         NSColor.black.withAlphaComponent(0.3).setFill()
         bounds.fill()
 
-        if let start = startPoint, let current = currentPoint {
-            let selectionRect = makeRect(from: start, to: current)
-
-            // Clear the selection area
-            NSColor.clear.setFill()
-            selectionRect.fill(using: .copy)
-
-            // Draw border
-            NSColor.white.setStroke()
-            let path = NSBezierPath(rect: selectionRect)
-            path.lineWidth = 1.5
-            path.stroke()
-
-            // Draw dashed inner border
-            NSColor.white.withAlphaComponent(0.5).setStroke()
-            let dashedPath = NSBezierPath(rect: selectionRect.insetBy(dx: 1, dy: 1))
-            dashedPath.lineWidth = 0.5
-            dashedPath.setLineDash([4, 4], count: 2, phase: 0)
-            dashedPath.stroke()
-
-            // Draw dimensions label
-            drawDimensionsLabel(for: selectionRect)
+        if let selectionRect = activeSelectionRect {
+            drawSelection(selectionRect)
         }
+    }
+
+    func preselect(_ region: CaptureRegion?, on screen: NSScreen) {
+        guard let region,
+              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+              region.displayID == displayID
+        else {
+            return
+        }
+
+        let rect = NSRect(
+            x: region.sourceRect.minX,
+            y: screen.frame.height - region.sourceRect.maxY,
+            width: region.sourceRect.width,
+            height: region.sourceRect.height
+        ).intersection(bounds)
+
+        guard !rect.isNull, rect.width >= 10, rect.height >= 10 else { return }
+
+        selectedRect = rect
+        needsDisplay = true
+    }
+
+    private var activeSelectionRect: NSRect? {
+        if let start = startPoint, let current = currentPoint {
+            return makeRect(from: start, to: current)
+        }
+        return selectedRect
+    }
+
+    private func drawSelection(_ selectionRect: NSRect) {
+        NSColor.clear.setFill()
+        selectionRect.fill(using: .copy)
+
+        NSColor.white.setStroke()
+        let path = NSBezierPath(rect: selectionRect)
+        path.lineWidth = 1.5
+        path.stroke()
+
+        NSColor.white.withAlphaComponent(0.5).setStroke()
+        let dashedPath = NSBezierPath(rect: selectionRect.insetBy(dx: 1, dy: 1))
+        dashedPath.lineWidth = 0.5
+        dashedPath.setLineDash([4, 4], count: 2, phase: 0)
+        dashedPath.stroke()
+
+        drawDimensionsLabel(for: selectionRect)
     }
 
     private func drawDimensionsLabel(for rect: NSRect) {
@@ -183,8 +213,15 @@ private class RegionSelectionView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        startPoint = clampedPoint(convert(event.locationInWindow, from: nil))
-        currentPoint = startPoint
+        let point = clampedPoint(convert(event.locationInWindow, from: nil))
+        if event.clickCount >= 2, let selectedRect, selectedRect.contains(point) {
+            completeSelection(selectedRect)
+            return
+        }
+
+        selectedRect = nil
+        startPoint = point
+        currentPoint = point
         needsDisplay = true
     }
 
@@ -205,6 +242,27 @@ private class RegionSelectionView: NSView {
             return
         }
 
+        completeSelection(selectionRect)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 53:
+            onCancel?()
+        case 36, 76:
+            if let selectedRect {
+                completeSelection(selectedRect)
+            }
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    private func completeSelection(_ selectionRect: NSRect) {
+        startPoint = nil
+        currentPoint = nil
+        selectedRect = selectionRect
+
         guard let window = self.window, let screen = window.screen else { return }
 
         // Convert view coordinates → window coordinates → screen coordinates
@@ -223,12 +281,6 @@ private class RegionSelectionView: NSView {
             scaleFactor: screen.backingScaleFactor
         )
         onComplete?(region)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCancel?()
-        }
     }
 
     private func makeRect(from p1: NSPoint, to p2: NSPoint) -> NSRect {

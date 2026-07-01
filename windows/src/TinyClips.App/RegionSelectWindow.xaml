@@ -10,6 +10,7 @@
         PointerPressed="OnPointerPressed"
         PointerMoved="OnPointerMoved"
         PointerReleased="OnPointerReleased"
+        DoubleTapped="OnDoubleTapped"
         KeyDown="OnKeyDown">
         <Image
             x:Name="Backdrop"

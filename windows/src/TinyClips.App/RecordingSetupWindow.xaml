@@ -185,7 +185,7 @@
                     AutomationProperties.AutomationId="ReselectRecordingRegionButton"
                     AutomationProperties.Name="Reselect recording region"
                     Click="OnReselectRegion"
-                    ToolTipService.ToolTip="Reselect region (Esc)"
+                    ToolTipService.ToolTip="Reselect region"
                     Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE8B7;" />

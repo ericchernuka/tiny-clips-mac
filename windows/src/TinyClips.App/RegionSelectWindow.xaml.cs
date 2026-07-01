@@ -20,16 +20,25 @@ public sealed partial class RegionSelectWindow : Window
 {
     private readonly MonitorInfo _monitor;
     private readonly CapturedFrame? _backdropFrame;
+    private readonly PixelRect? _recentRegion;
     private readonly Action<RegionSelectResult?> _onComplete;
     private Point _start;
+    private Rect? _selectedRect;
     private bool _dragging;
+    private bool _drawingSelection;
     private bool _completed;
     private bool _closedByController;
+    private bool _preselected;
 
-    internal RegionSelectWindow(MonitorInfo monitor, CapturedFrame? backdropFrame, Action<RegionSelectResult?> onComplete)
+    internal RegionSelectWindow(
+        MonitorInfo monitor,
+        CapturedFrame? backdropFrame,
+        PixelRect? recentRegion,
+        Action<RegionSelectResult?> onComplete)
     {
         _monitor = monitor;
         _backdropFrame = backdropFrame;
+        _recentRegion = recentRegion;
         _onComplete = onComplete;
 
         InitializeComponent();
@@ -44,9 +53,12 @@ public sealed partial class RegionSelectWindow : Window
     }
 
     /// <summary>Shows the overlay on the given monitor and resolves with the chosen region.</summary>
-    public static async Task<PixelRect?> RunAsync(MonitorInfo monitor)
+    public static async Task<PixelRect?> RunAsync(MonitorInfo monitor, PixelRect? recentRegion = null)
     {
-        var result = await RegionSelectController.RunAsync(new[] { monitor });
+        var recentRegions = recentRegion is { } region
+            ? new Dictionary<nint, PixelRect> { [monitor.HMonitor] = region }
+            : null;
+        var result = await RegionSelectController.RunAsync(new[] { monitor }, recentRegions);
         return result?.Region;
     }
 
@@ -54,6 +66,7 @@ public sealed partial class RegionSelectWindow : Window
     {
         Activated -= OnActivated;
         RootGrid.Focus(FocusState.Programmatic);
+        PreselectRecentRegion();
     }
 
     /// <summary>
@@ -87,6 +100,7 @@ public sealed partial class RegionSelectWindow : Window
     {
         FullDim.Width = e.NewSize.Width;
         FullDim.Height = e.NewSize.Height;
+        PreselectRecentRegion();
     }
 
     private void ConfigurePresenter()
@@ -102,18 +116,12 @@ public sealed partial class RegionSelectWindow : Window
     {
         _start = e.GetCurrentPoint(OverlayCanvas).Position;
         _dragging = true;
-        Canvas.SetLeft(SelectionRect, _start.X);
-        Canvas.SetTop(SelectionRect, _start.Y);
-        SelectionRect.Width = 0;
-        SelectionRect.Height = 0;
-        SelectionRect.Visibility = Visibility.Visible;
-
-        // Swap the uniform dim for the hole-punch panels so the selection stays clear.
-        FullDim.Visibility = Visibility.Collapsed;
-        TopDim.Visibility = Visibility.Visible;
-        BottomDim.Visibility = Visibility.Visible;
-        LeftDim.Visibility = Visibility.Visible;
-        RightDim.Visibility = Visibility.Visible;
+        _drawingSelection = _selectedRect is not { } selectedRect || !selectedRect.Contains(_start);
+        if (_drawingSelection)
+        {
+            _selectedRect = null;
+            ShowSelection(_start.X, _start.Y, 0, 0);
+        }
 
         RootGrid.CapturePointer(e.Pointer);
     }
@@ -126,17 +134,18 @@ public sealed partial class RegionSelectWindow : Window
         }
 
         var current = e.GetCurrentPoint(OverlayCanvas).Position;
+        if (!_drawingSelection)
+        {
+            _drawingSelection = true;
+            _selectedRect = null;
+        }
+
         var x = Math.Min(_start.X, current.X);
         var y = Math.Min(_start.Y, current.Y);
         var width = Math.Abs(current.X - _start.X);
         var height = Math.Abs(current.Y - _start.Y);
 
-        Canvas.SetLeft(SelectionRect, x);
-        Canvas.SetTop(SelectionRect, y);
-        SelectionRect.Width = width;
-        SelectionRect.Height = height;
-
-        UpdateDimPanels(x, y, width, height);
+        ShowSelection(x, y, width, height);
     }
 
     /// <summary>
@@ -179,6 +188,11 @@ public sealed partial class RegionSelectWindow : Window
         _dragging = false;
         RootGrid.ReleasePointerCapture(e.Pointer);
 
+        if (!_drawingSelection)
+        {
+            return;
+        }
+
         var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
         var x = Canvas.GetLeft(SelectionRect);
         var y = Canvas.GetTop(SelectionRect);
@@ -205,7 +219,79 @@ public sealed partial class RegionSelectWindow : Window
         if (e.Key == VirtualKey.Escape)
         {
             Complete(null);
+            return;
         }
+
+        if (e.Key == VirtualKey.Enter && _selectedRect is { } selectedRect)
+        {
+            Complete(ToPixelRect(selectedRect));
+        }
+    }
+
+    private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        var point = e.GetPosition(OverlayCanvas);
+        if (_selectedRect is { } selectedRect && selectedRect.Contains(point))
+        {
+            Complete(ToPixelRect(selectedRect));
+        }
+    }
+
+    private void PreselectRecentRegion()
+    {
+        if (_preselected || _recentRegion is not { } region)
+        {
+            return;
+        }
+
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? _monitor.ScaleFactor;
+        var canvasWidth = OverlayCanvas.ActualWidth;
+        var canvasHeight = OverlayCanvas.ActualHeight;
+        if (scale <= 0 || canvasWidth <= 0 || canvasHeight <= 0)
+        {
+            return;
+        }
+
+        var x = Math.Clamp(region.X / scale, 0, canvasWidth);
+        var y = Math.Clamp(region.Y / scale, 0, canvasHeight);
+        var width = Math.Clamp(region.Width / scale, 0, canvasWidth - x);
+        var height = Math.Clamp(region.Height / scale, 0, canvasHeight - y);
+        if (width < 2 || height < 2)
+        {
+            _preselected = true;
+            return;
+        }
+
+        _preselected = true;
+        _selectedRect = new Rect(x, y, width, height);
+        ShowSelection(x, y, width, height);
+    }
+
+    private void ShowSelection(double x, double y, double width, double height)
+    {
+        Canvas.SetLeft(SelectionRect, x);
+        Canvas.SetTop(SelectionRect, y);
+        SelectionRect.Width = width;
+        SelectionRect.Height = height;
+        SelectionRect.Visibility = Visibility.Visible;
+
+        FullDim.Visibility = Visibility.Collapsed;
+        TopDim.Visibility = Visibility.Visible;
+        BottomDim.Visibility = Visibility.Visible;
+        LeftDim.Visibility = Visibility.Visible;
+        RightDim.Visibility = Visibility.Visible;
+
+        UpdateDimPanels(x, y, width, height);
+    }
+
+    private PixelRect ToPixelRect(Rect rect)
+    {
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        return new PixelRect(
+            (int)Math.Round(rect.X * scale),
+            (int)Math.Round(rect.Y * scale),
+            (int)Math.Round(rect.Width * scale),
+            (int)Math.Round(rect.Height * scale));
     }
 
     private void Complete(PixelRect? region)
@@ -217,6 +303,7 @@ public sealed partial class RegionSelectWindow : Window
 
         _completed = true;
         _dragging = false;
+        _drawingSelection = false;
         RootGrid.ReleasePointerCaptures();
         _onComplete(region is { } selected
             ? new RegionSelectResult(_monitor.HMonitor, selected)
@@ -233,6 +320,7 @@ public sealed partial class RegionSelectWindow : Window
 
         _completed = true;
         _dragging = false;
+        _drawingSelection = false;
         _onComplete(null);
     }
 

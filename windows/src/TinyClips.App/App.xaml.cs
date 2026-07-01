@@ -52,6 +52,7 @@ public partial class App : Application
     private GlobalHotKeyManager? _hotKeyManager;
     private DispatcherQueue? _dispatcher;
     private bool _isExiting;
+    private readonly RecentCaptureRegionStore _recentRegionStore = new();
 
     public static IServiceProvider Services { get; private set; } = null!;
 
@@ -390,6 +391,7 @@ public partial class App : Application
             switch (type)
             {
                 case CaptureType.Screenshot:
+                    SaveRecentRegionIfNeeded(pick.Mode, selection);
                     var screenshots = Services.GetRequiredService<IScreenshotService>();
                     var path = await screenshots.CaptureTargetAsync(selection.Target, selection.Region);
                     await CopyToClipboardAsync(path, CaptureType.Screenshot);
@@ -455,22 +457,28 @@ public partial class App : Application
         while (true)
         {
             var outcome = await ShowRecordingSetupAsync(type, selection, settings, canReselectRegion, setup);
-            switch (outcome.Kind)
+            switch (outcome)
             {
-                case RecordingSetupOutcomeKind.Start when outcome.Setup is { } startSetup:
+                case { Kind: RecordingSetupOutcomeKind.Start, Setup: { } startSetup }:
+                    SaveRecentRegionIfNeeded(mode, selection);
                     return new RecordingReady(selection, startSetup);
 
-                case RecordingSetupOutcomeKind.Reselect when canReselectRegion:
-                    setup = outcome.Setup;
+                case { Kind: RecordingSetupOutcomeKind.Reselect, Setup: var reselectSetup } when canReselectRegion:
+                    setup = reselectSetup;
                     if (await ResolveTargetAsync(CapturePickerMode.Region) is { } nextSelection)
                     {
                         selection = nextSelection;
                         continue;
                     }
 
+                    _recentRegionStore.Clear();
                     return null;
 
                 default:
+                    if (canReselectRegion)
+                    {
+                        _recentRegionStore.Clear();
+                    }
                     return null;
             }
         }
@@ -566,15 +574,20 @@ public partial class App : Application
                 var preferredMonitor = ResolvePreferredMonitor(monitors, settings.MultiMonitorCaptureMode);
                 if (preferredMonitor is { } single)
                 {
-                    var region = await RegionSelectWindow.RunAsync(single);
-                    return region is { } singleRegion
-                        ? new TargetSelection(CaptureTarget.Monitor(single.HMonitor), singleRegion, single)
-                        : null;
+                    var region = await RegionSelectWindow.RunAsync(single, _recentRegionStore.Get(single.HMonitor));
+                    if (region is not { } singleRegion)
+                    {
+                        _recentRegionStore.Clear();
+                        return null;
+                    }
+
+                    return new TargetSelection(CaptureTarget.Monitor(single.HMonitor), singleRegion, single);
                 }
 
-                var result = await RegionSelectController.RunAsync(all);
+                var result = await RegionSelectController.RunAsync(all, _recentRegionStore.Snapshot());
                 if (result is not { } selection)
                 {
+                    _recentRegionStore.Clear();
                     return null;
                 }
 
@@ -636,6 +649,16 @@ public partial class App : Application
         return monitor is null
             ? region
             : region with { X = monitor.X + region.X, Y = monitor.Y + region.Y };
+    }
+
+    private void SaveRecentRegionIfNeeded(CapturePickerMode mode, TargetSelection selection)
+    {
+        if (mode == CapturePickerMode.Region &&
+            selection.Region is { } region &&
+            selection.Target.HMonitor != 0)
+        {
+            _recentRegionStore.Save(selection.Target.HMonitor, region);
+        }
     }
 
     private static MonitorInfo? ResolvePreferredMonitor(IMonitorService monitors, MultiMonitorCaptureMode mode) => mode switch
