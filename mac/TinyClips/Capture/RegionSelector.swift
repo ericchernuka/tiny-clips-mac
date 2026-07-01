@@ -118,6 +118,7 @@ private class RegionSelectionView: NSView {
     private var startPoint: NSPoint?
     private var currentPoint: NSPoint?
     private var selectedRect: NSRect?
+    private var isDrawingSelection = false
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -216,24 +217,40 @@ private class RegionSelectionView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = clampedPoint(convert(event.locationInWindow, from: nil))
-        if event.clickCount >= 2, let selectedRect, selectedRect.contains(point) {
-            completeSelection(selectedRect)
+        if let selectedRect, selectedRect.contains(point) {
+            if event.clickCount >= 2 {
+                completeSelection(selectedRect)
+                return
+            }
+            startPoint = point
+            currentPoint = nil
+            isDrawingSelection = false
             return
         }
 
         selectedRect = nil
         startPoint = point
         currentPoint = point
+        isDrawingSelection = true
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
+        guard startPoint != nil else { return }
+        if !isDrawingSelection {
+            selectedRect = nil
+            isDrawingSelection = true
+        }
         currentPoint = clampedPoint(convert(event.locationInWindow, from: nil))
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard let start = startPoint else { return }
+        guard isDrawingSelection, let start = startPoint else {
+            startPoint = nil
+            currentPoint = nil
+            return
+        }
         let end = clampedPoint(convert(event.locationInWindow, from: nil))
         let selectionRect = makeRect(from: start, to: end)
 
@@ -263,6 +280,7 @@ private class RegionSelectionView: NSView {
     private func completeSelection(_ selectionRect: NSRect) {
         startPoint = nil
         currentPoint = nil
+        isDrawingSelection = false
         selectedRect = selectionRect
 
         guard let window = self.window, let screen = window.screen else { return }
