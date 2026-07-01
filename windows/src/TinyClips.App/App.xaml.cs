@@ -52,7 +52,6 @@ public partial class App : Application
     private GlobalHotKeyManager? _hotKeyManager;
     private DispatcherQueue? _dispatcher;
     private bool _isExiting;
-    private readonly RecentCaptureRegionStore _recentRegionStore = new();
 
     public static IServiceProvider Services { get; private set; } = null!;
 
@@ -346,17 +345,17 @@ public partial class App : Application
                 return;
             }
 
+            RecordingSetupResult? recordingSetup = null;
             if (type is CaptureType.Video or CaptureType.Gif)
             {
-                var ready = await ResolveRecordingSetupAsync(type, pick.Mode, selection, settings);
-                if (ready is null)
+                recordingSetup = await ShowRecordingSetupAsync(type, selection, settings);
+                if (recordingSetup is null)
                 {
                     CloseRecordingRegionIndicator();
                     return;
                 }
 
-                selection = ready.Selection;
-                ApplyRecordingSetup(type, ready.Setup, settings);
+                ApplyRecordingSetup(type, recordingSetup, settings);
             }
 
             var showDisabledStopDuringCountdown = type is CaptureType.Video or CaptureType.Gif
@@ -391,7 +390,6 @@ public partial class App : Application
             switch (type)
             {
                 case CaptureType.Screenshot:
-                    SaveRecentRegionIfNeeded(pick.Mode, selection);
                     var screenshots = Services.GetRequiredService<IScreenshotService>();
                     var path = await screenshots.CaptureTargetAsync(selection.Target, selection.Region);
                     await CopyToClipboardAsync(path, CaptureType.Screenshot);
@@ -444,52 +442,7 @@ public partial class App : Application
         }
     }
 
-    private async Task<RecordingReady?> ResolveRecordingSetupAsync(
-        CaptureType type,
-        CapturePickerMode mode,
-        TargetSelection initialSelection,
-        ICaptureSettings settings)
-    {
-        var selection = initialSelection;
-        RecordingSetupResult? setup = null;
-        var canReselectRegion = mode == CapturePickerMode.Region;
-
-        while (true)
-        {
-            var outcome = await ShowRecordingSetupAsync(type, selection, settings, canReselectRegion, setup);
-            switch (outcome)
-            {
-                case { Kind: RecordingSetupOutcomeKind.Start, Setup: { } startSetup }:
-                    SaveRecentRegionIfNeeded(mode, selection);
-                    return new RecordingReady(selection, startSetup);
-
-                case { Kind: RecordingSetupOutcomeKind.Reselect, Setup: var reselectSetup } when canReselectRegion:
-                    setup = reselectSetup;
-                    if (await ResolveTargetAsync(CapturePickerMode.Region) is { } nextSelection)
-                    {
-                        selection = nextSelection;
-                        continue;
-                    }
-
-                    _recentRegionStore.Clear();
-                    return null;
-
-                default:
-                    if (canReselectRegion)
-                    {
-                        _recentRegionStore.Clear();
-                    }
-                    return null;
-            }
-        }
-    }
-
-    private async Task<RecordingSetupOutcome> ShowRecordingSetupAsync(
-        CaptureType type,
-        TargetSelection selection,
-        ICaptureSettings settings,
-        bool canReselectRegion,
-        RecordingSetupResult? initialSetup)
+    private async Task<RecordingSetupResult?> ShowRecordingSetupAsync(CaptureType type, TargetSelection selection, ICaptureSettings settings)
     {
         PixelRect? region = null;
         if (selection.Region is { } selectedRegion)
@@ -506,15 +459,7 @@ public partial class App : Application
                 var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
                 var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
                 var webcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-                return await RecordingSetupWindow.RunAsync(
-                    type,
-                    settings,
-                    audioDevices,
-                    webcamDevices,
-                    monitor,
-                    region,
-                    canReselectRegion,
-                    initialSetup);
+                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, webcamDevices, monitor, region);
             }
             finally
             {
@@ -525,15 +470,7 @@ public partial class App : Application
         var setupMonitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
         var setupAudioDevices = Services.GetRequiredService<IAudioDeviceService>();
         var setupWebcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-        return await RecordingSetupWindow.RunAsync(
-            type,
-            settings,
-            setupAudioDevices,
-            setupWebcamDevices,
-            setupMonitor,
-            region,
-            canReselectRegion,
-            initialSetup);
+        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupWebcamDevices, setupMonitor, region);
     }
 
     private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)
@@ -574,20 +511,15 @@ public partial class App : Application
                 var preferredMonitor = ResolvePreferredMonitor(monitors, settings.MultiMonitorCaptureMode);
                 if (preferredMonitor is { } single)
                 {
-                    var region = await RegionSelectWindow.RunAsync(single, _recentRegionStore.Get(single.HMonitor));
-                    if (region is not { } singleRegion)
-                    {
-                        _recentRegionStore.Clear();
-                        return null;
-                    }
-
-                    return new TargetSelection(CaptureTarget.Monitor(single.HMonitor), singleRegion, single);
+                    var region = await RegionSelectWindow.RunAsync(single);
+                    return region is { } singleRegion
+                        ? new TargetSelection(CaptureTarget.Monitor(single.HMonitor), singleRegion, single)
+                        : null;
                 }
 
-                var result = await RegionSelectController.RunAsync(all, _recentRegionStore.Snapshot());
+                var result = await RegionSelectController.RunAsync(all);
                 if (result is not { } selection)
                 {
-                    _recentRegionStore.Clear();
                     return null;
                 }
 
@@ -651,16 +583,6 @@ public partial class App : Application
             : region with { X = monitor.X + region.X, Y = monitor.Y + region.Y };
     }
 
-    private void SaveRecentRegionIfNeeded(CapturePickerMode mode, TargetSelection selection)
-    {
-        if (mode == CapturePickerMode.Region &&
-            selection.Region is { } region &&
-            selection.Target.HMonitor != 0)
-        {
-            _recentRegionStore.Save(selection.Target.HMonitor, region);
-        }
-    }
-
     private static MonitorInfo? ResolvePreferredMonitor(IMonitorService monitors, MultiMonitorCaptureMode mode) => mode switch
     {
         MultiMonitorCaptureMode.UnderCursor => monitors.GetMonitorUnderCursor() ?? monitors.GetPrimaryMonitor(),
@@ -701,8 +623,6 @@ public partial class App : Application
     }
 
     private readonly record struct TargetSelection(CaptureTarget Target, PixelRect? Region, MonitorInfo? Monitor);
-
-    private readonly record struct RecordingReady(TargetSelection Selection, RecordingSetupResult Setup);
 
     private async Task ToggleVideoAsync()
     {
