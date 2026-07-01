@@ -7,6 +7,20 @@ struct VideoRecordingArtifacts {
     let webcamRecordingURL: URL?
 }
 
+private struct PendingRecordingSetup {
+    var target: CaptureTarget
+    let type: CaptureType
+    let mode: CapturePickerMode
+    let countdownEnabled: Bool
+    let countdownDuration: Int
+    let videoTimeLimitMinutes: Int
+    var setupOptions: RecordingSetupOptions?
+
+    var isRegion: Bool {
+        mode == .region
+    }
+}
+
 @MainActor
 class CaptureManager: ObservableObject {
     @Published var isRecording = false {
@@ -31,13 +45,7 @@ class CaptureManager: ObservableObject {
     private var startPanel: StartRecordingPanel?
     private var stopPanel: StopRecordingPanel?
     private var regionIndicatorPanel: RegionIndicatorPanel?
-    private var pendingRecordingTarget: CaptureTarget?
-    private var pendingRecordingType: CaptureType?
-    private var pendingRecordingMode: CapturePickerMode?
-    private var pendingRecordingCountdownEnabled: Bool = true
-    private var pendingRecordingCountdownDuration: Int = 3
-    private var pendingVideoTimeLimitMinutes: Int = 0
-    private var pendingRecordingSetupOptions: StartRecordingPanel.RecordingSetupOptions?
+    private var pendingRecordingSetup: PendingRecordingSetup?
     private var activeRecordingRegion: CaptureRegion?
     private var recordPanelPosition: NSPoint?
     private var trimmerWindow: VideoTrimmerWindow?
@@ -58,7 +66,7 @@ class CaptureManager: ObservableObject {
     private var activeMouseClickRegion: CaptureRegion?
     private var activeMouseClickCaptureType: CaptureType?
     private var activeMouseClickCaptureEnabledOverride: Bool?
-    private var activeWebcamOverlaySelection: StartRecordingPanel.WebcamSelection?
+    private var activeWebcamOverlaySelection: RecordingWebcamSelection?
     private let hotKeyManager = HotKeyManager()
     private let recentRegionStore = SessionRecentCaptureRegionStore()
     private var hotKeySettingsCancellable: AnyCancellable?
@@ -339,7 +347,7 @@ class CaptureManager: ObservableObject {
         systemAudio: Bool,
         microphone: Bool,
         selectedMicrophoneID: String,
-        webcamSelection: StartRecordingPanel.WebcamSelection,
+        webcamSelection: RecordingWebcamSelection,
         mouseClicksEnabled: Bool,
         timeLimitMinutes: Int,
         countdownEnabled: Bool,
@@ -1012,47 +1020,38 @@ class CaptureManager: ObservableObject {
     }
 
     private func showStartPanel() {
-        let setupOptions = pendingRecordingSetupOptions
+        guard let setup = pendingRecordingSetup else { return }
         let panel = StartRecordingPanel(
-            captureType: pendingRecordingType ?? .video,
+            captureType: setup.type,
             onStart: { [weak self] options in
-                guard
-                    let self,
-                    let target = self.pendingRecordingTarget,
-                    let type = self.pendingRecordingType
-                else { return }
+                guard let self else { return }
 
-                let countdownEnabled = self.pendingRecordingCountdownEnabled
-                let countdownDuration = self.pendingRecordingCountdownDuration
-                let videoTimeLimitMinutes = self.pendingVideoTimeLimitMinutes
-                let mode = self.pendingRecordingMode
-
-                if mode == .region {
-                    self.recentRegionStore.save(target.region)
+                if setup.isRegion {
+                    self.recentRegionStore.save(setup.target.region)
                 }
 
                 self.clearPendingRecordingSetup()
                 self.dismissStartPanel()
 
-                switch type {
+                switch setup.type {
                 case .video:
                     self.beginVideoRecording(
-                        target: target,
+                        target: setup.target,
                         systemAudio: options.systemAudio,
                         microphone: options.microphoneSelection.enabled,
                         selectedMicrophoneID: options.microphoneSelection.deviceID,
                         webcamSelection: options.webcamSelection,
                         mouseClicksEnabled: options.mouseClicksEnabled,
-                        timeLimitMinutes: videoTimeLimitMinutes,
-                        countdownEnabled: countdownEnabled,
-                        countdownDuration: countdownDuration
+                        timeLimitMinutes: setup.videoTimeLimitMinutes,
+                        countdownEnabled: setup.countdownEnabled,
+                        countdownDuration: setup.countdownDuration
                     )
                 case .gif:
                     self.beginGifRecording(
-                        target: target,
+                        target: setup.target,
                         mouseClicksEnabled: options.mouseClicksEnabled,
-                        countdownEnabled: countdownEnabled,
-                        countdownDuration: countdownDuration
+                        countdownEnabled: setup.countdownEnabled,
+                        countdownDuration: setup.countdownDuration
                     )
                 case .screenshot:
                     break
@@ -1060,36 +1059,32 @@ class CaptureManager: ObservableObject {
             },
             onCancel: { [weak self] in
                 guard let self else { return }
-                if self.pendingRecordingMode == .region {
+                if setup.isRegion {
                     self.recentRegionStore.clear()
                 }
                 self.clearPendingRecordingSetup()
                 self.dismissStartPanel()
                 self.dismissRegionIndicator()
             },
-            onReselectRegion: pendingRecordingMode == .region ? { [weak self] options in
+            onReselectRegion: setup.isRegion ? { [weak self] options in
                 guard let self else { return }
-                self.pendingRecordingSetupOptions = options
+                self.pendingRecordingSetup?.setupOptions = options
                 Task {
                     await self.reselectPendingRecordingRegion()
                 }
             } : nil,
-            initialOptions: setupOptions
+            initialOptions: setup.setupOptions
         )
         panel.show()
         self.startPanel = panel
     }
 
     private func clearPendingRecordingSetup() {
-        pendingRecordingTarget = nil
-        pendingRecordingType = nil
-        pendingRecordingMode = nil
-        pendingRecordingSetupOptions = nil
-        pendingVideoTimeLimitMinutes = CaptureSettings.shared.videoRecordingTimeLimitMinutes
+        pendingRecordingSetup = nil
     }
 
     private func reselectPendingRecordingRegion() async {
-        guard pendingRecordingMode == .region else { return }
+        guard var setup = pendingRecordingSetup, setup.isRegion else { return }
 
         dismissStartPanel()
         dismissRegionIndicator()
@@ -1100,21 +1095,22 @@ class CaptureManager: ObservableObject {
             return
         }
 
-        pendingRecordingTarget = target
+        setup.target = target
+        pendingRecordingSetup = setup
         showPendingRecordingRegionIndicator()
         showStartPanel()
     }
 
     private func showPendingRecordingRegionIndicator() {
         dismissRegionIndicator()
-        guard pendingRecordingMode != .screen,
-              let target = pendingRecordingTarget,
+        guard let setup = pendingRecordingSetup,
+              setup.mode != .screen,
               CaptureSettings.shared.showRegionIndicator
         else {
             return
         }
 
-        let panel = RegionIndicatorPanel(region: target.region)
+        let panel = RegionIndicatorPanel(region: setup.target.region)
         panel.show()
         regionIndicatorPanel = panel
     }
@@ -1374,12 +1370,15 @@ class CaptureManager: ObservableObject {
             return
         }
 
-        pendingRecordingTarget = target
-        pendingRecordingType = type
-        pendingRecordingMode = mode
-        pendingRecordingCountdownEnabled = countdownEnabled
-        pendingRecordingCountdownDuration = countdownDuration
-        pendingVideoTimeLimitMinutes = videoTimeLimitMinutes
+        pendingRecordingSetup = PendingRecordingSetup(
+            target: target,
+            type: type,
+            mode: mode,
+            countdownEnabled: countdownEnabled,
+            countdownDuration: countdownDuration,
+            videoTimeLimitMinutes: videoTimeLimitMinutes,
+            setupOptions: nil
+        )
 
         showPendingRecordingRegionIndicator()
 

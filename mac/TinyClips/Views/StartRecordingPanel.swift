@@ -2,27 +2,27 @@ import AppKit
 import SwiftUI
 import AVFoundation
 
+struct RecordingMicrophoneSelection {
+    let enabled: Bool
+    let deviceID: String
+}
+
+struct RecordingWebcamSelection {
+    let enabled: Bool
+    let deviceID: String
+    let shape: String
+    let corner: String
+    let size: String
+}
+
+struct RecordingSetupOptions {
+    let systemAudio: Bool
+    let microphoneSelection: RecordingMicrophoneSelection
+    let webcamSelection: RecordingWebcamSelection
+    let mouseClicksEnabled: Bool
+}
+
 class StartRecordingPanel: NSPanel {
-    struct MicrophoneSelection {
-        let enabled: Bool
-        let deviceID: String
-    }
-
-    struct WebcamSelection {
-        let enabled: Bool
-        let deviceID: String
-        let shape: String
-        let corner: String
-        let size: String
-    }
-
-    struct RecordingSetupOptions {
-        let systemAudio: Bool
-        let microphoneSelection: MicrophoneSelection
-        let webcamSelection: WebcamSelection
-        let mouseClicksEnabled: Bool
-    }
-
     private var onStart: ((RecordingSetupOptions) -> Void)?
     private var onCancel: (() -> Void)?
     private var onReselectRegion: ((RecordingSetupOptions) -> Void)?
@@ -154,9 +154,9 @@ private struct StartRecordingView: View {
     let availableWebcams: [WebcamDeviceOption]
     @State var mouseClicksEnabled: Bool
     let allowsMouseClickToggle: Bool
-    let onStart: (StartRecordingPanel.RecordingSetupOptions) -> Void
+    let onStart: (RecordingSetupOptions) -> Void
     let onCancel: () -> Void
-    let onReselectRegion: ((StartRecordingPanel.RecordingSetupOptions) -> Void)?
+    let onReselectRegion: ((RecordingSetupOptions) -> Void)?
 
     /// Tracks that the user tried to enable an input but was blocked by a denied
     /// permission. When the app regains focus (e.g. after granting access in System
@@ -199,8 +199,8 @@ private struct StartRecordingView: View {
         }
     }
 
-    private var currentOptions: StartRecordingPanel.RecordingSetupOptions {
-        StartRecordingPanel.RecordingSetupOptions(
+    private var currentOptions: RecordingSetupOptions {
+        RecordingSetupOptions(
             systemAudio: systemAudio,
             microphoneSelection: .init(enabled: microphone, deviceID: selectedMicrophoneID),
             webcamSelection: .init(
