@@ -33,8 +33,10 @@ public sealed class RecordingTimelineTests
     }
 
     [Fact]
-    public void AddSamples_TrimsTimestampOverlapWithoutShiftingFollowingAudio()
+    public void AddSamples_AppendsLaterPacketsContiguouslyIgnoringPerPacketTimestamps()
     {
+        // Only the first packet is aligned to the origin. Later packets are appended contiguously
+        // so per-packet timestamp jitter never inserts or drops samples (which caused crackle).
         var format = new WaveFormat(1000, 16, 1);
         var origin = TimeSpan.FromSeconds(10);
         var provider = new TimelineAlignedWaveProvider(format);
@@ -43,9 +45,27 @@ public sealed class RecordingTimelineTests
 
         Assert.Equal(new short[] { 1, 2 }, ReadSamples(provider, 2));
 
+        // A later packet arrives with a jittery timestamp; it must still append right after the
+        // previously buffered audio rather than being trimmed or padded.
         provider.AddSamples(ToBytes(9, 10, 11), 6, origin + TimeSpan.FromMilliseconds(3));
 
-        Assert.Equal(new short[] { 3, 4, 10, 11 }, ReadSamples(provider, 4));
+        Assert.Equal(new short[] { 3, 4, 9, 10 }, ReadSamples(provider, 4));
+    }
+
+    [Fact]
+    public void AddSamples_TrimsFirstPacketFramesRecordedBeforeOrigin()
+    {
+        // A first packet that began before the origin has its pre-origin frames dropped so the
+        // stream still starts exactly at the shared origin.
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format);
+        provider.BeginTimeline(origin);
+
+        // Packet starts 2 ms (2 frames at 1000 Hz) before the origin.
+        provider.AddSamples(ToBytes(1, 2, 3, 4), 8, origin - TimeSpan.FromMilliseconds(2));
+
+        Assert.Equal(new short[] { 3, 4 }, ReadSamples(provider, 2));
     }
 
     private static byte[] ToBytes(params short[] samples)

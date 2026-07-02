@@ -3,16 +3,19 @@ using NAudio.Wave;
 namespace TinyClips.Core.Capture;
 
 /// <summary>
-/// Places timestamped source packets on a shared recording timeline. Reads before a
-/// source begins produce silence, while late/overlapping packets are trimmed rather
-/// than shifting everything that follows.
+/// Places timestamped source packets on a shared recording timeline. The first packet after
+/// <see cref="BeginTimeline"/> is aligned to the shared origin (leading silence is inserted, or
+/// pre-origin frames are trimmed) so independent sources that start at slightly different times
+/// stay in sync. Every subsequent packet is appended contiguously: re-deriving each packet's
+/// position from its (jittery, frame-rounded) timestamp would insert or drop a sample or two on
+/// every ~10 ms packet, producing constant audible crackle.
 /// </summary>
 internal sealed class TimelineAlignedWaveProvider : IWaveProvider
 {
     private readonly BufferedWaveProvider _buffer;
     private TimeSpan _origin;
-    private long _framesRead;
     private bool _timelineStarted;
+    private bool _aligned;
 
     public TimelineAlignedWaveProvider(WaveFormat waveFormat)
     {
@@ -30,9 +33,9 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
     public void BeginTimeline(TimeSpan origin)
     {
         _origin = origin;
-        _framesRead = 0;
         _buffer.ClearBuffer();
         _timelineStarted = true;
+        _aligned = false;
     }
 
     public void AddSamples(byte[] samples, int count, TimeSpan sourceTimestamp)
@@ -49,36 +52,36 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
             return;
         }
 
-        var sourceOffset = sourceTimestamp - _origin;
-        var desiredStartFrame = (long)Math.Round(
-            sourceOffset.Ticks * WaveFormat.SampleRate / (double)TimeSpan.TicksPerSecond);
-        var sourceFrameOffset = 0L;
+        var byteOffset = 0;
 
-        if (desiredStartFrame < 0)
+        if (!_aligned)
         {
-            sourceFrameOffset = Math.Min(packetFrames, -desiredStartFrame);
-            desiredStartFrame += sourceFrameOffset;
+            _aligned = true;
+
+            // Position only the first packet relative to the shared origin. This preserves the
+            // true start offset between sources (e.g. microphone vs. system audio) without
+            // re-quantizing every later packet.
+            var sourceOffset = sourceTimestamp - _origin;
+            var desiredStartFrame = (long)Math.Round(
+                sourceOffset.Ticks * WaveFormat.SampleRate / (double)TimeSpan.TicksPerSecond);
+
+            if (desiredStartFrame < 0)
+            {
+                // The first packet began before the origin: drop its pre-origin frames.
+                var trimFrames = Math.Min(packetFrames, -desiredStartFrame);
+                byteOffset = checked((int)(trimFrames * blockAlign));
+                if (byteOffset >= count)
+                {
+                    return;
+                }
+            }
+            else if (desiredStartFrame > 0)
+            {
+                // The source began after the origin: pad the gap with silence so it lands late.
+                AddSilence(desiredStartFrame);
+            }
         }
 
-        var writeCursor = _framesRead + (_buffer.BufferedBytes / blockAlign);
-        if (desiredStartFrame < writeCursor)
-        {
-            var overlap = Math.Min(packetFrames - sourceFrameOffset, writeCursor - desiredStartFrame);
-            sourceFrameOffset += overlap;
-            desiredStartFrame += overlap;
-        }
-
-        if (sourceFrameOffset >= packetFrames)
-        {
-            return;
-        }
-
-        if (desiredStartFrame > writeCursor)
-        {
-            AddSilence(desiredStartFrame - writeCursor);
-        }
-
-        var byteOffset = checked((int)(sourceFrameOffset * blockAlign));
         var alignedCount = ((count - byteOffset) / blockAlign) * blockAlign;
         if (alignedCount > 0)
         {
@@ -86,12 +89,7 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
         }
     }
 
-    public int Read(byte[] buffer, int offset, int count)
-    {
-        var read = _buffer.Read(buffer, offset, count);
-        _framesRead += read / WaveFormat.BlockAlign;
-        return read;
-    }
+    public int Read(byte[] buffer, int offset, int count) => _buffer.Read(buffer, offset, count);
 
     private void AddSilence(long frameCount)
     {

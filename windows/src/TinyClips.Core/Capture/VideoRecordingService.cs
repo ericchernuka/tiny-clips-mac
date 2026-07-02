@@ -31,6 +31,10 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private const uint AvcBaselineProfile = 66;
     private const uint AvcHighProfile = 100;
 
+    // How far behind the recording clock the audio reader stays so WASAPI capture latency and
+    // jitter never cause the mix buffer to underrun mid-read (which would splice in silence).
+    private static readonly TimeSpan AudioReadSafetyLatency = TimeSpan.FromMilliseconds(120);
+
     private ContinuousCaptureSession? _capture;
     private Channel<TimestampedFrame>? _channel;
     private Task? _transcodeTask;
@@ -668,9 +672,14 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             // MediaStreamSource can ask for samples faster than wall clock. Do not consume
             // timestamped source buffers before the corresponding capture packets can arrive.
+            // WASAPI delivers packets a buffer-period behind real time, so we hold the reader a
+            // fixed safety margin behind the recording clock. Without this lag each read would
+            // outrun capture, the buffer would underrun, and ReadFully would splice in silence —
+            // producing crackle and dropouts even though capture itself is clean.
             const int frameCount = AudioCaptureService.SampleRate / 50;
             var requestedEnd = TimeSpan.FromTicks(
-                (long)((_audioFramesRead + frameCount) * TimeSpan.TicksPerSecond / AudioCaptureService.SampleRate));
+                (long)((_audioFramesRead + frameCount) * TimeSpan.TicksPerSecond / AudioCaptureService.SampleRate))
+                + AudioReadSafetyLatency;
             while (!_audioEnding &&
                    _recordingTimeline is { } timeline &&
                    timeline.Elapsed < requestedEnd)
