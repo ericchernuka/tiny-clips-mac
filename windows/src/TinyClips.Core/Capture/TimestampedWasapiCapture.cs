@@ -15,6 +15,13 @@ internal sealed class TimestampedWasapiCapture : IDisposable
     private const long ReferenceTimesPerSecond = TimeSpan.TicksPerSecond;
     private const long ReferenceTimesPerMillisecond = TimeSpan.TicksPerMillisecond;
 
+    // Request a generous capture buffer so a busy CPU (e.g. software H.264 encoding) can stall
+    // the polling thread for tens of milliseconds without WASAPI overrunning and dropping samples.
+    private const long RequestedBufferDurationMs = 200;
+
+    // Poll well inside the buffer window regardless of the negotiated buffer size.
+    private const int PollIntervalMs = 8;
+
     private readonly MMDevice _device;
     private readonly AudioClient _audioClient;
     private readonly bool _isLoopback;
@@ -57,6 +64,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
         {
             IsBackground = true,
             Name = _isLoopback ? "TinyClips.SystemAudioCapture" : "TinyClips.MicrophoneCapture",
+            Priority = ThreadPriority.Highest,
         };
         _captureThread.Start();
     }
@@ -84,7 +92,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             streamFlags |= AudioClientStreamFlags.Loopback;
         }
 
-        var requestedDuration = 20 * ReferenceTimesPerMillisecond;
+        var requestedDuration = RequestedBufferDurationMs * ReferenceTimesPerMillisecond;
         _audioClient.Initialize(
             AudioClientShareMode.Shared,
             streamFlags,
@@ -104,14 +112,12 @@ internal sealed class TimestampedWasapiCapture : IDisposable
         {
             var captureClient = _audioClient.AudioCaptureClient;
             var bufferFrameCount = _audioClient.BufferSize;
-            var actualDuration = ReferenceTimesPerSecond * bufferFrameCount / WaveFormat.SampleRate;
-            var sleepMilliseconds = Math.Max(1, (int)(actualDuration / ReferenceTimesPerMillisecond / 2));
 
             _audioClient.Start();
-            WebcamDiagnostics.Log($"Audio capture loop started ({(_isLoopback ? "loopback" : "microphone")}): bufferFrames={bufferFrameCount} sleepMs={sleepMilliseconds}.");
+            WebcamDiagnostics.Log($"Audio capture loop started ({(_isLoopback ? "loopback" : "microphone")}): bufferFrames={bufferFrameCount} pollMs={PollIntervalMs}.");
             while (_capturing)
             {
-                Thread.Sleep(sleepMilliseconds);
+                Thread.Sleep(PollIntervalMs);
                 ReadAvailablePackets(captureClient, ref packetCount, ref nonSilentPackets, ref loggedFirst);
             }
         }
