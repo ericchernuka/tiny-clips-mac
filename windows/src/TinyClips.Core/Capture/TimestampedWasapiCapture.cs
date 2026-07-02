@@ -18,6 +18,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
     private readonly MMDevice _device;
     private readonly AudioClient _audioClient;
     private readonly bool _isLoopback;
+    private readonly WaveFormat _mixFormat;
     private Thread? _captureThread;
     private volatile bool _capturing;
     private bool _initialized;
@@ -27,7 +28,16 @@ internal sealed class TimestampedWasapiCapture : IDisposable
         _device = device;
         _audioClient = device.AudioClient;
         _isLoopback = isLoopback;
-        WaveFormat = _audioClient.MixFormat;
+
+        // WASAPI's shared-mode mix format is a WaveFormatExtensible. Initialize WASAPI with
+        // that exact format, but expose a "standard" IEEE-float/PCM WaveFormat to the NAudio
+        // pipeline. NAudio's sample-provider converters reject the Extensible encoding with
+        // "Unsupported source encoding"; the byte layout is identical, so only the format tag
+        // differs and the raw capture bytes reinterpret cleanly.
+        _mixFormat = _audioClient.MixFormat;
+        WaveFormat = _mixFormat is WaveFormatExtensible extensible
+            ? extensible.ToStandardWaveFormat()
+            : _mixFormat;
     }
 
     public WaveFormat WaveFormat { get; }
@@ -80,7 +90,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             streamFlags,
             requestedDuration,
             0,
-            WaveFormat,
+            _mixFormat,
             Guid.Empty);
         _initialized = true;
     }
