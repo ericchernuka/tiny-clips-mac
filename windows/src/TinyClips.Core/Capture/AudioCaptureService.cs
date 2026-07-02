@@ -21,10 +21,10 @@ public sealed class AudioCaptureService : IDisposable
     private readonly bool _captureMic;
     private readonly string? _micDeviceId;
     private readonly object _gate = new();
-    private readonly List<BufferedWaveProvider> _buffers = new();
+    private readonly List<TimelineAlignedWaveProvider> _buffers = new();
 
-    private WasapiLoopbackCapture? _loopback;
-    private WasapiCapture? _mic;
+    private TimestampedWasapiCapture? _loopback;
+    private TimestampedWasapiCapture? _mic;
     private MixingSampleProvider? _mixer;
     private IWaveProvider? _output;
     private bool _disposed;
@@ -74,29 +74,25 @@ public sealed class AudioCaptureService : IDisposable
     {
         try
         {
-            WasapiCapture capture = isLoopback
-                ? new WasapiLoopbackCapture()
-                : CreateMicCapture();
+            var capture = CreateCapture(isLoopback);
 
-            var buffer = new BufferedWaveProvider(capture.WaveFormat)
-            {
-                ReadFully = true,
-                DiscardOnBufferOverflow = true,
-                BufferDuration = TimeSpan.FromSeconds(5),
-            };
+            var buffer = new TimelineAlignedWaveProvider(capture.WaveFormat);
 
-            capture.DataAvailable += (_, e) =>
+            capture.DataAvailable += (data, count, sourceTimestamp) =>
             {
-                if (e.BytesRecorded > 0)
+                lock (_gate)
                 {
-                    buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                    if (!_disposed)
+                    {
+                        buffer.AddSamples(data, count, sourceTimestamp);
+                    }
                 }
             };
 
             var provider = ToStereo48k(buffer.ToSampleProvider());
             _mixer!.AddMixerInput(provider);
 
-            capture.StartRecording();
+            capture.Start();
 
             lock (_gate)
             {
@@ -105,7 +101,7 @@ public sealed class AudioCaptureService : IDisposable
 
             if (isLoopback)
             {
-                _loopback = (WasapiLoopbackCapture)capture;
+                _loopback = capture;
             }
             else
             {
@@ -120,16 +116,24 @@ public sealed class AudioCaptureService : IDisposable
         }
     }
 
-    private WasapiCapture CreateMicCapture()
+    private TimestampedWasapiCapture CreateCapture(bool isLoopback)
     {
-        if (!string.IsNullOrEmpty(_micDeviceId))
+        using var enumerator = new MMDeviceEnumerator();
+        if (isLoopback)
         {
-            using var enumerator = new MMDeviceEnumerator();
-            var device = enumerator.GetDevice(_micDeviceId);
-            return new WasapiCapture(device);
+            var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            return new TimestampedWasapiCapture(device, isLoopback: true);
         }
 
-        return new WasapiCapture();
+        if (!string.IsNullOrEmpty(_micDeviceId))
+        {
+            var device = enumerator.GetDevice(_micDeviceId);
+            return new TimestampedWasapiCapture(device, isLoopback: false);
+        }
+
+        return new TimestampedWasapiCapture(
+            enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console),
+            isLoopback: false);
     }
 
     /// <summary>
@@ -189,11 +193,10 @@ public sealed class AudioCaptureService : IDisposable
     }
 
     /// <summary>
-    /// Discards any audio captured during pipeline warm-up so the next read lines up with the
-    /// moment video frame emission begins. This keeps the audio and video tracks in sync — the
-    /// device keeps running, only the already-buffered pre-roll is dropped.
+    /// Anchors every active source to the shared recording clock. Packets captured before the
+    /// origin are trimmed; sources that begin later retain their exact leading-silence offset.
     /// </summary>
-    public void FlushBuffers()
+    internal void BeginTimeline(RecordingTimeline timeline)
     {
         lock (_gate)
         {
@@ -204,7 +207,7 @@ public sealed class AudioCaptureService : IDisposable
 
             foreach (var buffer in _buffers)
             {
-                buffer.ClearBuffer();
+                buffer.BeginTimeline(timeline.Origin);
             }
         }
     }
@@ -213,7 +216,7 @@ public sealed class AudioCaptureService : IDisposable
     {
         try
         {
-            _loopback?.StopRecording();
+            _loopback?.Stop();
         }
         catch
         {
@@ -222,7 +225,7 @@ public sealed class AudioCaptureService : IDisposable
 
         try
         {
-            _mic?.StopRecording();
+            _mic?.Stop();
         }
         catch
         {

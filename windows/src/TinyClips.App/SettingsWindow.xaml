@@ -584,7 +584,8 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="RecordMicrophoneToggle"
                             AutomationProperties.Name="Record microphone"
-                            IsOn="{x:Bind ViewModel.RecordMicrophone, Mode=TwoWay}" />
+                            IsOn="{x:Bind ViewModel.RecordMicrophone, Mode=OneWay}"
+                            Toggled="OnRecordMicrophoneToggled" />
                     </Grid>
                 </Border>
 
@@ -652,7 +653,8 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="EnableWebcamToggle"
                             AutomationProperties.Name="Enable webcam by default"
-                            IsOn="{x:Bind ViewModel.WebcamEnabled, Mode=TwoWay}" />
+                            IsOn="{x:Bind ViewModel.WebcamEnabled, Mode=OneWay}"
+                            Toggled="OnEnableWebcamToggled" />
                     </Grid>
                 </Border>
 

@@ -13,12 +13,12 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
     private MediaCapture? _mediaCapture;
     private MediaFrameReader? _frameReader;
-    private MediaCaptureFailedEventHandler? _failedHandler;
+    private int _nextMediaCaptureId;
+    private int _activeMediaCaptureId;
     private bool _stopRequested;
     private bool _isDisposed;
 
     private WebcamFrame? _latestFrame;
-    private TimeSpan? _baseTimestamp;
     private long _framesArrived;
     private int _firstFrameLogged;
     private int _firstCacheLogged;
@@ -46,7 +46,6 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             }
 
             _stopRequested = false;
-            _baseTimestamp = null;
             Interlocked.Exchange(ref _framesArrived, 0);
             Interlocked.Exchange(ref _firstFrameLogged, 0);
             Interlocked.Exchange(ref _firstCacheLogged, 0);
@@ -59,8 +58,8 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             WebcamDiagnostics.Log($"WebcamCaptureService.StartAsync deviceId='{(string.IsNullOrWhiteSpace(deviceId) ? "(default)" : deviceId)}' size={bitmapSize.Width}x{bitmapSize.Height}");
 
             var mediaCapture = new MediaCapture();
-            MediaCaptureFailedEventHandler failedHandler = OnMediaCaptureFailed;
-            mediaCapture.Failed += failedHandler;
+            var captureId = Interlocked.Increment(ref _nextMediaCaptureId);
+            mediaCapture.Failed += (sender, args) => OnMediaCaptureFailed(sender, args, captureId);
 
             try
             {
@@ -77,7 +76,6 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
                 if (_stopRequested)
                 {
-                    mediaCapture.Failed -= failedHandler;
                     mediaCapture.Dispose();
                     return;
                 }
@@ -108,21 +106,19 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
                     frameReader.FrameArrived -= OnFrameArrived;
                     await frameReader.StopAsync().AsTask().ConfigureAwait(false);
                     frameReader.Dispose();
-                    mediaCapture.Failed -= failedHandler;
                     mediaCapture.Dispose();
                     return;
                 }
 
                 _mediaCapture = mediaCapture;
                 _frameReader = frameReader;
-                _failedHandler = failedHandler;
+                Volatile.Write(ref _activeMediaCaptureId, captureId);
                 IsRunning = true;
                 WebcamDiagnostics.Log("Webcam capture is now running (IsRunning=true).");
             }
             catch (Exception ex)
             {
                 WebcamDiagnostics.Log($"StartAsync FAILED: 0x{(uint)ex.HResult:X8} {ex.GetType().Name}: {ex.Message}");
-                mediaCapture.Failed -= failedHandler;
                 mediaCapture.Dispose();
                 throw;
             }
@@ -142,11 +138,10 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
         {
             var frameReader = _frameReader;
             var mediaCapture = _mediaCapture;
-            var failedHandler = _failedHandler;
 
             _frameReader = null;
             _mediaCapture = null;
-            _failedHandler = null;
+            Volatile.Write(ref _activeMediaCaptureId, 0);
             IsRunning = false;
 
             if (mediaCapture is not null)
@@ -157,11 +152,6 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             if (frameReader is not null)
             {
                 frameReader.FrameArrived -= OnFrameArrived;
-            }
-
-            if (mediaCapture is not null && failedHandler is not null)
-            {
-                mediaCapture.Failed -= failedHandler;
             }
 
             if (frameReader is not null)
@@ -181,7 +171,6 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             }
 
             mediaCapture?.Dispose();
-            _baseTimestamp = null;
         }
         finally
         {
@@ -215,11 +204,6 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
             }
 
             var timestamp = frameReference!.SystemRelativeTime ?? TimeSpan.Zero;
-            if (_baseTimestamp is null)
-            {
-                _baseTimestamp = timestamp;
-            }
-
             Interlocked.Increment(ref _framesArrived);
             if (Interlocked.Exchange(ref _firstFrameLogged, 1) == 0)
             {
@@ -240,7 +224,9 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
 
             try
             {
-                var frame = CopyFrame(preparedBitmap, timestamp - _baseTimestamp.Value);
+                // Keep the source's absolute system-relative timestamp. The recorder
+                // normalizes it against the same QPC origin used by screen and audio.
+                var frame = CopyFrame(preparedBitmap, timestamp);
                 lock (_latestFrameGate)
                 {
                     _latestFrame = frame;
@@ -266,8 +252,13 @@ public sealed class WebcamCaptureService : IWebcamCaptureService
         }
     }
 
-    private async void OnMediaCaptureFailed(MediaCapture sender, MediaCaptureFailedEventArgs args)
+    private async void OnMediaCaptureFailed(MediaCapture sender, MediaCaptureFailedEventArgs args, int captureId)
     {
+        if (captureId != Volatile.Read(ref _activeMediaCaptureId))
+        {
+            return;
+        }
+
         WebcamDiagnostics.Log($"MediaCapture.Failed fired: code={args.Code} message='{args.Message}' (frames so far={Interlocked.Read(ref _framesArrived)})");
         try
         {
