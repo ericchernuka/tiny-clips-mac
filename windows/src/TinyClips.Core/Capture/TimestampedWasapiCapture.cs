@@ -87,6 +87,9 @@ internal sealed class TimestampedWasapiCapture : IDisposable
 
     private void CaptureLoop()
     {
+        var packetCount = 0L;
+        var nonSilentPackets = 0L;
+        var loggedFirst = false;
         try
         {
             var captureClient = _audioClient.AudioCaptureClient;
@@ -95,18 +98,21 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             var sleepMilliseconds = Math.Max(1, (int)(actualDuration / ReferenceTimesPerMillisecond / 2));
 
             _audioClient.Start();
+            WebcamDiagnostics.Log($"Audio capture loop started ({(_isLoopback ? "loopback" : "microphone")}): bufferFrames={bufferFrameCount} sleepMs={sleepMilliseconds}.");
             while (_capturing)
             {
                 Thread.Sleep(sleepMilliseconds);
-                ReadAvailablePackets(captureClient);
+                ReadAvailablePackets(captureClient, ref packetCount, ref nonSilentPackets, ref loggedFirst);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Capture sources are best-effort. The other source and video remain usable.
+            WebcamDiagnostics.Log($"Audio capture loop crashed ({(_isLoopback ? "loopback" : "microphone")}): {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
+            WebcamDiagnostics.Log($"Audio capture loop ended ({(_isLoopback ? "loopback" : "microphone")}): packets={packetCount} nonSilentPackets={nonSilentPackets}.");
             try
             {
                 _audioClient.Stop();
@@ -120,7 +126,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
         }
     }
 
-    private void ReadAvailablePackets(AudioCaptureClient captureClient)
+    private void ReadAvailablePackets(AudioCaptureClient captureClient, ref long packetCount, ref long nonSilentPackets, ref bool loggedFirst)
     {
         var packetFrames = captureClient.GetNextPacketSize();
         while (_capturing && packetFrames > 0)
@@ -134,9 +140,22 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             {
                 var byteCount = checked(framesAvailable * WaveFormat.BlockAlign);
                 var data = new byte[byteCount];
-                if ((flags & AudioClientBufferFlags.Silent) == 0)
+                var silent = (flags & AudioClientBufferFlags.Silent) != 0;
+                if (!silent)
                 {
                     Marshal.Copy(dataPointer, data, 0, byteCount);
+                }
+
+                packetCount++;
+                if (!silent)
+                {
+                    nonSilentPackets++;
+                }
+
+                if (!loggedFirst)
+                {
+                    loggedFirst = true;
+                    WebcamDiagnostics.Log($"Audio first packet ({(_isLoopback ? "loopback" : "microphone")}): frames={framesAvailable} bytes={byteCount} silent={silent} qpc={qpcPosition}.");
                 }
 
                 // WASAPI reports the QPC position in 100-nanosecond units and it refers

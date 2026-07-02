@@ -57,6 +57,9 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private AudioStreamDescriptor? _audioDescriptor;
     private bool _hasAudio;
     private long _audioFramesRead;
+    private long _audioSamplesRequested;
+    private long _audioNonSilentChunks;
+    private bool _loggedFirstAudioChunk;
     private volatile bool _audioEnding;
     private RecordingTimeline? _recordingTimeline;
 
@@ -127,6 +130,9 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
                 _audioEnding = false;
                 _audioFramesRead = 0;
+                _audioSamplesRequested = 0;
+                _audioNonSilentChunks = 0;
+                _loggedFirstAudioChunk = false;
                 StartAudioCapture();
 
                 var includeAudio = _hasAudio;
@@ -706,17 +712,50 @@ public sealed class VideoRecordingService : IVideoRecordingService
         var duration = TimeSpan.FromTicks((long)(producedFrames * TimeSpan.TicksPerSecond / AudioCaptureService.SampleRate));
         _audioFramesRead += producedFrames;
 
+        _audioSamplesRequested++;
+        if (ContainsNonSilence(data))
+        {
+            _audioNonSilentChunks++;
+            if (!_loggedFirstAudioChunk)
+            {
+                _loggedFirstAudioChunk = true;
+                WebcamDiagnostics.Log($"Audio muxer received first NON-SILENT chunk after {_audioSamplesRequested} request(s) ({producedFrames} frames).");
+            }
+        }
+
+        if (_audioSamplesRequested % 250 == 0)
+        {
+            WebcamDiagnostics.Log($"Audio muxer progress: requests={_audioSamplesRequested} nonSilentChunks={_audioNonSilentChunks} framesRead={_audioFramesRead}.");
+        }
+
         var sample = MediaStreamSample.CreateFromBuffer(data.AsBuffer(), pts);
         sample.Duration = duration;
         args.Request.Sample = sample;
+    }
+
+    private static bool ContainsNonSilence(byte[] pcm16)
+    {
+        // Scan interleaved 16-bit PCM for any sample above a small noise floor.
+        for (var i = 0; i + 1 < pcm16.Length; i += 2)
+        {
+            var sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+            if (Math.Abs(sample) > 16)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void StartAudioCapture()
     {
         var wantSystem = _settings.RecordAudio;
         var wantMic = _settings.RecordMicrophone;
+        WebcamDiagnostics.Log($"StartAudioCapture: RecordAudio={wantSystem} RecordMicrophone={wantMic} micDeviceId='{(string.IsNullOrWhiteSpace(_settings.SelectedMicrophoneId) ? "(default)" : _settings.SelectedMicrophoneId)}'");
         if (!wantSystem && !wantMic)
         {
+            WebcamDiagnostics.Log("StartAudioCapture: no audio sources requested; recording will have no audio track.");
             return;
         }
 
@@ -729,14 +768,17 @@ public sealed class VideoRecordingService : IVideoRecordingService
                 // The AudioStreamDescriptor itself is built per-MediaStreamSource in
                 // CreateMediaStreamSource; here we only record that audio is available.
                 _hasAudio = true;
+                WebcamDiagnostics.Log("StartAudioCapture: audio capture started; audio track will be muxed.");
             }
             else
             {
+                WebcamDiagnostics.Log("StartAudioCapture: AudioCaptureService.TryStart returned false; NO audio source started.");
                 audio.Dispose();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            WebcamDiagnostics.Log($"StartAudioCapture: exception starting audio capture: {ex.GetType().Name}: {ex.Message}");
             _audio = null;
             _hasAudio = false;
             _audioDescriptor = null;

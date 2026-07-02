@@ -72,6 +72,7 @@ public sealed class AudioCaptureService : IDisposable
 
     private void TryStartSource(bool isLoopback)
     {
+        var sourceName = isLoopback ? "system/loopback" : "microphone";
         try
         {
             var capture = CreateCapture(isLoopback);
@@ -109,10 +110,12 @@ public sealed class AudioCaptureService : IDisposable
             }
 
             IsActive = true;
+            WebcamDiagnostics.Log($"Audio source '{sourceName}' started: {capture.WaveFormat.SampleRate}Hz {capture.WaveFormat.Channels}ch {capture.WaveFormat.BitsPerSample}bit {capture.WaveFormat.Encoding}.");
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort: a missing/denied device simply means that source is skipped.
+            WebcamDiagnostics.Log($"Audio source '{sourceName}' failed to start: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
