@@ -11,24 +11,24 @@
         <item>
             
             
-            <title>1.5.0</title>
+            <title>1.5.1</title>
             
             
-            <pubDate>Tue, 30 Jun 2026 14:03:51 +0000</pubDate>
+            <pubDate>Fri, 03 Jul 2026 15:22:10 +0000</pubDate>
             
             
-            <sparkle:version>49</sparkle:version>
+            <sparkle:version>50</sparkle:version>
             
             
-            <sparkle:shortVersionString>1.5.0</sparkle:shortVersionString>
+            <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
             
             
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             
             
-            <description><![CDATA[<h3>What's Changed</h3><ul><li>Mark v1.5.0 mac release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.4.0.4-mac...v1.5.0-mac">Full Changelog</a></p>]]></description>
-            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.0-mac</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.5.0-mac/TinyClips-v1.5.0-mac.zip" length="3397730" type="application/octet-stream" sparkle:edSignature="TNGVuYzD+7gfzlnZ/xzKCy/ptp7wlP9INMxT2mSv7qfxQG0eN+PTrdfH3CD0cwuqnNMDuQqXmt3rF9VLKi1vBw=="/>
+            <description><![CDATA[<h3>What's Changed</h3><ul><li>Mark v1.5.1-mac release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.5.0-mac...v1.5.1-mac">Full Changelog</a></p>]]></description>
+            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.1-mac</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.5.1-mac/TinyClips-v1.5.1-mac.zip" length="3400151" type="application/octet-stream" sparkle:edSignature="X2z0/41NWjtkBq7cDZr24XaRwNz7UhZKBHIgEUu9mARqOwMEzsGhinAgtFgaAkqt+T7bUNT4h6uKLiRhDxhMCA=="/>
             
         
         </item>
