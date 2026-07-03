@@ -68,6 +68,45 @@ public sealed class RecordingTimelineTests
         Assert.Equal(new short[] { 3, 4 }, ReadSamples(provider, 2));
     }
 
+    [Fact]
+    public void AddSamples_DropsEntirePreOriginPacketsThenAlignsFirstStraddlingPacket()
+    {
+        // With a larger capture buffer, several whole packets can predate the origin. Each fully
+        // pre-origin packet must be dropped (not appended at the origin), so only audio at/after
+        // the origin is kept — otherwise stale pre-roll would delay all real audio.
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format);
+        provider.BeginTimeline(origin);
+
+        // Entirely before the origin (4 frames ending 6 ms before origin): dropped.
+        provider.AddSamples(ToBytes(1, 2, 3, 4), 8, origin - TimeSpan.FromMilliseconds(10));
+        // Straddles the origin by 2 frames: first two dropped, {30, 40} kept.
+        provider.AddSamples(ToBytes(10, 20, 30, 40), 8, origin - TimeSpan.FromMilliseconds(2));
+
+        Assert.Equal(new short[] { 30, 40 }, ReadSamples(provider, 2));
+    }
+
+    [Fact]
+    public void AddSamples_AdvancesAudioByCaptureLatency()
+    {
+        // A source with capture latency reports timestamps that trail real capture time, so audio
+        // is advanced by the latency: frames within the latency window are trimmed from the front.
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format)
+        {
+            Latency = TimeSpan.FromMilliseconds(3),
+        };
+        provider.BeginTimeline(origin);
+
+        // Packet reported exactly at the origin, but 3 ms (3 frames) of latency means the first
+        // 3 frames actually predate the true capture instant and are trimmed.
+        provider.AddSamples(ToBytes(1, 2, 3, 4, 5), 10, origin);
+
+        Assert.Equal(new short[] { 4, 5 }, ReadSamples(provider, 2));
+    }
+
     private static byte[] ToBytes(params short[] samples)
     {
         var bytes = new byte[samples.Length * sizeof(short)];

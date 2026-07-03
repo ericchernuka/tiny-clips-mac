@@ -14,6 +14,7 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
 {
     private readonly BufferedWaveProvider _buffer;
     private TimeSpan _origin;
+    private TimeSpan _latency;
     private bool _timelineStarted;
     private bool _aligned;
 
@@ -29,6 +30,16 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
     }
 
     public WaveFormat WaveFormat { get; }
+
+    /// <summary>
+    /// The source's capture latency. Audio is advanced by this amount during alignment so the
+    /// recorded sound lines up with video captured at the same wall-clock instant.
+    /// </summary>
+    public TimeSpan Latency
+    {
+        get => _latency;
+        set => _latency = value;
+    }
 
     public void BeginTimeline(TimeSpan origin)
     {
@@ -56,29 +67,43 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
 
         if (!_aligned)
         {
-            _aligned = true;
-
-            // Position only the first packet relative to the shared origin. This preserves the
-            // true start offset between sources (e.g. microphone vs. system audio) without
-            // re-quantizing every later packet.
-            var sourceOffset = sourceTimestamp - _origin;
+            // Position the stream relative to the shared origin, compensating for the source's
+            // input latency so captured sound lands at the wall-clock moment it actually occurred
+            // (WASAPI timestamps the buffer read, which trails the real acoustic capture time).
+            var sourceOffset = sourceTimestamp - _origin - _latency;
             var desiredStartFrame = (long)Math.Round(
                 sourceOffset.Ticks * WaveFormat.SampleRate / (double)TimeSpan.TicksPerSecond);
 
+            if (desiredStartFrame + packetFrames <= 0)
+            {
+                // The entire packet is before the (latency-compensated) origin. Drop it and keep
+                // waiting: later packets carry later timestamps, so one of them will straddle the
+                // origin. This discards ALL pre-origin pre-roll, not just the first packet's worth.
+                return;
+            }
+
+            _aligned = true;
+
             if (desiredStartFrame < 0)
             {
-                // The first packet began before the origin: drop its pre-origin frames.
+                // This packet straddles the origin: drop its pre-origin frames, keep the rest.
                 var trimFrames = Math.Min(packetFrames, -desiredStartFrame);
                 byteOffset = checked((int)(trimFrames * blockAlign));
+                WebcamDiagnostics.Log($"TimelineAlignedWaveProvider aligned: sourceOffsetMs={(sourceTimestamp - _origin).TotalMilliseconds:F1} latencyMs={_latency.TotalMilliseconds:F1} trimFrames={trimFrames}.");
                 if (byteOffset >= count)
                 {
                     return;
                 }
             }
-            else if (desiredStartFrame > 0)
+            else
             {
-                // The source began after the origin: pad the gap with silence so it lands late.
-                AddSilence(desiredStartFrame);
+                // The source begins after the origin: pad the gap so it lands at the right offset.
+                if (desiredStartFrame > 0)
+                {
+                    AddSilence(desiredStartFrame);
+                }
+
+                WebcamDiagnostics.Log($"TimelineAlignedWaveProvider aligned: sourceOffsetMs={(sourceTimestamp - _origin).TotalMilliseconds:F1} latencyMs={_latency.TotalMilliseconds:F1} padFrames={desiredStartFrame}.");
             }
         }
 

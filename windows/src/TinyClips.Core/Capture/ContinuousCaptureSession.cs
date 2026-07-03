@@ -43,6 +43,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
     private int _latestWidth;
     private int _latestHeight;
     private TimeSpan _lastEmittedPts = TimeSpan.MinValue;
+    private bool _loggedFirstEmit;
     private int _fullWidth;
     private int _fullHeight;
     private volatile bool _running;
@@ -123,6 +124,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
             }
 
             _timeline = timeline ?? RecordingTimeline.StartNow();
+            _loggedFirstEmit = false;
 
             // Steady-rate pump: re-emits the latest captured frame even when WGC is idle.
             _pump = new Timer(OnPump, null, TimeSpan.Zero, _frameInterval);
@@ -230,6 +232,12 @@ internal sealed class ContinuousCaptureSession : IDisposable
         finally
         {
             Monitor.Exit(_sync);
+        }
+
+        if (!_loggedFirstEmit)
+        {
+            _loggedFirstEmit = true;
+            WebcamDiagnostics.Log($"First screen frame emitted: ptsMs={pts.TotalMilliseconds:F1}.");
         }
 
         // Raise outside the lock so heavy per-frame compositing doesn't stall WGC delivery.

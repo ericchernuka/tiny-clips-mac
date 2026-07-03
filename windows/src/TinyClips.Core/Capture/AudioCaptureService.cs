@@ -95,6 +95,10 @@ public sealed class AudioCaptureService : IDisposable
 
             capture.Start();
 
+            // Now that the audio client is initialized, propagate its capture latency so the
+            // provider can advance recorded audio into sync with the video timeline.
+            buffer.Latency = capture.CaptureLatency;
+
             lock (_gate)
             {
                 _buffers.Add(buffer);

@@ -49,6 +49,12 @@ internal sealed class TimestampedWasapiCapture : IDisposable
 
     public WaveFormat WaveFormat { get; }
 
+    /// <summary>
+    /// The engine's capture latency (device period), available after <see cref="Start"/>.
+    /// Used to advance recorded audio so it lines up with video captured at the same instant.
+    /// </summary>
+    public TimeSpan CaptureLatency { get; private set; }
+
     public event Action<byte[], int, TimeSpan>? DataAvailable;
 
     public void Start()
@@ -101,6 +107,18 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             _mixFormat,
             Guid.Empty);
         _initialized = true;
+
+        // StreamLatency (REFERENCE_TIME, 100-ns units) is the delay the engine adds between the
+        // sound being captured and the frames becoming available to us. Advancing recorded audio
+        // by this keeps it in sync with video captured at the same wall-clock instant.
+        try
+        {
+            CaptureLatency = TimeSpan.FromTicks(_audioClient.StreamLatency);
+        }
+        catch
+        {
+            CaptureLatency = TimeSpan.Zero;
+        }
     }
 
     private void CaptureLoop()
@@ -114,7 +132,7 @@ internal sealed class TimestampedWasapiCapture : IDisposable
             var bufferFrameCount = _audioClient.BufferSize;
 
             _audioClient.Start();
-            WebcamDiagnostics.Log($"Audio capture loop started ({(_isLoopback ? "loopback" : "microphone")}): bufferFrames={bufferFrameCount} pollMs={PollIntervalMs}.");
+            WebcamDiagnostics.Log($"Audio capture loop started ({(_isLoopback ? "loopback" : "microphone")}): bufferFrames={bufferFrameCount} pollMs={PollIntervalMs} latencyMs={CaptureLatency.TotalMilliseconds:F1}.");
             while (_capturing)
             {
                 Thread.Sleep(PollIntervalMs);
