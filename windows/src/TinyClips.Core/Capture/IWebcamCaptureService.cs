@@ -3,7 +3,7 @@ using Windows.Graphics.Imaging;
 namespace TinyClips.Core.Capture;
 
 /// <summary>
-/// A timestamped webcam frame in tightly-packed BGRA8 pixels.
+/// A webcam frame in tightly-packed BGRA8 pixels with its system-relative source timestamp.
 /// </summary>
 public sealed class WebcamFrame
 {

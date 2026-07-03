@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using TinyClips.Core.Models;
 using TinyClips.Core.Services;
@@ -6,6 +7,7 @@ using Windows.Graphics.Imaging;
 using Windows.Media.Core;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
+using Windows.Storage.Streams;
 
 namespace TinyClips.Core.Capture;
 
@@ -25,6 +27,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     // MF_MT_MPEG2_PROFILE attribute + eAVEncH264VProfile values.
     // Baseline (66) disables B-frames for max compatibility; High (100) is the default.
     private static readonly Guid Mpeg2ProfileAttribute = new("ad76a80b-2d5c-4e0b-b375-64e520137036");
+    private const int MfTransformTypeNotSet = unchecked((int)0xC00D6D60);
     private const uint AvcBaselineProfile = 66;
     private const uint AvcHighProfile = 100;
 
@@ -32,6 +35,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private Channel<TimestampedFrame>? _channel;
     private Task? _transcodeTask;
     private FileStream? _fileStream;
+    private MediaStreamSource? _mediaStreamSource;
     private string? _outputPath;
     private TimeSpan _frameDuration;
     private Timer? _limitTimer;
@@ -47,11 +51,17 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private long _webcamCompositedFrames;
     private long _webcamOverlayNullFrames;
     private long _webcamNoFrameFrames;
+    private WebcamFrame? _lastTimelineWebcamFrame;
 
     private AudioCaptureService? _audio;
     private AudioStreamDescriptor? _audioDescriptor;
+    private bool _hasAudio;
     private long _audioFramesRead;
+    private long _audioSamplesRequested;
+    private long _audioNonSilentChunks;
+    private bool _loggedFirstAudioChunk;
     private volatile bool _audioEnding;
+    private RecordingTimeline? _recordingTimeline;
 
     public VideoRecordingService(
         IMonitorService monitors,
@@ -118,53 +128,54 @@ public sealed class VideoRecordingService : IVideoRecordingService
                 _fileStream = new FileStream(_outputPath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
                 var randomAccessStream = _fileStream.AsRandomAccessStream();
 
-                var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD1080p);
-                profile.Audio = null;
-                profile.Video.Width = (uint)width;
-                profile.Video.Height = (uint)height;
-                profile.Video.FrameRate.Numerator = (uint)fps;
-                profile.Video.FrameRate.Denominator = 1;
-                profile.Video.PixelAspectRatio.Numerator = 1;
-                profile.Video.PixelAspectRatio.Denominator = 1;
-                profile.Video.Bitrate = (uint)Math.Clamp((long)width * height * fps / 10, 2_000_000, 24_000_000);
-
-                // H.264 profile is configurable. High (default) enables B-frames + CABAC for the
-                // best quality/size. Baseline disables B-frames for maximum playback compatibility.
-                // (eAVEncH264VProfile_Base = 66, eAVEncH264VProfile_High = 100.)
-                profile.Video.Properties[Mpeg2ProfileAttribute] =
-                    _settings.VideoEncoderProfile == VideoEncoderProfile.Baseline
-                        ? AvcBaselineProfile
-                        : AvcHighProfile;
-
-                var videoProps = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
-                videoProps.FrameRate.Numerator = (uint)fps;
-                videoProps.FrameRate.Denominator = 1;
-
-                var videoDescriptor = new VideoStreamDescriptor(videoProps);
-
                 _audioEnding = false;
                 _audioFramesRead = 0;
+                _audioSamplesRequested = 0;
+                _audioNonSilentChunks = 0;
+                _loggedFirstAudioChunk = false;
                 StartAudioCapture();
 
-                MediaStreamSource mediaStreamSource;
-                if (_audioDescriptor is not null)
-                {
-                    profile.Audio = AudioEncodingProperties.CreateAac(AudioCaptureService.SampleRate, AudioCaptureService.Channels, 192_000);
-                    mediaStreamSource = new MediaStreamSource(videoDescriptor, _audioDescriptor) { BufferTime = TimeSpan.Zero };
-                }
-                else
-                {
-                    mediaStreamSource = new MediaStreamSource(videoDescriptor) { BufferTime = TimeSpan.Zero };
-                }
-
-                mediaStreamSource.Starting += (_, args) => args.Request.SetActualStartPosition(TimeSpan.Zero);
-                mediaStreamSource.SampleRequested += OnSampleRequested;
+                var includeAudio = _hasAudio;
+                var requestedEncoderProfile = _settings.VideoEncoderProfile;
+                var profile = CreateEncodingProfile(width, height, fps, requestedEncoderProfile, includeAudio);
+                var mediaStreamSource = CreateMediaStreamSource(width, height, fps);
 
                 var transcoder = new MediaTranscoder { HardwareAccelerationEnabled = true };
-                var prepare = await transcoder
-                    .PrepareMediaStreamSourceTranscodeAsync(mediaStreamSource, randomAccessStream, profile)
-                    .AsTask(cancellationToken)
-                    .ConfigureAwait(false);
+                PrepareTranscodeResult prepare;
+                var usedFallbackProfile = false;
+                try
+                {
+                    prepare = await PrepareTranscodeAsync(
+                        transcoder,
+                        mediaStreamSource,
+                        randomAccessStream,
+                        profile,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (COMException ex) when (ex.HResult == MfTransformTypeNotSet)
+                {
+                    prepare = await RetryPrepareWithBaselineAsync(
+                        randomAccessStream,
+                        width,
+                        height,
+                        fps,
+                        includeAudio,
+                        cancellationToken,
+                        ex).ConfigureAwait(false);
+                    usedFallbackProfile = true;
+                }
+
+                if (!prepare.CanTranscode && !usedFallbackProfile)
+                {
+                    prepare = await RetryPrepareWithBaselineAsync(
+                        randomAccessStream,
+                        width,
+                        height,
+                        fps,
+                        includeAudio,
+                        cancellationToken,
+                        null).ConfigureAwait(false);
+                }
 
                 if (!prepare.CanTranscode)
                 {
@@ -172,15 +183,17 @@ public sealed class VideoRecordingService : IVideoRecordingService
                 }
 
                 // The encoder is now ready to consume frames. Wait briefly for the first webcam
-                // frame (camera warm-up) so the overlay is present from frame zero, then flush the
-                // stale pre-roll audio and start the frame pump together. This anchors the recorded
-                // timeline to the real "recording started" moment — without it, the capture clock,
+                // frame, then give screen, webcam, loopback, and microphone one shared QPC origin.
+                // Audio packets retain their source timestamp offsets rather than being flattened
+                // by independent buffers. This anchors the recorded timeline to the real start
+                // moment — without it, the capture clock,
                 // encoder prep and camera warm-up were baked in as several seconds of dead pre-roll
                 // (frozen screen, no webcam) at the front of every clip, and that pre-roll saturated
                 // the bounded frame channel so real frames near the end were dropped.
                 await WaitForFirstWebcamFrameAsync(cancellationToken).ConfigureAwait(false);
-                _audio?.FlushBuffers();
-                _capture.BeginEmitting();
+                _recordingTimeline = RecordingTimeline.StartNow();
+                _audio?.BeginTimeline(_recordingTimeline);
+                _capture.BeginEmitting(_recordingTimeline);
 
                 _transcodeTask = prepare.TranscodeAsync().AsTask();
                 IsRecording = true;
@@ -214,9 +227,16 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
         if (_webcamOverlay is not null)
         {
-            if (_webcamCapture.TryGetLatestFrame(out WebcamFrame? webcamFrame) && webcamFrame is not null)
+            if (_webcamCapture.TryGetLatestFrame(out WebcamFrame? webcamFrame) &&
+                webcamFrame is not null &&
+                IsWebcamFrameReady(webcamFrame, pts))
             {
-                _webcamOverlay.Draw(frame.BgraPixels, frame.Width, frame.Height, webcamFrame);
+                _lastTimelineWebcamFrame = webcamFrame;
+            }
+
+            if (_lastTimelineWebcamFrame is not null)
+            {
+                _webcamOverlay.Draw(frame.BgraPixels, frame.Width, frame.Height, _lastTimelineWebcamFrame);
                 Interlocked.Increment(ref _webcamCompositedFrames);
             }
             else
@@ -282,7 +302,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
         // Media Foundation BGRA samples are bottom-up; WGC frames arrive top-down.
         for (var y = 0; y < frame.Height; y++)
         {
-            Buffer.BlockCopy(
+            System.Buffer.BlockCopy(
                 frame.BgraPixels,
                 (frame.Height - 1 - y) * rowStride,
                 pixels,
@@ -293,8 +313,132 @@ public sealed class VideoRecordingService : IVideoRecordingService
         return pixels;
     }
 
+    private MediaEncodingProfile CreateEncodingProfile(
+        int width,
+        int height,
+        int fps,
+        VideoEncoderProfile encoderProfile,
+        bool includeAudio)
+    {
+        var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD1080p);
+        profile.Container.Subtype = MediaEncodingSubtypes.Mpeg4;
+        profile.Audio = includeAudio
+            ? AudioEncodingProperties.CreateAac(AudioCaptureService.SampleRate, AudioCaptureService.Channels, 192_000)
+            : null;
+        profile.Video.Subtype = MediaEncodingSubtypes.H264;
+        profile.Video.Width = (uint)width;
+        profile.Video.Height = (uint)height;
+        profile.Video.FrameRate.Numerator = (uint)fps;
+        profile.Video.FrameRate.Denominator = 1;
+        profile.Video.PixelAspectRatio.Numerator = 1;
+        profile.Video.PixelAspectRatio.Denominator = 1;
+        profile.Video.Bitrate = (uint)Math.Clamp((long)width * height * fps / 10, 2_000_000, 24_000_000);
+
+        // H.264 profile is configurable. High (default) enables B-frames + CABAC for the
+        // best quality/size. Baseline disables B-frames for maximum playback compatibility.
+        // (eAVEncH264VProfile_Base = 66, eAVEncH264VProfile_High = 100.)
+        profile.Video.Properties[Mpeg2ProfileAttribute] =
+            encoderProfile == VideoEncoderProfile.Baseline
+                ? AvcBaselineProfile
+                : AvcHighProfile;
+
+        return profile;
+    }
+
+    private MediaStreamSource CreateMediaStreamSource(int width, int height, int fps)
+    {
+        DetachMediaStreamSource();
+
+        // WinRT stream descriptors are single-use: once attached to a MediaStreamSource they
+        // cannot be reused for another one ("This object has already been initialized"). Build
+        // fresh descriptors on every call so the Baseline retry path gets its own instances.
+        var videoProps = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
+        videoProps.FrameRate.Numerator = (uint)fps;
+        videoProps.FrameRate.Denominator = 1;
+        var videoDescriptor = new VideoStreamDescriptor(videoProps);
+
+        MediaStreamSource mediaStreamSource;
+        if (_hasAudio)
+        {
+            _audioDescriptor = new AudioStreamDescriptor(
+                AudioEncodingProperties.CreatePcm(AudioCaptureService.SampleRate, AudioCaptureService.Channels, AudioCaptureService.BitsPerSample));
+            mediaStreamSource = new MediaStreamSource(videoDescriptor, _audioDescriptor);
+        }
+        else
+        {
+            _audioDescriptor = null;
+            mediaStreamSource = new MediaStreamSource(videoDescriptor);
+        }
+
+        mediaStreamSource.BufferTime = TimeSpan.Zero;
+        mediaStreamSource.Starting += OnMediaStreamSourceStarting;
+        mediaStreamSource.SampleRequested += OnSampleRequested;
+        _mediaStreamSource = mediaStreamSource;
+        return mediaStreamSource;
+    }
+
+    private void DetachMediaStreamSource()
+    {
+        var mediaStreamSource = _mediaStreamSource;
+        if (mediaStreamSource is null)
+        {
+            return;
+        }
+
+        mediaStreamSource.Starting -= OnMediaStreamSourceStarting;
+        mediaStreamSource.SampleRequested -= OnSampleRequested;
+        _mediaStreamSource = null;
+    }
+
+    private static async Task<PrepareTranscodeResult> PrepareTranscodeAsync(
+        MediaTranscoder transcoder,
+        MediaStreamSource mediaStreamSource,
+        IRandomAccessStream outputStream,
+        MediaEncodingProfile profile,
+        CancellationToken cancellationToken)
+    {
+        return await transcoder
+            .PrepareMediaStreamSourceTranscodeAsync(mediaStreamSource, outputStream, profile)
+            .AsTask(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<PrepareTranscodeResult> RetryPrepareWithBaselineAsync(
+        IRandomAccessStream outputStream,
+        int width,
+        int height,
+        int fps,
+        bool includeAudio,
+        CancellationToken cancellationToken,
+        COMException? originalException)
+    {
+        WebcamDiagnostics.Log(originalException is null
+            ? "Transcode prepare failed with the requested H.264 profile; retrying with software Baseline profile."
+            : $"Transcode prepare failed with 0x{(uint)originalException.HResult:X8}; retrying with software Baseline profile.");
+
+        DetachMediaStreamSource();
+        _fileStream?.SetLength(0);
+        outputStream.Seek(0);
+
+        var fallbackProfile = CreateEncodingProfile(
+            width,
+            height,
+            fps,
+            VideoEncoderProfile.Baseline,
+            includeAudio);
+        var fallbackSource = CreateMediaStreamSource(width, height, fps);
+        var fallbackTranscoder = new MediaTranscoder { HardwareAccelerationEnabled = false };
+        return await PrepareTranscodeAsync(
+            fallbackTranscoder,
+            fallbackSource,
+            outputStream,
+            fallbackProfile,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task CleanupFailedStartAsync()
     {
+        DetachMediaStreamSource();
         _limitTimer?.Dispose();
         _limitTimer = null;
         _clickMonitor?.Dispose();
@@ -323,12 +467,15 @@ public sealed class VideoRecordingService : IVideoRecordingService
         }
 
         _outputPath = null;
+        _recordingTimeline = null;
+        _lastTimelineWebcamFrame = null;
         IsRecording = false;
     }
 
     private async Task StartWebcamOverlayAsync(CancellationToken cancellationToken)
     {
         _webcamOverlay = null;
+        _lastTimelineWebcamFrame = null;
         Interlocked.Exchange(ref _webcamCompositedFrames, 0);
         Interlocked.Exchange(ref _webcamOverlayNullFrames, 0);
         Interlocked.Exchange(ref _webcamNoFrameFrames, 0);
@@ -454,11 +601,30 @@ public sealed class VideoRecordingService : IVideoRecordingService
         _ => new BitmapSize { Width = 960, Height = 540 },
     };
 
+    private bool IsWebcamFrameReady(WebcamFrame frame, TimeSpan screenPts)
+    {
+        var timeline = _recordingTimeline;
+        if (timeline is null || frame.Timestamp == TimeSpan.Zero)
+        {
+            return true;
+        }
+
+        // A cached pre-origin frame is intentionally allowed at frame zero so an already-warmed
+        // camera is visible immediately. Never composite a frame from ahead of the screen clock.
+        var webcamPts = timeline.Normalize(frame.Timestamp);
+        return webcamPts <= TimeSpan.Zero || webcamPts <= screenPts;
+    }
+
+    private void OnMediaStreamSourceStarting(MediaStreamSource sender, MediaStreamSourceStartingEventArgs args)
+    {
+        args.Request.SetActualStartPosition(TimeSpan.Zero);
+    }
+
     private async void OnSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
     {
         if (_audioDescriptor is not null && ReferenceEquals(args.Request.StreamDescriptor, _audioDescriptor))
         {
-            HandleAudioRequest(args);
+            await HandleAudioRequestAsync(args).ConfigureAwait(false);
             return;
         }
 
@@ -495,7 +661,46 @@ public sealed class VideoRecordingService : IVideoRecordingService
         }
     }
 
-    private void HandleAudioRequest(MediaStreamSourceSampleRequestedEventArgs args)
+    private async Task HandleAudioRequestAsync(MediaStreamSourceSampleRequestedEventArgs args)
+    {
+        var deferral = args.Request.GetDeferral();
+        try
+        {
+            const int frameCount = AudioCaptureService.SampleRate / 50;
+
+            // Back-pressure: only hand the muxer a chunk once that many real frames have actually
+            // been captured. The audio source pads silence on demand (ReadFully), so without this
+            // the transcoder drains audio far faster than real time and the whole audio track
+            // races ~1s ahead of the video. Gating on captured-frame availability (not the wall
+            // clock) keeps audio locked to real capture progress AND never reads an empty buffer,
+            // so there is no silence-splicing crackle. A generous cap prevents a stalled capture
+            // from hanging the transcode pull.
+            var audio = _audio;
+            var waited = 0;
+            const int maxWaitMs = 2000;
+            const int pollMs = 4;
+            while (audio is not null &&
+                   !_audioEnding &&
+                   audio.AvailableFrames < frameCount &&
+                   waited < maxWaitMs)
+            {
+                await Task.Delay(pollMs).ConfigureAwait(false);
+                waited += pollMs;
+            }
+
+            FillAudioRequest(args, frameCount);
+        }
+        catch
+        {
+            args.Request.Sample = null;
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    private void FillAudioRequest(MediaStreamSourceSampleRequestedEventArgs args, int frameCount)
     {
         var audio = _audio;
         if (audio is null || _audioEnding)
@@ -505,8 +710,6 @@ public sealed class VideoRecordingService : IVideoRecordingService
             return;
         }
 
-        // ~20 ms of audio per chunk.
-        const int frameCount = AudioCaptureService.SampleRate / 50;
         var data = audio.ReadChunk(frameCount);
         if (data is null || data.Length == 0)
         {
@@ -519,17 +722,50 @@ public sealed class VideoRecordingService : IVideoRecordingService
         var duration = TimeSpan.FromTicks((long)(producedFrames * TimeSpan.TicksPerSecond / AudioCaptureService.SampleRate));
         _audioFramesRead += producedFrames;
 
+        _audioSamplesRequested++;
+        if (ContainsNonSilence(data))
+        {
+            _audioNonSilentChunks++;
+            if (!_loggedFirstAudioChunk)
+            {
+                _loggedFirstAudioChunk = true;
+                WebcamDiagnostics.Log($"Audio muxer received first NON-SILENT chunk after {_audioSamplesRequested} request(s) ({producedFrames} frames).");
+            }
+        }
+
+        if (_audioSamplesRequested % 250 == 0)
+        {
+            WebcamDiagnostics.Log($"Audio muxer progress: requests={_audioSamplesRequested} nonSilentChunks={_audioNonSilentChunks} framesRead={_audioFramesRead}.");
+        }
+
         var sample = MediaStreamSample.CreateFromBuffer(data.AsBuffer(), pts);
         sample.Duration = duration;
         args.Request.Sample = sample;
+    }
+
+    private static bool ContainsNonSilence(byte[] pcm16)
+    {
+        // Scan interleaved 16-bit PCM for any sample above a small noise floor.
+        for (var i = 0; i + 1 < pcm16.Length; i += 2)
+        {
+            var sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+            if (Math.Abs(sample) > 16)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void StartAudioCapture()
     {
         var wantSystem = _settings.RecordAudio;
         var wantMic = _settings.RecordMicrophone;
+        WebcamDiagnostics.Log($"StartAudioCapture: RecordAudio={wantSystem} RecordMicrophone={wantMic} micDeviceId='{(string.IsNullOrWhiteSpace(_settings.SelectedMicrophoneId) ? "(default)" : _settings.SelectedMicrophoneId)}'");
         if (!wantSystem && !wantMic)
         {
+            WebcamDiagnostics.Log("StartAudioCapture: no audio sources requested; recording will have no audio track.");
             return;
         }
 
@@ -539,17 +775,22 @@ public sealed class VideoRecordingService : IVideoRecordingService
             if (audio.TryStart())
             {
                 _audio = audio;
-                _audioDescriptor = new AudioStreamDescriptor(
-                    AudioEncodingProperties.CreatePcm(AudioCaptureService.SampleRate, AudioCaptureService.Channels, AudioCaptureService.BitsPerSample));
+                // The AudioStreamDescriptor itself is built per-MediaStreamSource in
+                // CreateMediaStreamSource; here we only record that audio is available.
+                _hasAudio = true;
+                WebcamDiagnostics.Log("StartAudioCapture: audio capture started; audio track will be muxed.");
             }
             else
             {
+                WebcamDiagnostics.Log("StartAudioCapture: AudioCaptureService.TryStart returned false; NO audio source started.");
                 audio.Dispose();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            WebcamDiagnostics.Log($"StartAudioCapture: exception starting audio capture: {ex.GetType().Name}: {ex.Message}");
             _audio = null;
+            _hasAudio = false;
             _audioDescriptor = null;
         }
     }
@@ -559,6 +800,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
         _audioEnding = true;
         _audio?.Dispose();
         _audio = null;
+        _hasAudio = false;
         _audioDescriptor = null;
     }
 
@@ -617,6 +859,9 @@ public sealed class VideoRecordingService : IVideoRecordingService
             _fileStream = null;
             _channel = null;
             _transcodeTask = null;
+            _recordingTimeline = null;
+            _lastTimelineWebcamFrame = null;
+            DetachMediaStreamSource();
 
             IsRecording = false;
             var path = _outputPath;

@@ -60,6 +60,7 @@ public partial class App : Application
         InitializeComponent();
         Services = new ServiceCollection()
             .AddTinyClipsCore()
+            .AddSingleton<IMediaDevicePermissionService, MediaDevicePermissionService>()
             .BuildServiceProvider();
 
         ApplyTheme();
@@ -459,7 +460,15 @@ public partial class App : Application
                 var monitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
                 var audioDevices = Services.GetRequiredService<IAudioDeviceService>();
                 var webcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-                return await RecordingSetupWindow.RunAsync(type, settings, audioDevices, webcamDevices, monitor, region);
+                var mediaPermissions = Services.GetRequiredService<IMediaDevicePermissionService>();
+                return await RecordingSetupWindow.RunAsync(
+                    type,
+                    settings,
+                    audioDevices,
+                    webcamDevices,
+                    mediaPermissions,
+                    monitor,
+                    region);
             }
             finally
             {
@@ -470,7 +479,15 @@ public partial class App : Application
         var setupMonitor = selection.Monitor ?? ResolveMonitorForTarget(selection.Target);
         var setupAudioDevices = Services.GetRequiredService<IAudioDeviceService>();
         var setupWebcamDevices = Services.GetRequiredService<IWebcamDeviceEnumerator>();
-        return await RecordingSetupWindow.RunAsync(type, settings, setupAudioDevices, setupWebcamDevices, setupMonitor, region);
+        var setupMediaPermissions = Services.GetRequiredService<IMediaDevicePermissionService>();
+        return await RecordingSetupWindow.RunAsync(
+            type,
+            settings,
+            setupAudioDevices,
+            setupWebcamDevices,
+            setupMediaPermissions,
+            setupMonitor,
+            region);
     }
 
     private static void ApplyRecordingSetup(CaptureType type, RecordingSetupResult setup, ICaptureSettings settings)

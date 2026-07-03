@@ -45,6 +45,7 @@ public sealed partial class RecordingSetupWindow : Window
     private readonly CaptureType _captureType;
     private readonly IAudioDeviceService _audioDevices;
     private readonly IWebcamDeviceEnumerator _webcamDevices;
+    private readonly IMediaDevicePermissionService _mediaPermissions;
     private readonly ObservableCollection<AudioInputDevice> _microphones = new();
     private readonly ObservableCollection<WebcamDeviceInfo> _webcams = new();
 
@@ -72,13 +73,15 @@ public sealed partial class RecordingSetupWindow : Window
         CaptureType captureType,
         ICaptureSettings settings,
         IAudioDeviceService audioDevices,
-        IWebcamDeviceEnumerator webcamDevices)
+        IWebcamDeviceEnumerator webcamDevices,
+        IMediaDevicePermissionService mediaPermissions)
     {
         InitializeComponent();
 
         _captureType = captureType;
         _audioDevices = audioDevices;
         _webcamDevices = webcamDevices;
+        _mediaPermissions = mediaPermissions;
         _recordSystemAudio = settings.RecordAudio;
         _recordMicrophone = settings.RecordMicrophone;
         _selectedMicrophoneId = settings.SelectedMicrophoneId ?? string.Empty;
@@ -107,10 +110,16 @@ public sealed partial class RecordingSetupWindow : Window
         ICaptureSettings settings,
         IAudioDeviceService audioDevices,
         IWebcamDeviceEnumerator webcamDevices,
+        IMediaDevicePermissionService mediaPermissions,
         MonitorInfo? monitor,
         PixelRect? regionInVirtualDesktop)
     {
-        var window = new RecordingSetupWindow(captureType, settings, audioDevices, webcamDevices);
+        var window = new RecordingSetupWindow(
+            captureType,
+            settings,
+            audioDevices,
+            webcamDevices,
+            mediaPermissions);
         window.ShowNear(monitor, regionInVirtualDesktop);
         if (captureType == CaptureType.Video)
         {
@@ -359,44 +368,88 @@ public sealed partial class RecordingSetupWindow : Window
         UpdateSystemAudioVisual();
     }
 
-    private void OnMicrophoneToggled(object sender, RoutedEventArgs e)
+    private async void OnMicrophoneToggled(object sender, RoutedEventArgs e)
     {
         if (_suppressEvents)
         {
             return;
         }
 
-        _recordMicrophone = MicrophoneToggle.IsChecked == true;
+        if (MicrophoneToggle.IsChecked == true && !_recordMicrophone)
+        {
+            MicrophoneToggle.IsEnabled = false;
+            _recordMicrophone = await _mediaPermissions.RequestMicrophoneAccessAsync();
+            if (_closed)
+            {
+                return;
+            }
+
+            MicrophoneToggle.IsEnabled = true;
+            SetMediaToggleStates();
+        }
+        else
+        {
+            _recordMicrophone = MicrophoneToggle.IsChecked == true;
+        }
+
         UpdateMicrophoneVisual();
         UpdateMicrophonePickerEnabled();
     }
 
-    private void OnWebcamToggled(object sender, RoutedEventArgs e)
+    private async void OnWebcamToggled(object sender, RoutedEventArgs e)
     {
         if (_suppressEvents)
         {
             return;
         }
 
-        _webcamEnabled = WebcamToggle.IsChecked == true;
-        if (_webcamEnabled)
+        if (WebcamToggle.IsChecked == true && !_webcamEnabled)
         {
-            _recordMicrophone = true;
-            _suppressEvents = true;
-            try
+            WebcamToggle.IsEnabled = false;
+            MicrophoneToggle.IsEnabled = false;
+
+            var isCameraAllowed = await _mediaPermissions.RequestCameraAccessAsync();
+            if (_closed)
             {
-                MicrophoneToggle.IsChecked = true;
+                return;
             }
-            finally
+
+            var isMicrophoneAllowed = await _mediaPermissions.RequestMicrophoneAccessAsync();
+            if (_closed)
             {
-                _suppressEvents = false;
+                return;
             }
+
+            _webcamEnabled = isCameraAllowed;
+            _recordMicrophone = isMicrophoneAllowed;
+            SetMediaToggleStates();
+
+            WebcamToggle.IsEnabled = true;
+            MicrophoneToggle.IsEnabled = true;
+        }
+        else
+        {
+            _webcamEnabled = WebcamToggle.IsChecked == true;
         }
 
         UpdateWebcamVisual();
         UpdateWebcamSettingsEnabled();
         UpdateMicrophoneVisual();
         UpdateMicrophonePickerEnabled();
+    }
+
+    private void SetMediaToggleStates()
+    {
+        _suppressEvents = true;
+        try
+        {
+            WebcamToggle.IsChecked = _webcamEnabled;
+            MicrophoneToggle.IsChecked = _recordMicrophone;
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
     }
 
     private void OnMouseClicksToggled(object sender, RoutedEventArgs e)

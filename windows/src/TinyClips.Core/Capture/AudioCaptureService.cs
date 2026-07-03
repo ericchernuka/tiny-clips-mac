@@ -21,10 +21,10 @@ public sealed class AudioCaptureService : IDisposable
     private readonly bool _captureMic;
     private readonly string? _micDeviceId;
     private readonly object _gate = new();
-    private readonly List<BufferedWaveProvider> _buffers = new();
+    private readonly List<TimelineAlignedWaveProvider> _buffers = new();
 
-    private WasapiLoopbackCapture? _loopback;
-    private WasapiCapture? _mic;
+    private TimestampedWasapiCapture? _loopback;
+    private TimestampedWasapiCapture? _mic;
     private MixingSampleProvider? _mixer;
     private IWaveProvider? _output;
     private bool _disposed;
@@ -72,31 +72,32 @@ public sealed class AudioCaptureService : IDisposable
 
     private void TryStartSource(bool isLoopback)
     {
+        var sourceName = isLoopback ? "system/loopback" : "microphone";
         try
         {
-            WasapiCapture capture = isLoopback
-                ? new WasapiLoopbackCapture()
-                : CreateMicCapture();
+            var capture = CreateCapture(isLoopback);
 
-            var buffer = new BufferedWaveProvider(capture.WaveFormat)
-            {
-                ReadFully = true,
-                DiscardOnBufferOverflow = true,
-                BufferDuration = TimeSpan.FromSeconds(5),
-            };
+            var buffer = new TimelineAlignedWaveProvider(capture.WaveFormat);
 
-            capture.DataAvailable += (_, e) =>
+            capture.DataAvailable += (data, count, sourceTimestamp) =>
             {
-                if (e.BytesRecorded > 0)
+                lock (_gate)
                 {
-                    buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                    if (!_disposed)
+                    {
+                        buffer.AddSamples(data, count, sourceTimestamp);
+                    }
                 }
             };
 
             var provider = ToStereo48k(buffer.ToSampleProvider());
             _mixer!.AddMixerInput(provider);
 
-            capture.StartRecording();
+            capture.Start();
+
+            // Now that the audio client is initialized, propagate its capture latency so the
+            // provider can advance recorded audio into sync with the video timeline.
+            buffer.Latency = capture.CaptureLatency;
 
             lock (_gate)
             {
@@ -105,7 +106,7 @@ public sealed class AudioCaptureService : IDisposable
 
             if (isLoopback)
             {
-                _loopback = (WasapiLoopbackCapture)capture;
+                _loopback = capture;
             }
             else
             {
@@ -113,23 +114,33 @@ public sealed class AudioCaptureService : IDisposable
             }
 
             IsActive = true;
+            WebcamDiagnostics.Log($"Audio source '{sourceName}' started: {capture.WaveFormat.SampleRate}Hz {capture.WaveFormat.Channels}ch {capture.WaveFormat.BitsPerSample}bit {capture.WaveFormat.Encoding}.");
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort: a missing/denied device simply means that source is skipped.
+            WebcamDiagnostics.Log($"Audio source '{sourceName}' failed to start: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
-    private WasapiCapture CreateMicCapture()
+    private TimestampedWasapiCapture CreateCapture(bool isLoopback)
     {
-        if (!string.IsNullOrEmpty(_micDeviceId))
+        using var enumerator = new MMDeviceEnumerator();
+        if (isLoopback)
         {
-            using var enumerator = new MMDeviceEnumerator();
-            var device = enumerator.GetDevice(_micDeviceId);
-            return new WasapiCapture(device);
+            var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            return new TimestampedWasapiCapture(device, isLoopback: true);
         }
 
-        return new WasapiCapture();
+        if (!string.IsNullOrEmpty(_micDeviceId))
+        {
+            var device = enumerator.GetDevice(_micDeviceId);
+            return new TimestampedWasapiCapture(device, isLoopback: false);
+        }
+
+        return new TimestampedWasapiCapture(
+            enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console),
+            isLoopback: false);
     }
 
     /// <summary>
@@ -156,6 +167,44 @@ public sealed class AudioCaptureService : IDisposable
         multiplexer.ConnectInputToOutput(0, 0);
         multiplexer.ConnectInputToOutput(1, 1);
         return multiplexer;
+    }
+
+    /// <summary>
+    /// The number of fully-captured, timeline-aligned output frames currently ready across all
+    /// active sources (the minimum, since the mixer advances every source in lockstep). Used to
+    /// pace the muxer to real capture progress so audio is never padded ahead of real time
+    /// (which would race the audio track ~1s ahead) nor read from an empty buffer (which splices
+    /// in silence and crackles).
+    /// </summary>
+    public int AvailableFrames
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (_disposed || _buffers.Count == 0)
+                {
+                    return 0;
+                }
+
+                var min = TimeSpan.MaxValue;
+                foreach (var buffer in _buffers)
+                {
+                    var buffered = buffer.BufferedDuration;
+                    if (buffered < min)
+                    {
+                        min = buffered;
+                    }
+                }
+
+                if (min == TimeSpan.MaxValue)
+                {
+                    return 0;
+                }
+
+                return (int)(min.TotalSeconds * SampleRate);
+            }
+        }
     }
 
     /// <summary>
@@ -189,11 +238,10 @@ public sealed class AudioCaptureService : IDisposable
     }
 
     /// <summary>
-    /// Discards any audio captured during pipeline warm-up so the next read lines up with the
-    /// moment video frame emission begins. This keeps the audio and video tracks in sync — the
-    /// device keeps running, only the already-buffered pre-roll is dropped.
+    /// Anchors every active source to the shared recording clock. Packets captured before the
+    /// origin are trimmed; sources that begin later retain their exact leading-silence offset.
     /// </summary>
-    public void FlushBuffers()
+    internal void BeginTimeline(RecordingTimeline timeline)
     {
         lock (_gate)
         {
@@ -204,7 +252,7 @@ public sealed class AudioCaptureService : IDisposable
 
             foreach (var buffer in _buffers)
             {
-                buffer.ClearBuffer();
+                buffer.BeginTimeline(timeline.Origin);
             }
         }
     }
@@ -213,7 +261,7 @@ public sealed class AudioCaptureService : IDisposable
     {
         try
         {
-            _loopback?.StopRecording();
+            _loopback?.Stop();
         }
         catch
         {
@@ -222,7 +270,7 @@ public sealed class AudioCaptureService : IDisposable
 
         try
         {
-            _mic?.StopRecording();
+            _mic?.Stop();
         }
         catch
         {

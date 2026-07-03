@@ -95,6 +95,9 @@ the elapsed time. Global hotkeys work app-wide.
 For coordinate/DPI behaviour across mixed-DPI monitors, see
 [`docs/dpi-and-coordinates.md`](docs/dpi-and-coordinates.md).
 
+For how the screen, webcam, microphone, and system audio are kept in sync (shared timeline,
+WASAPI capture, and audio back-pressure), see [`docs/audio-video-sync.md`](docs/audio-video-sync.md).
+
 ## CI
 
 `.github/workflows/windows-build.yml` builds `x64` + `ARM64` and runs the Core tests on
