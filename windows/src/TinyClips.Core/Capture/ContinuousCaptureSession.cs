@@ -37,12 +37,13 @@ internal sealed class ContinuousCaptureSession : IDisposable
     private ID3D11Texture2D? _stagingTexture;
     private ID3D11DeviceContext? _context;
 
-    private readonly Stopwatch _clock = new();
+    private RecordingTimeline? _timeline;
     private Timer? _pump;
     private byte[]? _latestPixels;
     private int _latestWidth;
     private int _latestHeight;
     private TimeSpan _lastEmittedPts = TimeSpan.MinValue;
+    private bool _loggedFirstEmit;
     private int _fullWidth;
     private int _fullHeight;
     private volatile bool _running;
@@ -113,7 +114,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
     /// starts cleanly at the real "recording started" moment instead of baking in capture /
     /// encoder / camera warm-up as dead pre-roll at the front of the clip.
     /// </summary>
-    public void BeginEmitting()
+    public void BeginEmitting(RecordingTimeline? timeline = null)
     {
         lock (_sync)
         {
@@ -122,11 +123,11 @@ internal sealed class ContinuousCaptureSession : IDisposable
                 return;
             }
 
-            // Anchor the presentation clock to the moment emission begins.
-            _clock.Restart();
+            _timeline = timeline ?? RecordingTimeline.StartNow();
+            _loggedFirstEmit = false;
 
             // Steady-rate pump: re-emits the latest captured frame even when WGC is idle.
-            _pump = new Timer(OnPump, null, _frameInterval, _frameInterval);
+            _pump = new Timer(OnPump, null, TimeSpan.Zero, _frameInterval);
         }
     }
 
@@ -215,9 +216,12 @@ internal sealed class ContinuousCaptureSession : IDisposable
             height = _latestHeight;
             copy = (byte[])_latestPixels.Clone();
 
-            // First emitted frame anchors the timeline at zero; subsequent frames use the
-            // real elapsed time so the encoded duration matches wall-clock (and the audio).
-            pts = _lastEmittedPts == TimeSpan.MinValue ? TimeSpan.Zero : _clock.Elapsed;
+            // Screen frames use the same QPC origin as webcam and audio.
+            pts = _timeline?.Elapsed ?? TimeSpan.Zero;
+            if (pts < TimeSpan.Zero)
+            {
+                pts = TimeSpan.Zero;
+            }
             if (_lastEmittedPts != TimeSpan.MinValue && pts <= _lastEmittedPts)
             {
                 pts = _lastEmittedPts + TimeSpan.FromTicks(1);
@@ -228,6 +232,12 @@ internal sealed class ContinuousCaptureSession : IDisposable
         finally
         {
             Monitor.Exit(_sync);
+        }
+
+        if (!_loggedFirstEmit)
+        {
+            _loggedFirstEmit = true;
+            WebcamDiagnostics.Log($"First screen frame emitted: ptsMs={pts.TotalMilliseconds:F1}.");
         }
 
         // Raise outside the lock so heavy per-frame compositing doesn't stall WGC delivery.
@@ -275,7 +285,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
         _running = false;
         _pump?.Dispose();
         _pump = null;
-        _clock.Stop();
+        _timeline = null;
         lock (_sync)
         {
             if (_framePool is not null)

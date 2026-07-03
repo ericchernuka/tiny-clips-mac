@@ -23,12 +23,17 @@ namespace TinyClips.App;
 
 public sealed partial class SettingsWindow : Window
 {
+    private readonly IMediaDevicePermissionService _mediaPermissions;
+    private bool _suppressMediaToggleEvents;
+    private bool _closed;
+
     public SettingsViewModel ViewModel { get; }
     public bool IsStoreBuild => BuildFlavor.IsStoreBuild;
     public bool IsDirectBuild => BuildFlavor.IsDirectBuild;
 
     public SettingsWindow()
     {
+        _mediaPermissions = App.Services.GetRequiredService<IMediaDevicePermissionService>();
         ViewModel = new SettingsViewModel(
             App.Services.GetRequiredService<ICaptureSettings>(),
             App.Services.GetRequiredService<IHotKeyService>(),
@@ -72,6 +77,7 @@ public sealed partial class SettingsWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        _closed = true;
         ViewModel.ThemeChanged -= ApplyTheme;
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         RootGrid.Loaded -= OnRootGridLoaded;
@@ -92,6 +98,81 @@ public sealed partial class SettingsWindow : Window
             e.PropertyName == nameof(SettingsViewModel.VideoMouseClickColorHex))
         {
             UpdateGifMouseClickPreview();
+        }
+    }
+
+    private async void OnRecordMicrophoneToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressMediaToggleEvents || sender is not ToggleSwitch toggle)
+        {
+            return;
+        }
+
+        if (!toggle.IsOn)
+        {
+            ViewModel.RecordMicrophone = false;
+            return;
+        }
+
+        if (ViewModel.RecordMicrophone)
+        {
+            return;
+        }
+
+        toggle.IsEnabled = false;
+        var isAllowed = await _mediaPermissions.RequestMicrophoneAccessAsync();
+        if (_closed)
+        {
+            return;
+        }
+
+        toggle.IsEnabled = true;
+
+        SetMediaToggleState(toggle, isAllowed);
+        ViewModel.RecordMicrophone = isAllowed;
+    }
+
+    private async void OnEnableWebcamToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressMediaToggleEvents || sender is not ToggleSwitch toggle)
+        {
+            return;
+        }
+
+        if (!toggle.IsOn)
+        {
+            ViewModel.WebcamEnabled = false;
+            return;
+        }
+
+        if (ViewModel.WebcamEnabled)
+        {
+            return;
+        }
+
+        toggle.IsEnabled = false;
+        var isAllowed = await _mediaPermissions.RequestCameraAccessAsync();
+        if (_closed)
+        {
+            return;
+        }
+
+        toggle.IsEnabled = true;
+
+        SetMediaToggleState(toggle, isAllowed);
+        ViewModel.WebcamEnabled = isAllowed;
+    }
+
+    private void SetMediaToggleState(ToggleSwitch toggle, bool isOn)
+    {
+        _suppressMediaToggleEvents = true;
+        try
+        {
+            toggle.IsOn = isOn;
+        }
+        finally
+        {
+            _suppressMediaToggleEvents = false;
         }
     }
 
