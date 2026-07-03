@@ -762,7 +762,7 @@ private struct ScreenshotEditorView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Corners: \(Int(viewModel.canvasCornerRadius)) px")
+                Text("Image corners: \(Int(viewModel.canvasCornerRadius)) px")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Slider(value: $viewModel.canvasCornerRadius, in: 0...60, step: 1)
@@ -1101,17 +1101,27 @@ private struct CanvasView: View {
                     .frame(width: imageSize.width, height: imageSize.height)
                     .position(x: containerSize.width / 2, y: containerSize.height / 2)
 
-                // Annotations layer
+                // Image annotations layer (clipped to the screenshot corners)
                 Canvas { context, size in
-                    for annotation in viewModel.annotations {
-                        let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
-                        drawAnnotation(annotation, in: context, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
-                    }
+                    context.drawLayer { layerContext in
+                        if viewModel.canvasCornerRadius > 0 {
+                            let clipPath = Path(
+                                roundedRect: CGRect(origin: origin, size: imageSize),
+                                cornerRadius: viewModel.canvasCornerRadius
+                            )
+                            layerContext.clip(to: clipPath)
+                        }
 
-                    // Draw in-progress annotation
-                    if let current = viewModel.currentAnnotation {
-                        let scaledRect = viewModel.scaledRect(current.rect, imageSize: imageSize, origin: origin)
-                        drawAnnotation(current, in: context, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
+                        for annotation in viewModel.annotations {
+                            let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
+                            drawAnnotation(annotation, in: layerContext, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
+                        }
+
+                        // Draw in-progress annotation
+                        if let current = viewModel.currentAnnotation {
+                            let scaledRect = viewModel.scaledRect(current.rect, imageSize: imageSize, origin: origin)
+                            drawAnnotation(current, in: layerContext, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
+                        }
                     }
 
                     // Draw crop overlay
@@ -1134,15 +1144,22 @@ private struct CanvasView: View {
                 .allowsHitTesting(false)
 
                 // Text annotations
-                ForEach(viewModel.annotations.filter { $0.tool == .text }) { annotation in
-                    let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
-                    Text(annotation.text)
-                        .font(textPreviewFont(family: annotation.fontFamily, size: annotation.fontSize, isBold: annotation.isBold))
-                        .italic(annotation.isItalic)
-                        .underline(annotation.isUnderlined)
-                        .foregroundColor(annotation.color)
-                        .position(x: scaledRect.midX, y: scaledRect.midY)
-                        .allowsHitTesting(false)
+                ZStack {
+                    ForEach(viewModel.annotations.filter { $0.tool == .text }) { annotation in
+                        let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
+                        Text(annotation.text)
+                            .font(textPreviewFont(family: annotation.fontFamily, size: annotation.fontSize, isBold: annotation.isBold))
+                            .italic(annotation.isItalic)
+                            .underline(annotation.isUnderlined)
+                            .foregroundColor(annotation.color)
+                            .position(x: scaledRect.midX, y: scaledRect.midY)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .mask {
+                    RoundedRectangle(cornerRadius: viewModel.canvasCornerRadius)
+                        .frame(width: imageSize.width, height: imageSize.height)
+                        .position(x: containerSize.width / 2, y: containerSize.height / 2)
                 }
 
                 // Inline text editing field
@@ -2343,6 +2360,25 @@ private class EditorViewModel: ObservableObject {
             }
         }
 
+        let imageRect = CGRect(
+            x: exportPadding,
+            y: exportPadding,
+            width: Int(cropPixelRect.width),
+            height: Int(cropPixelRect.height)
+        )
+        let imageCornerRadius = max(0, min(canvasCornerRadius, min(imageRect.width, imageRect.height) / 2))
+        if imageCornerRadius > 0 {
+            let imageClipPath = CGPath(
+                roundedRect: imageRect,
+                cornerWidth: imageCornerRadius,
+                cornerHeight: imageCornerRadius,
+                transform: nil
+            )
+            context.saveGState()
+            context.addPath(imageClipPath)
+            context.clip()
+        }
+
         // Draw the original image (cropped)
         let sourceCGImage = original.cgImage(forProposedRect: nil, context: nil, hints: nil)
         if let cgImage = sourceCGImage {
@@ -2353,12 +2389,6 @@ private class EditorViewModel: ObservableObject {
                 height: cropPixelRect.height
             )
             if let croppedCG = cgImage.cropping(to: cropCGRect) {
-                let imageRect = CGRect(
-                    x: exportPadding,
-                    y: exportPadding,
-                    width: Int(cropPixelRect.width),
-                    height: Int(cropPixelRect.height)
-                )
                 context.draw(croppedCG, in: imageRect)
             }
         }
@@ -2374,6 +2404,10 @@ private class EditorViewModel: ObservableObject {
                 contentOffset: CGPoint(x: exportPadding, y: exportPadding),
                 sourceCGImage: sourceCGImage
             )
+        }
+
+        if imageCornerRadius > 0 {
+            context.restoreGState()
         }
 
         return result

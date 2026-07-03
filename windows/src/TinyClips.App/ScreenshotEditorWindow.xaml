@@ -541,7 +541,7 @@
                                     x:Name="CornerSlider"
                                     AutomationProperties.AutomationId="EditorCornerSlider"
                                     AutomationProperties.Name="Corner radius"
-                                    Header="Corners"
+                                    Header="Image corners"
                                     Maximum="60"
                                     Minimum="0"
                                     StepFrequency="1"
