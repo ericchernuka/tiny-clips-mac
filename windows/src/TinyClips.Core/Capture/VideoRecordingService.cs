@@ -624,12 +624,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     {
         if (_audioDescriptor is not null && ReferenceEquals(args.Request.StreamDescriptor, _audioDescriptor))
         {
-            // Serve audio synchronously with no wall-clock gating. The MediaTranscoder interleaves
-            // audio against video, and video is paced by real screen capture, so audio demand is
-            // naturally bounded. Gating reads to the recording clock (as an earlier version did)
-            // forced reads at moments the mix buffer could be momentarily thin, splicing in silence.
-            const int frameCount = AudioCaptureService.SampleRate / 50;
-            FillAudioRequest(args, frameCount);
+            await HandleAudioRequestAsync(args).ConfigureAwait(false);
             return;
         }
 
@@ -655,6 +650,45 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             // Channel completed and drained -> signal end of stream.
             args.Request.Sample = null;
+        }
+        catch
+        {
+            args.Request.Sample = null;
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    private async Task HandleAudioRequestAsync(MediaStreamSourceSampleRequestedEventArgs args)
+    {
+        var deferral = args.Request.GetDeferral();
+        try
+        {
+            const int frameCount = AudioCaptureService.SampleRate / 50;
+
+            // Back-pressure: only hand the muxer a chunk once that many real frames have actually
+            // been captured. The audio source pads silence on demand (ReadFully), so without this
+            // the transcoder drains audio far faster than real time and the whole audio track
+            // races ~1s ahead of the video. Gating on captured-frame availability (not the wall
+            // clock) keeps audio locked to real capture progress AND never reads an empty buffer,
+            // so there is no silence-splicing crackle. A generous cap prevents a stalled capture
+            // from hanging the transcode pull.
+            var audio = _audio;
+            var waited = 0;
+            const int maxWaitMs = 2000;
+            const int pollMs = 4;
+            while (audio is not null &&
+                   !_audioEnding &&
+                   audio.AvailableFrames < frameCount &&
+                   waited < maxWaitMs)
+            {
+                await Task.Delay(pollMs).ConfigureAwait(false);
+                waited += pollMs;
+            }
+
+            FillAudioRequest(args, frameCount);
         }
         catch
         {

@@ -31,6 +31,9 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
 
     public WaveFormat WaveFormat { get; }
 
+    /// <summary>How much captured, timeline-aligned audio is currently buffered and ready to read.</summary>
+    public TimeSpan BufferedDuration => _timelineStarted && _aligned ? _buffer.BufferedDuration : TimeSpan.Zero;
+
     /// <summary>
     /// The source's capture latency. Audio is advanced by this amount during alignment so the
     /// recorded sound lines up with video captured at the same wall-clock instant.

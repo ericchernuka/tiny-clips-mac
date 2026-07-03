@@ -170,6 +170,44 @@ public sealed class AudioCaptureService : IDisposable
     }
 
     /// <summary>
+    /// The number of fully-captured, timeline-aligned output frames currently ready across all
+    /// active sources (the minimum, since the mixer advances every source in lockstep). Used to
+    /// pace the muxer to real capture progress so audio is never padded ahead of real time
+    /// (which would race the audio track ~1s ahead) nor read from an empty buffer (which splices
+    /// in silence and crackles).
+    /// </summary>
+    public int AvailableFrames
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (_disposed || _buffers.Count == 0)
+                {
+                    return 0;
+                }
+
+                var min = TimeSpan.MaxValue;
+                foreach (var buffer in _buffers)
+                {
+                    var buffered = buffer.BufferedDuration;
+                    if (buffered < min)
+                    {
+                        min = buffered;
+                    }
+                }
+
+                if (min == TimeSpan.MaxValue)
+                {
+                    return 0;
+                }
+
+                return (int)(min.TotalSeconds * SampleRate);
+            }
+        }
+    }
+
+    /// <summary>
     /// Reads up to <paramref name="frameCount"/> frames (samples per channel) of mixed audio
     /// as interleaved 16-bit stereo PCM. Returns a silence-padded full buffer while active.
     /// </summary>
