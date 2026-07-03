@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Improved
+- Screenshot editor background settings now apply the corner-radius control to the screenshot content itself (not just the background frame), so rounded image corners are reflected in both preview and exported files.
+
 ## v1.5.0-mac - 2026-06-30
 
 ### Changed

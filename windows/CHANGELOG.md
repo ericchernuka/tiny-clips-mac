@@ -15,6 +15,7 @@ own `CHANGELOG.md` at the repository root.
 - **Webcam-unavailable notification** - if the webcam can't start (for example camera access is blocked in Privacy settings) or is lost mid-recording, the app now shows a toast explaining why and that the screen recording continued without it, instead of silently dropping the overlay.
 
 ### Improved
+- **Screenshot editor background settings now round the screenshot content itself** — the Image corners control now explicitly clips the screenshot preview content to match the rounded-corner export behavior.
 - **Video/GIF recording now matches the macOS target-first setup flow** — after choosing Region,
   Screen, or Window, Windows now shows a pre-record panel before countdown. Video captures can pick
   system audio, microphone on/off, the microphone device defaulting to Settings, and mouse-click visuals;
