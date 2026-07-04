@@ -51,7 +51,7 @@ public sealed partial class CountdownWindow : Window
         // shown. Applying SetWindowRgn before the first present leaves the surface blank,
         // which is why the countdown stopped appearing.
         window.CenterOnMonitor(monitor);
-        window.AnimateFade(RootBorder, 1, 180).Begin();
+        window.AnimateFade(window.RootBorder, 1, 180).Begin();
         window.AnimateCountText(finalSecond: window._remaining == 1);
         window._timer.Start();
         return window._completed.Task;
