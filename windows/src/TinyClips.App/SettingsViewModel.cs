@@ -992,6 +992,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         var date = DateTime.Today.AddHours(hour);
         return date.ToString("h tt", CultureInfo.InvariantCulture);
     }
+
+    private static string FormatCount(int count, string singular, string? plural = null) =>
+        $"{count} {(count == 1 ? singular : plural ?? $"{singular}s")}";
 }
 
 public sealed class CaptureAnalyticsDayViewModel
