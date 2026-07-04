@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NAudio.Wave;
 using TinyClips.Core.Capture;
 
@@ -18,14 +19,18 @@ public sealed class RecordingTimelineTests
     [Fact]
     public void Normalize_SubtractsPausedDuration()
     {
-        var origin = TimeSpan.FromSeconds(42);
+        var origin = SystemRelativeNow();
         var timeline = RecordingTimeline.FromOrigin(origin);
 
         timeline.Pause();
-        Thread.Sleep(20);
+        Thread.Sleep(50);
         timeline.Resume();
 
-        Assert.True(timeline.Normalize(origin + TimeSpan.FromMilliseconds(100)) < TimeSpan.FromMilliseconds(100));
+        var sampleTimestamp = SystemRelativeNow() + TimeSpan.FromMilliseconds(100);
+        var rawElapsed = sampleTimestamp - origin;
+        var normalized = timeline.Normalize(sampleTimestamp);
+
+        Assert.InRange((rawElapsed - normalized).TotalMilliseconds, 20, 5000);
     }
 
     [Fact]
@@ -151,4 +156,7 @@ public sealed class RecordingTimelineTests
         Buffer.BlockCopy(bytes, 0, samples, 0, bytes.Length);
         return samples;
     }
+
+    private static TimeSpan SystemRelativeNow() =>
+        Stopwatch.GetElapsedTime(0, Stopwatch.GetTimestamp());
 }

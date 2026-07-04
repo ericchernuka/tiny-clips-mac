@@ -135,7 +135,13 @@ internal sealed class ContinuousCaptureSession : IDisposable
 
     public void PauseEmitting()
     {
-        _emittingPaused = true;
+        lock (_sync)
+        {
+            _emittingPaused = true;
+            _latestPixels = null;
+            _latestWidth = 0;
+            _latestHeight = 0;
+        }
     }
 
     public void ResumeEmitting()

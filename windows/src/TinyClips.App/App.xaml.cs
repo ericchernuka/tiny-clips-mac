@@ -812,11 +812,25 @@ public partial class App : Application
 
         if (video.IsRecording)
         {
+            if (video.IsPaused)
+            {
+                return;
+            }
+
             await video.PauseAsync();
         }
         else if (gif.IsRecording)
         {
+            if (gif.IsPaused)
+            {
+                return;
+            }
+
             await gif.PauseAsync();
+        }
+        else
+        {
+            return;
         }
 
         _recordingElapsedBeforePause += DateTime.UtcNow - _recordingStartedUtc;
@@ -832,11 +846,25 @@ public partial class App : Application
 
         if (video.IsRecording)
         {
+            if (!video.IsPaused)
+            {
+                return;
+            }
+
             await video.ResumeAsync();
         }
         else if (gif.IsRecording)
         {
+            if (!gif.IsPaused)
+            {
+                return;
+            }
+
             await gif.ResumeAsync();
+        }
+        else
+        {
+            return;
         }
 
         _recordingStartedUtc = DateTime.UtcNow;
