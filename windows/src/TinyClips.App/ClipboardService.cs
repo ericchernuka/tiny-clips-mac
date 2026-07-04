@@ -23,6 +23,14 @@ internal static class ClipboardService
         SetContent(package);
     }
 
+    public static Task CopyTextAsync(string text)
+    {
+        var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+        package.SetText(text);
+        SetContent(package);
+        return Task.CompletedTask;
+    }
+
     public static async Task CopyBitmapAsync(SoftwareBitmap bitmap)
     {
         using var stream = new InMemoryRandomAccessStream();

@@ -21,6 +21,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private readonly IMonitorService _monitors;
     private readonly IClipStorageService _storage;
     private readonly ICaptureSettings _settings;
+    private readonly IClipAnalyticsService _analytics;
     private readonly IWebcamCaptureService _webcamCapture;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -67,11 +68,13 @@ public sealed class VideoRecordingService : IVideoRecordingService
         IMonitorService monitors,
         IClipStorageService storage,
         ICaptureSettings settings,
+        IClipAnalyticsService analytics,
         IWebcamCaptureService webcamCapture)
     {
         _monitors = monitors;
         _storage = storage;
         _settings = settings;
+        _analytics = analytics;
         _webcamCapture = webcamCapture;
     }
 
@@ -865,6 +868,10 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             IsRecording = false;
             var path = _outputPath;
+            if (HasNonEmptyOutputFile(path))
+            {
+                _analytics.RecordCapture(CaptureType.Video);
+            }
             RecordingCompleted?.Invoke(this, path);
             return path;
         }
@@ -872,6 +879,24 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             Interlocked.Exchange(ref _stopping, 0);
             _gate.Release();
+        }
+    }
+
+    private static bool HasNonEmptyOutputFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var fileInfo = new FileInfo(path);
+            return fileInfo.Exists && fileInfo.Length > 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
         }
     }
 

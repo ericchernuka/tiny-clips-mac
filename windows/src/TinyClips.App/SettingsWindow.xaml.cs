@@ -40,7 +40,8 @@ public sealed partial class SettingsWindow : Window
             App.Services.GetRequiredService<ILaunchAtLoginService>(),
             App.Services.GetRequiredService<IAudioDeviceService>(),
             App.Services.GetRequiredService<IWebcamDeviceEnumerator>(),
-            App.Services.GetRequiredService<IClipStorageService>());
+            App.Services.GetRequiredService<IClipStorageService>(),
+            App.Services.GetRequiredService<IClipAnalyticsService>());
 
         InitializeComponent();
         ApplyBuildFlavorVisibility();
@@ -400,6 +401,7 @@ public sealed partial class SettingsWindow : Window
     private void ShowSettingsSection(string sectionTag)
     {
         GeneralSection.Visibility = sectionTag == "General" ? Visibility.Visible : Visibility.Collapsed;
+        AnalyticsSection.Visibility = sectionTag == "Analytics" ? Visibility.Visible : Visibility.Collapsed;
         ScreenshotSection.Visibility = sectionTag == "Screenshot" ? Visibility.Visible : Visibility.Collapsed;
         VideoSection.Visibility = sectionTag == "Video" ? Visibility.Visible : Visibility.Collapsed;
         GifSection.Visibility = sectionTag == "Gif" ? Visibility.Visible : Visibility.Collapsed;
@@ -407,6 +409,34 @@ public sealed partial class SettingsWindow : Window
         BrandingSection.Visibility = sectionTag == "Branding" ? Visibility.Visible : Visibility.Collapsed;
         HotkeysSection.Visibility = sectionTag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
         AboutSection.Visibility = sectionTag == "About" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void OnResetAnalytics(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Reset capture analytics?",
+            Content = "This clears all local screenshot, video, and GIF counts — including lifetime totals. This can't be undone.",
+            PrimaryButtonText = "Reset",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            ViewModel.ResetAnalytics();
+        }
+    }
+
+    private async void OnCopyAnalyticsSummary(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.CopyAnalyticsSummaryAsync();
+
+        var originalContent = CopyAnalyticsSummaryButton.Content;
+        CopyAnalyticsSummaryButton.Content = "Copied!";
+        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        CopyAnalyticsSummaryButton.Content = originalContent;
     }
 
     private void ApplyBuildFlavorVisibility()

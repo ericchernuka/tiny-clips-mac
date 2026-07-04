@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -28,6 +29,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IAudioDeviceService _audioDevices;
     private readonly IWebcamDeviceEnumerator _webcamDevices;
     private readonly IClipStorageService _storage;
+    private readonly IClipAnalyticsService _analytics;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _loading;
     private string _savedMicrophoneId = string.Empty;
@@ -50,7 +52,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         ILaunchAtLoginService launchAtLogin,
         IAudioDeviceService audioDevices,
         IWebcamDeviceEnumerator webcamDevices,
-        IClipStorageService storage)
+        IClipStorageService storage,
+        IClipAnalyticsService analytics)
     {
         _settings = settings;
         _hotKeys = hotKeys;
@@ -58,8 +61,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         _audioDevices = audioDevices;
         _webcamDevices = webcamDevices;
         _storage = storage;
+        _analytics = analytics;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         Load();
+        RefreshAnalytics();
         _ = LoadMicrophonesAsync();
         _ = LoadWebcamsAsync();
 
@@ -301,6 +306,64 @@ public sealed partial class SettingsViewModel : ObservableObject
     // Branding
     [ObservableProperty]
     private bool _showBrandingOverlay;
+
+    // Analytics
+    public System.Collections.ObjectModel.ObservableCollection<CaptureAnalyticsDayViewModel> AnalyticsDays { get; } = new();
+
+    [ObservableProperty]
+    private int _analyticsRangeIndex;
+
+    [ObservableProperty]
+    private int _analyticsScreenshotTotal;
+
+    [ObservableProperty]
+    private int _analyticsVideoTotal;
+
+    [ObservableProperty]
+    private int _analyticsGifTotal;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AnalyticsEmptyStateVisibility))]
+    private int _analyticsCaptureTotal;
+
+    public Microsoft.UI.Xaml.Visibility AnalyticsEmptyStateVisibility => AnalyticsCaptureTotal == 0
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    /// <summary>Whether the screenshot series is currently shown in the daily chart (does not affect totals).</summary>
+    [ObservableProperty]
+    private bool _showScreenshotsInChart = true;
+
+    [ObservableProperty]
+    private bool _showVideosInChart = true;
+
+    [ObservableProperty]
+    private bool _showGifsInChart = true;
+
+    // Lifetime totals (never pruned by the rolling day window)
+    [ObservableProperty]
+    private int _lifetimeScreenshotTotal;
+
+    [ObservableProperty]
+    private int _lifetimeVideoTotal;
+
+    [ObservableProperty]
+    private int _lifetimeGifTotal;
+
+    [ObservableProperty]
+    private int _lifetimeCaptureTotal;
+
+    // Insights: busiest weekday / most active hour
+    public System.Collections.ObjectModel.ObservableCollection<WeekdayBreakdownViewModel> WeekdayBreakdown { get; } = new();
+
+    public System.Collections.ObjectModel.ObservableCollection<HourBreakdownViewModel> HourlyBreakdown { get; } = new();
+
+    [ObservableProperty]
+    private string _busiestWeekdayLabel = "No captures yet for this range.";
+
+    [ObservableProperty]
+    private string _mostActiveHourLabel = "No captures yet.";
+
     public string ScreenshotHotKeyDisplay => _hotKeys.GetBinding(CaptureType.Screenshot).DisplayString;
 
     public string VideoHotKeyDisplay => _hotKeys.GetBinding(CaptureType.Video).DisplayString;
@@ -342,6 +405,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         Load();
+        RefreshAnalytics();
         _ready = true;
     }
 
@@ -758,6 +822,25 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnShowBrandingOverlayChanged(bool value) => Persist(() => _settings.ShowBrandingOverlay = value);
 
+    partial void OnAnalyticsRangeIndexChanged(int value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        RefreshAnalytics();
+    }
+
+    partial void OnShowScreenshotsInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowScreenshotsInChart = true);
+
+    partial void OnShowVideosInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowVideosInChart = true);
+
+    partial void OnShowGifsInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowGifsInChart = true);
+
     private void Persist(Action apply)
     {
         if (_loading || !_ready)
@@ -767,4 +850,247 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         apply();
     }
+
+    public void ResetAnalytics()
+    {
+        _analytics.Clear();
+        RefreshAnalytics();
+    }
+
+    /// <summary>Builds a shareable plain-text summary of capture activity for the selected range.</summary>
+    public string BuildAnalyticsSummaryText()
+    {
+        var rangeDays = AnalyticsRangeIndex == 1 ? 30 : 7;
+        var rangeLabel = AnalyticsRangeIndex == 1 ? "the last 30 days" : "the last 7 days";
+
+        var lines = new List<string>
+        {
+            $"📊 Tiny Clips capture activity — {rangeLabel}",
+            $"📸 {AnalyticsScreenshotTotal} screenshot{(AnalyticsScreenshotTotal == 1 ? string.Empty : "s")}",
+            $"🎥 {AnalyticsVideoTotal} video{(AnalyticsVideoTotal == 1 ? string.Empty : "s")}",
+            $"🎞️ {AnalyticsGifTotal} GIF{(AnalyticsGifTotal == 1 ? string.Empty : "s")}",
+        };
+
+        var busiestWeekday = _analytics.GetBusiestWeekday(rangeDays);
+        if (busiestWeekday is not null)
+        {
+            lines.Add($"Busiest day: {busiestWeekday.Weekday} ({FormatCount(busiestWeekday.Count, "capture")})");
+        }
+
+        var mostActiveHour = _analytics.GetMostActiveHour();
+        if (mostActiveHour is not null)
+        {
+            lines.Add($"Most active hour (all-time): {FormatHourLabel(mostActiveHour.Hour)}");
+        }
+
+        lines.Add($"Lifetime total: {FormatCount(LifetimeCaptureTotal, "capture")}");
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>Copies the current analytics summary text to the clipboard.</summary>
+    public Task CopyAnalyticsSummaryAsync() => ClipboardService.CopyTextAsync(BuildAnalyticsSummaryText());
+
+    private void RefreshAnalyticsChartOrKeepSeriesSelected(bool value, Action keepSeriesSelected)
+    {
+        if (!value && !ShowScreenshotsInChart && !ShowVideosInChart && !ShowGifsInChart)
+        {
+            keepSeriesSelected();
+            return;
+        }
+
+        RefreshAnalyticsChartOnly();
+    }
+
+    /// <summary>Re-renders just the chart bar heights/visibility for the active range
+    /// without updating totals, lifetime counts, or insight summaries.</summary>
+    private void RefreshAnalyticsChartOnly()
+    {
+        var rangeDays = AnalyticsRangeIndex == 1 ? 30 : 7;
+        ApplyChartDays(_analytics.GetDailyCounts(rangeDays), rangeDays);
+    }
+
+    private void RefreshAnalytics()
+    {
+        var rangeDays = AnalyticsRangeIndex == 1 ? 30 : 7;
+        var dailyCounts = _analytics.GetDailyCounts(rangeDays);
+
+        ApplyChartDays(dailyCounts, rangeDays);
+
+        AnalyticsScreenshotTotal = dailyCounts.Sum(day => day.ScreenshotCount);
+        AnalyticsVideoTotal = dailyCounts.Sum(day => day.VideoCount);
+        AnalyticsGifTotal = dailyCounts.Sum(day => day.GifCount);
+        AnalyticsCaptureTotal = AnalyticsScreenshotTotal + AnalyticsVideoTotal + AnalyticsGifTotal;
+
+        var lifetime = _analytics.GetLifetimeTotals();
+        LifetimeScreenshotTotal = lifetime.ScreenshotCount;
+        LifetimeVideoTotal = lifetime.VideoCount;
+        LifetimeGifTotal = lifetime.GifCount;
+        LifetimeCaptureTotal = lifetime.TotalCount;
+
+        RefreshInsights(rangeDays);
+    }
+
+    private void ApplyChartDays(IReadOnlyList<DailyCaptureAnalytics> dailyCounts, int rangeDays)
+    {
+        const double chartHeight = 160.0;
+
+        int VisibleCount(DailyCaptureAnalytics day) =>
+            (ShowScreenshotsInChart ? day.ScreenshotCount : 0) +
+            (ShowVideosInChart ? day.VideoCount : 0) +
+            (ShowGifsInChart ? day.GifCount : 0);
+
+        var maxTotal = Math.Max(1, dailyCounts.Count == 0 ? 0 : dailyCounts.Max(VisibleCount));
+
+        AnalyticsDays.Clear();
+        foreach (var day in dailyCounts)
+        {
+            AnalyticsDays.Add(new CaptureAnalyticsDayViewModel(
+                dateLabel: rangeDays == 7
+                    ? day.Date.ToString("ddd", CultureInfo.InvariantCulture)[..2]
+                    : day.Date.ToString("%d", CultureInfo.InvariantCulture),
+                fullDateLabel: day.Date.ToString("ddd, MMM d", CultureInfo.InvariantCulture),
+                screenshotCount: day.ScreenshotCount,
+                videoCount: day.VideoCount,
+                gifCount: day.GifCount,
+                screenshotHeight: ShowScreenshotsInChart ? chartHeight * day.ScreenshotCount / maxTotal : 0,
+                videoHeight: ShowVideosInChart ? chartHeight * day.VideoCount / maxTotal : 0,
+                gifHeight: ShowGifsInChart ? chartHeight * day.GifCount / maxTotal : 0));
+        }
+    }
+
+    private void RefreshInsights(int rangeDays)
+    {
+        const double breakdownHeight = 60.0;
+
+        var weekdayTotals = _analytics.GetWeekdayTotals(rangeDays);
+        var maxWeekdayCount = Math.Max(1, weekdayTotals.Count == 0 ? 0 : weekdayTotals.Max(w => w.Count));
+        var busiestWeekday = _analytics.GetBusiestWeekday(rangeDays);
+
+        WeekdayBreakdown.Clear();
+        foreach (var weekday in weekdayTotals)
+        {
+            WeekdayBreakdown.Add(new WeekdayBreakdownViewModel(
+                dayLabel: weekday.Weekday.ToString()[..3],
+                fullDayLabel: weekday.Weekday.ToString(),
+                count: weekday.Count,
+                height: breakdownHeight * weekday.Count / maxWeekdayCount,
+                isBusiest: busiestWeekday is not null && weekday.Weekday == busiestWeekday.Weekday));
+        }
+
+        BusiestWeekdayLabel = busiestWeekday is null
+            ? "No captures yet for this range."
+            : $"{busiestWeekday.Weekday} · {busiestWeekday.Count} capture{(busiestWeekday.Count == 1 ? string.Empty : "s")}";
+
+        var hourlyTotals = _analytics.GetHourlyTotals();
+        var maxHourCount = Math.Max(1, hourlyTotals.Count == 0 ? 0 : hourlyTotals.Max(h => h.Count));
+        var mostActiveHour = _analytics.GetMostActiveHour();
+
+        HourlyBreakdown.Clear();
+        foreach (var hour in hourlyTotals)
+        {
+            HourlyBreakdown.Add(new HourBreakdownViewModel(
+                hourLabel: FormatHourLabel(hour.Hour),
+                count: hour.Count,
+                height: breakdownHeight * hour.Count / maxHourCount,
+                isBusiest: mostActiveHour is not null && hour.Hour == mostActiveHour.Hour));
+        }
+
+        MostActiveHourLabel = mostActiveHour is null
+            ? "No captures yet."
+            : $"{FormatHourLabel(mostActiveHour.Hour)} · {mostActiveHour.Count} capture{(mostActiveHour.Count == 1 ? string.Empty : "s")}";
+    }
+
+    private static string FormatHourLabel(int hour)
+    {
+        var date = DateTime.Today.AddHours(hour);
+        return date.ToString("h tt", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatCount(int count, string singular, string? plural = null) =>
+        $"{count} {(count == 1 ? singular : plural ?? $"{singular}s")}";
+}
+
+public sealed class CaptureAnalyticsDayViewModel
+{
+    public CaptureAnalyticsDayViewModel(
+        string dateLabel,
+        string fullDateLabel,
+        int screenshotCount,
+        int videoCount,
+        int gifCount,
+        double screenshotHeight,
+        double videoHeight,
+        double gifHeight)
+    {
+        DateLabel = dateLabel;
+        FullDateLabel = fullDateLabel;
+        ScreenshotCount = screenshotCount;
+        VideoCount = videoCount;
+        GifCount = gifCount;
+        ScreenshotHeight = screenshotHeight;
+        VideoHeight = videoHeight;
+        GifHeight = gifHeight;
+    }
+
+    public string DateLabel { get; }
+    public string FullDateLabel { get; }
+    public int ScreenshotCount { get; }
+    public int VideoCount { get; }
+    public int GifCount { get; }
+    public double ScreenshotHeight { get; }
+    public double VideoHeight { get; }
+    public double GifHeight { get; }
+
+    public string AccessibilitySummary =>
+        $"{FullDateLabel}: {FormatCount(ScreenshotCount, "screenshot")}, {FormatCount(VideoCount, "video")}, {FormatCount(GifCount, "GIF", "GIFs")}.";
+
+    private static string FormatCount(int count, string singular, string? plural = null) =>
+        $"{count} {(count == 1 ? singular : plural ?? $"{singular}s")}";
+}
+
+/// <summary>A single day-of-week bar in the "busiest day" insights breakdown.</summary>
+public sealed class WeekdayBreakdownViewModel
+{
+    public WeekdayBreakdownViewModel(string dayLabel, string fullDayLabel, int count, double height, bool isBusiest)
+    {
+        DayLabel = dayLabel;
+        FullDayLabel = fullDayLabel;
+        Count = count;
+        Height = height;
+        IsBusiest = isBusiest;
+    }
+
+    public string DayLabel { get; }
+    public string FullDayLabel { get; }
+    public int Count { get; }
+    public double Height { get; }
+    public bool IsBusiest { get; }
+
+    /// <summary>Full opacity for the busiest bar, dimmed for all others.</summary>
+    public double BarOpacity => IsBusiest ? 1.0 : 0.35;
+
+    public string AccessibilitySummary => $"{FullDayLabel}: {Count} capture{(Count == 1 ? string.Empty : "s")}.";
+}
+
+/// <summary>A single hour-of-day bar in the "most active hour" insights breakdown (all-time).</summary>
+public sealed class HourBreakdownViewModel
+{
+    public HourBreakdownViewModel(string hourLabel, int count, double height, bool isBusiest)
+    {
+        HourLabel = hourLabel;
+        Count = count;
+        Height = height;
+        IsBusiest = isBusiest;
+    }
+
+    public string HourLabel { get; }
+    public int Count { get; }
+    public double Height { get; }
+    public bool IsBusiest { get; }
+
+    /// <summary>Full opacity for the busiest bar, dimmed for all others.</summary>
+    public double BarOpacity => IsBusiest ? 1.0 : 0.35;
+
+    public string AccessibilitySummary => $"{HourLabel}: {Count} capture{(Count == 1 ? string.Empty : "s")} all-time.";
 }

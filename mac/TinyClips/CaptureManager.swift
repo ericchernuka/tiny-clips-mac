@@ -274,6 +274,8 @@ class CaptureManager: ObservableObject {
                         return
                     }
 
+                    CaptureAnalyticsStore.shared.recordCapture(.screenshot)
+
                     if settings.showScreenshotEditor {
                         if shouldSaveImmediately {
                             SaveService.shared.handleSavedFile(url: url, type: .screenshot)
@@ -745,6 +747,7 @@ class CaptureManager: ObservableObject {
         }
 
         if let savedVideoURL {
+            CaptureAnalyticsStore.shared.recordCapture(.video)
             lastVideoRecordingArtifacts = VideoRecordingArtifacts(
                 screenRecordingURL: savedVideoURL,
                 webcamRecordingURL: savedWebcamURL
@@ -807,6 +810,7 @@ class CaptureManager: ObservableObject {
                     }
 
                     updateProcessingProgress(1.0, status: "Done")
+                    CaptureAnalyticsStore.shared.recordCapture(.gif)
                     showGifTrimmer(gifData: gifData, outputURL: url)
                 } else {
                     try await writer.stop(outputURL: url)
@@ -871,6 +875,7 @@ class CaptureManager: ObservableObject {
                     }
 
                     updateProcessingProgress(0.9, status: "Finalizing…")
+                    CaptureAnalyticsStore.shared.recordCapture(.gif)
                     SaveService.shared.handleSavedFile(url: url, type: .gif)
                     updateProcessingProgress(1.0, status: "Done")
                 }
