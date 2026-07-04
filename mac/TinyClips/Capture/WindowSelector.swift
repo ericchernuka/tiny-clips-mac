@@ -203,7 +203,7 @@ private class WindowSelectionView: NSView {
     override var acceptsFirstResponder: Bool { true }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        addCursorRect(bounds, cursor: WindowPickerCursor.camera)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -272,4 +272,55 @@ private class WindowSelectionView: NSView {
 private class WindowOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+// MARK: - Picker Cursor
+
+/// Builds a camera-styled cursor for the window picker overlay so the pointer
+/// signals that a click captures the highlighted window.
+enum WindowPickerCursor {
+    static let camera: NSCursor = makeCameraCursor()
+
+    private static func makeCameraCursor() -> NSCursor {
+        let config = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        guard let symbol = NSImage(systemSymbolName: "camera.fill", accessibilityDescription: "Capture window")?
+            .withSymbolConfiguration(config) else {
+            return .crosshair
+        }
+
+        let tinted = tint(symbol, with: .white)
+        let padding: CGFloat = 4
+        let canvasSize = NSSize(
+            width: tinted.size.width + padding * 2,
+            height: tinted.size.height + padding * 2
+        )
+
+        let cursorImage = NSImage(size: canvasSize)
+        cursorImage.lockFocus()
+
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.75)
+        shadow.shadowBlurRadius = 2
+        shadow.shadowOffset = .zero
+        shadow.set()
+
+        tinted.draw(
+            in: NSRect(x: padding, y: padding, width: tinted.size.width, height: tinted.size.height)
+        )
+        cursorImage.unlockFocus()
+
+        let hotSpot = NSPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+        return NSCursor(image: cursorImage, hotSpot: hotSpot)
+    }
+
+    private static func tint(_ image: NSImage, with color: NSColor) -> NSImage {
+        let result = NSImage(size: image.size)
+        result.lockFocus()
+        color.set()
+        let rect = NSRect(origin: .zero, size: image.size)
+        image.draw(in: rect)
+        rect.fill(using: .sourceAtop)
+        result.unlockFocus()
+        return result
+    }
 }
