@@ -383,7 +383,7 @@
                                            Width="10"
                                            Height="10"
                                            CornerRadius="5"
-                                           Background="#4F8CFF" />
+                                           Background="{ThemeResource AccentFillColorDefaultBrush}" />
                                        <CheckBox
                                            AutomationProperties.AutomationId="ShowScreenshotsInChartCheckBox"
                                            Content="Screenshots"
@@ -394,7 +394,7 @@
                                            Width="10"
                                            Height="10"
                                            CornerRadius="5"
-                                           Background="#FF6B6B" />
+                                           Background="{ThemeResource SystemFillColorCriticalBrush}" />
                                        <CheckBox
                                            AutomationProperties.AutomationId="ShowVideosInChartCheckBox"
                                            Content="Videos"
@@ -405,7 +405,7 @@
                                            Width="10"
                                            Height="10"
                                            CornerRadius="5"
-                                           Background="#34C759" />
+                                           Background="{ThemeResource SystemFillColorSuccessBrush}" />
                                        <CheckBox
                                            AutomationProperties.AutomationId="ShowGifsInChartCheckBox"
                                            Content="GIFs"
@@ -440,15 +440,15 @@
                                                            Spacing="0">
                                                            <Border
                                                                Height="{x:Bind GifHeight}"
-                                                               Background="#34C759"
+                                                               Background="{ThemeResource SystemFillColorSuccessBrush}"
                                                                CornerRadius="2,2,0,0" />
                                                            <Border
                                                                Height="{x:Bind VideoHeight}"
-                                                               Background="#FF6B6B"
+                                                               Background="{ThemeResource SystemFillColorCriticalBrush}"
                                                                CornerRadius="2,2,0,0" />
                                                            <Border
                                                                Height="{x:Bind ScreenshotHeight}"
-                                                               Background="#4F8CFF"
+                                                               Background="{ThemeResource AccentFillColorDefaultBrush}"
                                                                CornerRadius="2,2,0,0" />
                                                        </StackPanel>
                                                    </Grid>

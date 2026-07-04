@@ -888,8 +888,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Copies the current analytics summary text to the clipboard.</summary>
     public Task CopyAnalyticsSummaryAsync() => ClipboardService.CopyTextAsync(BuildAnalyticsSummaryText());
 
-    /// <summary>Re-renders just the chart bar heights/visibility from already-loaded daily counts,
-    /// without re-querying storage or touching totals/lifetime/insights data.</summary>
+    /// <summary>Re-renders just the chart bar heights/visibility for the active range
+    /// without updating totals, lifetime counts, or insight summaries.</summary>
     private void RefreshAnalyticsChartOnly()
     {
         var rangeDays = AnalyticsRangeIndex == 1 ? 30 : 7;
@@ -1026,7 +1026,10 @@ public sealed class CaptureAnalyticsDayViewModel
     public double GifHeight { get; }
 
     public string AccessibilitySummary =>
-        $"{FullDateLabel}: {ScreenshotCount} screenshots, {VideoCount} videos, {GifCount} GIFs.";
+        $"{FullDateLabel}: {FormatCount(ScreenshotCount, "screenshot")}, {FormatCount(VideoCount, "video")}, {FormatCount(GifCount, "GIF", "GIFs")}.";
+
+    private static string FormatCount(int count, string singular, string? plural = null) =>
+        $"{count} {(count == 1 ? singular : plural ?? $"{singular}s")}";
 }
 
 /// <summary>A single day-of-week bar in the "busiest day" insights breakdown.</summary>
@@ -1050,7 +1053,7 @@ public sealed class WeekdayBreakdownViewModel
     /// <summary>Full opacity for the busiest bar, dimmed for all others.</summary>
     public double BarOpacity => IsBusiest ? 1.0 : 0.35;
 
-    public string AccessibilitySummary => $"{FullDayLabel}: {Count} captures.";
+    public string AccessibilitySummary => $"{FullDayLabel}: {Count} capture{(Count == 1 ? string.Empty : "s")}.";
 }
 
 /// <summary>A single hour-of-day bar in the "most active hour" insights breakdown (all-time).</summary>
@@ -1072,6 +1075,5 @@ public sealed class HourBreakdownViewModel
     /// <summary>Full opacity for the busiest bar, dimmed for all others.</summary>
     public double BarOpacity => IsBusiest ? 1.0 : 0.35;
 
-    public string AccessibilitySummary => $"{HourLabel}: {Count} captures all-time.";
+    public string AccessibilitySummary => $"{HourLabel}: {Count} capture{(Count == 1 ? string.Empty : "s")} all-time.";
 }
-

@@ -325,7 +325,7 @@ private struct TypeToggleChip: View {
         .background(isOn ? color.opacity(0.18) : Color.gray.opacity(0.12), in: Capsule())
         .foregroundStyle(isOn ? color : .secondary)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
-        .accessibilityHint(isOn ? "Double-tap to hide \(title) from the chart." : "Double-tap to show \(title) in the chart.")
+        .accessibilityHint(isOn ? "Activate to hide \(title) from the chart." : "Activate to show \(title) in the chart.")
     }
 }
 
