@@ -135,7 +135,6 @@ final class CaptureAnalyticsStore: ObservableObject {
 
     func summaries(days: Int, referenceDate: Date = Date()) -> [DaySummary] {
         let clampedDays = max(1, min(Storage.retainedDays, days))
-        pruneIfNeeded(referenceDate: referenceDate)
         let startDate = calendar.date(byAdding: .day, value: -(clampedDays - 1), to: startOfDay(for: referenceDate)) ?? startOfDay(for: referenceDate)
 
         return (0..<clampedDays).compactMap { offset in
