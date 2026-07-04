@@ -489,8 +489,8 @@
 
                            <Border
                                Grid.Column="0"
-                               Background="#114F8CFF"
-                               BorderBrush="#334F8CFF"
+                               Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
                                BorderThickness="1"
                                CornerRadius="8"
                                Padding="12">
@@ -504,8 +504,8 @@
 
                            <Border
                                Grid.Column="1"
-                               Background="#11FF6B6B"
-                               BorderBrush="#33FF6B6B"
+                               Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                                BorderThickness="1"
                                CornerRadius="8"
                                Padding="12">
@@ -519,8 +519,8 @@
 
                            <Border
                                Grid.Column="2"
-                               Background="#1134C759"
-                               BorderBrush="#3334C759"
+                               Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
                                BorderThickness="1"
                                CornerRadius="8"
                                Padding="12">
@@ -549,8 +549,8 @@
 
                                    <Border
                                        Grid.Column="0"
-                                       Background="#114F8CFF"
-                                       BorderBrush="#334F8CFF"
+                                       Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
                                        BorderThickness="1"
                                        CornerRadius="8"
                                        Padding="12">
@@ -564,8 +564,8 @@
 
                                    <Border
                                        Grid.Column="1"
-                                       Background="#11FF6B6B"
-                                       BorderBrush="#33FF6B6B"
+                                       Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                                        BorderThickness="1"
                                        CornerRadius="8"
                                        Padding="12">
@@ -579,8 +579,8 @@
 
                                    <Border
                                        Grid.Column="2"
-                                       Background="#1134C759"
-                                       BorderBrush="#3334C759"
+                                       Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
                                        BorderThickness="1"
                                        CornerRadius="8"
                                        Padding="12">

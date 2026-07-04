@@ -871,7 +871,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         var busiestWeekday = _analytics.GetBusiestWeekday(rangeDays);
         if (busiestWeekday is not null)
         {
-            lines.Add($"Busiest day: {busiestWeekday.Weekday} ({busiestWeekday.Count} captures)");
+            lines.Add($"Busiest day: {busiestWeekday.Weekday} ({FormatCount(busiestWeekday.Count, "capture")})");
         }
 
         var mostActiveHour = _analytics.GetMostActiveHour();
@@ -880,7 +880,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             lines.Add($"Most active hour (all-time): {FormatHourLabel(mostActiveHour.Hour)}");
         }
 
-        lines.Add($"Lifetime total: {LifetimeCaptureTotal} captures");
+        lines.Add($"Lifetime total: {FormatCount(LifetimeCaptureTotal, "capture")}");
 
         return string.Join(Environment.NewLine, lines);
     }
