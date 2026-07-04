@@ -82,6 +82,7 @@ final class CaptureAnalyticsStore: ObservableObject {
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
         return formatter
     }()
 
@@ -214,9 +215,13 @@ final class CaptureAnalyticsStore: ObservableObject {
     @discardableResult
     private func pruneIfNeeded(referenceDate: Date) -> Bool {
         let earliestDay = calendar.date(byAdding: .day, value: -(Storage.retainedDays - 1), to: startOfDay(for: referenceDate)) ?? startOfDay(for: referenceDate)
-        let earliestKey = dayKey(for: earliestDay)
         let previousCount = history.count
-        history = history.filter { $0.key >= earliestKey }
+        history = history.filter { key, _ in
+            guard let date = formatter.date(from: key) else {
+                return false
+            }
+            return startOfDay(for: date) >= earliestDay
+        }
         return history.count != previousCount
     }
 
