@@ -1057,6 +1057,10 @@ private struct CanvasView: View {
             x: (containerSize.width - imageSize.width) / 2,
             y: (containerSize.height - imageSize.height) / 2
         )
+        let imageCornerRadius = min(
+            viewModel.canvasCornerRadius,
+            min(imageSize.width, imageSize.height) / 2
+        )
 
         ZStack(alignment: .topLeading) {
             // Checkered background for transparency
@@ -1067,13 +1071,12 @@ private struct CanvasView: View {
                 let backgroundHeight = imageSize.height + (viewModel.canvasPadding * 2)
 
                 if viewModel.backgroundStyle == .solid {
-                    RoundedRectangle(cornerRadius: viewModel.canvasCornerRadius)
+                    Rectangle()
                         .fill(viewModel.backgroundColor)
                         .frame(width: backgroundWidth, height: backgroundHeight)
-                        .shadow(color: .black.opacity(0.25), radius: viewModel.canvasShadowRadius)
                         .position(x: containerSize.width / 2, y: containerSize.height / 2)
                 } else if viewModel.backgroundStyle == .gradient {
-                    RoundedRectangle(cornerRadius: viewModel.canvasCornerRadius)
+                    Rectangle()
                         .fill(
                             LinearGradient(
                                 colors: [viewModel.backgroundColor, viewModel.backgroundSecondaryColor],
@@ -1082,48 +1085,54 @@ private struct CanvasView: View {
                             )
                         )
                         .frame(width: backgroundWidth, height: backgroundHeight)
-                        .shadow(color: .black.opacity(0.25), radius: viewModel.canvasShadowRadius)
                         .position(x: containerSize.width / 2, y: containerSize.height / 2)
                 } else if viewModel.backgroundStyle == .wallpaper, let wallpaperImage = viewModel.wallpaperImage {
                     Image(nsImage: wallpaperImage)
                         .resizable()
                         .scaledToFill()
                         .frame(width: backgroundWidth, height: backgroundHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: viewModel.canvasCornerRadius))
-                        .shadow(color: .black.opacity(0.25), radius: viewModel.canvasShadowRadius)
                         .position(x: containerSize.width / 2, y: containerSize.height / 2)
                 }
 
-                // Image
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: imageSize.width, height: imageSize.height)
-                    .position(x: containerSize.width / 2, y: containerSize.height / 2)
+                ZStack(alignment: .topLeading) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: imageSize.width, height: imageSize.height)
 
-                // Image annotations layer (clipped to the screenshot corners)
-                Canvas { context, size in
-                    context.drawLayer { layerContext in
-                        if viewModel.canvasCornerRadius > 0 {
-                            let clipPath = Path(
-                                roundedRect: CGRect(origin: origin, size: imageSize),
-                                cornerRadius: viewModel.canvasCornerRadius
-                            )
-                            layerContext.clip(to: clipPath)
-                        }
-
+                    // Image annotations layer
+                    Canvas { context, _ in
                         for annotation in viewModel.annotations {
-                            let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
-                            drawAnnotation(annotation, in: layerContext, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
+                            let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: .zero)
+                            drawAnnotation(annotation, in: context, scaledRect: scaledRect, imageSize: imageSize, origin: .zero, sourceImage: viewModel.originalImage)
                         }
 
                         // Draw in-progress annotation
                         if let current = viewModel.currentAnnotation {
-                            let scaledRect = viewModel.scaledRect(current.rect, imageSize: imageSize, origin: origin)
-                            drawAnnotation(current, in: layerContext, scaledRect: scaledRect, imageSize: imageSize, origin: origin, sourceImage: viewModel.originalImage)
+                            let scaledRect = viewModel.scaledRect(current.rect, imageSize: imageSize, origin: .zero)
+                            drawAnnotation(current, in: context, scaledRect: scaledRect, imageSize: imageSize, origin: .zero, sourceImage: viewModel.originalImage)
                         }
                     }
+                    .allowsHitTesting(false)
 
+                    // Text annotations
+                    ForEach(viewModel.annotations.filter { $0.tool == .text }) { annotation in
+                        let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: .zero)
+                        Text(annotation.text)
+                            .font(textPreviewFont(family: annotation.fontFamily, size: annotation.fontSize, isBold: annotation.isBold))
+                            .italic(annotation.isItalic)
+                            .underline(annotation.isUnderlined)
+                            .foregroundColor(annotation.color)
+                            .position(x: scaledRect.midX, y: scaledRect.midY)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .frame(width: imageSize.width, height: imageSize.height, alignment: .topLeading)
+                .clipShape(RoundedRectangle(cornerRadius: imageCornerRadius))
+                .shadow(color: .black.opacity(0.25), radius: viewModel.canvasShadowRadius)
+                .position(x: containerSize.width / 2, y: containerSize.height / 2)
+
+                Canvas { context, size in
                     // Draw crop overlay
                     if viewModel.selectedTool == .crop, let cropRect = viewModel.cropRect {
                         let scaled = viewModel.scaledRect(cropRect, imageSize: imageSize, origin: origin)
@@ -1142,25 +1151,6 @@ private struct CanvasView: View {
                     }
                 }
                 .allowsHitTesting(false)
-
-                // Text annotations
-                ZStack {
-                    ForEach(viewModel.annotations.filter { $0.tool == .text }) { annotation in
-                        let scaledRect = viewModel.scaledRect(annotation.rect, imageSize: imageSize, origin: origin)
-                        Text(annotation.text)
-                            .font(textPreviewFont(family: annotation.fontFamily, size: annotation.fontSize, isBold: annotation.isBold))
-                            .italic(annotation.isItalic)
-                            .underline(annotation.isUnderlined)
-                            .foregroundColor(annotation.color)
-                            .position(x: scaledRect.midX, y: scaledRect.midY)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .mask {
-                    RoundedRectangle(cornerRadius: viewModel.canvasCornerRadius)
-                        .frame(width: imageSize.width, height: imageSize.height)
-                        .position(x: containerSize.width / 2, y: containerSize.height / 2)
-                }
 
                 // Inline text editing field
                 if let textPos = viewModel.textEditPosition {
@@ -2331,27 +2321,12 @@ private class EditorViewModel: ObservableObject {
             let fullRect = CGRect(x: 0, y: 0, width: outputW, height: outputH)
             if backgroundStyle == .solid {
                 context.setFillColor(NSColor(backgroundColor).cgColor)
-                if canvasCornerRadius > 0 {
-                    let bgPath = CGPath(roundedRect: fullRect, cornerWidth: canvasCornerRadius, cornerHeight: canvasCornerRadius, transform: nil)
-                    context.addPath(bgPath)
-                    context.fillPath()
-                } else {
-                    context.fill(fullRect)
-                }
+                context.fill(fullRect)
             } else if backgroundStyle == .gradient {
                 let colors = [NSColor(backgroundColor).cgColor, NSColor(backgroundSecondaryColor).cgColor] as CFArray
                 let colorSpace = CGColorSpaceCreateDeviceRGB()
                 if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 1]) {
-                    if canvasCornerRadius > 0 {
-                        let bgPath = CGPath(roundedRect: fullRect, cornerWidth: canvasCornerRadius, cornerHeight: canvasCornerRadius, transform: nil)
-                        context.saveGState()
-                        context.addPath(bgPath)
-                        context.clip()
-                        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: outputH), end: CGPoint(x: outputW, y: 0), options: [])
-                        context.restoreGState()
-                    } else {
-                        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: outputH), end: CGPoint(x: outputW, y: 0), options: [])
-                    }
+                    context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: outputH), end: CGPoint(x: outputW, y: 0), options: [])
                 }
             } else if backgroundStyle == .wallpaper,
                       let wallpaperImage,
@@ -2367,20 +2342,33 @@ private class EditorViewModel: ObservableObject {
             height: Int(cropPixelRect.height)
         )
         let imageCornerRadius = max(0, min(canvasCornerRadius, min(imageRect.width, imageRect.height) / 2))
-        if imageCornerRadius > 0 {
-            let imageClipPath = CGPath(
-                roundedRect: imageRect,
-                cornerWidth: imageCornerRadius,
-                cornerHeight: imageCornerRadius,
-                transform: nil
+        let imageClipPath = CGPath(
+            roundedRect: imageRect,
+            cornerWidth: imageCornerRadius,
+            cornerHeight: imageCornerRadius,
+            transform: nil
+        )
+        let sourceCGImage = original.cgImage(forProposedRect: nil, context: nil, hints: nil)
+
+        // Draw the rounded screenshot card (image + annotations) inside a transparency
+        // layer so the drop shadow is cast from the card's real alpha. This keeps a
+        // window capture's transparent rounded corners transparent instead of filling
+        // them with a solid shadow color, matching the live preview.
+        context.saveGState()
+        if canvasShadowRadius > 0 {
+            context.setShadow(
+                offset: .zero,
+                blur: canvasShadowRadius,
+                color: NSColor.black.withAlphaComponent(0.25).cgColor
             )
-            context.saveGState()
-            context.addPath(imageClipPath)
-            context.clip()
         }
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+
+        context.saveGState()
+        context.addPath(imageClipPath)
+        context.clip()
 
         // Draw the original image (cropped)
-        let sourceCGImage = original.cgImage(forProposedRect: nil, context: nil, hints: nil)
         if let cgImage = sourceCGImage {
             let cropCGRect = CGRect(
                 x: cropPixelRect.origin.x,
@@ -2406,9 +2394,11 @@ private class EditorViewModel: ObservableObject {
             )
         }
 
-        if imageCornerRadius > 0 {
-            context.restoreGState()
-        }
+        // Remove the card clip before ending the layer so the shadow (applied on
+        // composite) is not clipped to the image bounds.
+        context.restoreGState()
+        context.endTransparencyLayer()
+        context.restoreGState()
 
         return result
     }
@@ -2620,13 +2610,7 @@ private class EditorViewModel: ObservableObject {
         )
 
         context.saveGState()
-        if canvasCornerRadius > 0 {
-            let path = CGPath(roundedRect: rect, cornerWidth: canvasCornerRadius, cornerHeight: canvasCornerRadius, transform: nil)
-            context.addPath(path)
-            context.clip()
-        } else {
-            context.clip(to: rect)
-        }
+        context.clip(to: rect)
         context.draw(image, in: drawRect)
         context.restoreGState()
     }
