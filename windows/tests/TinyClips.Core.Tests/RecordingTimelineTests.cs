@@ -16,6 +16,19 @@ public sealed class RecordingTimelineTests
     }
 
     [Fact]
+    public void Normalize_SubtractsPausedDuration()
+    {
+        var origin = TimeSpan.FromSeconds(42);
+        var timeline = RecordingTimeline.FromOrigin(origin);
+
+        timeline.Pause();
+        Thread.Sleep(20);
+        timeline.Resume();
+
+        Assert.True(timeline.Normalize(origin + TimeSpan.FromMilliseconds(100)) < TimeSpan.FromMilliseconds(100));
+    }
+
+    [Fact]
     public void AlignedProviders_PreserveDifferentSourceStartOffsets()
     {
         var format = new WaveFormat(1000, 16, 1);
@@ -105,6 +118,22 @@ public sealed class RecordingTimelineTests
         provider.AddSamples(ToBytes(1, 2, 3, 4, 5), 10, origin);
 
         Assert.Equal(new short[] { 4, 5 }, ReadSamples(provider, 2));
+    }
+
+    [Fact]
+    public void Pause_DropsSamplesUntilResume()
+    {
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format);
+        provider.BeginTimeline(origin);
+
+        provider.Pause();
+        provider.AddSamples(ToBytes(1, 2), 4, origin);
+        provider.Resume();
+        provider.AddSamples(ToBytes(3, 4), 4, origin + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(new short[] { 3, 4 }, ReadSamples(provider, 2));
     }
 
     private static byte[] ToBytes(params short[] samples)

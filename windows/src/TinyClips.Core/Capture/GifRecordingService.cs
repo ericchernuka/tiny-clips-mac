@@ -46,6 +46,8 @@ public sealed class GifRecordingService : IGifRecordingService
 
     public bool IsRecording { get; private set; }
 
+    public bool IsPaused { get; private set; }
+
     public event EventHandler<string?>? RecordingCompleted;
 
     public async Task StartAsync(CaptureTarget? target = null, PixelRect? region = null, CancellationToken cancellationToken = default)
@@ -83,6 +85,11 @@ public sealed class GifRecordingService : IGifRecordingService
 
     private void OnFrameReady(CapturedFrame frame, TimeSpan pts)
     {
+        if (IsPaused)
+        {
+            return;
+        }
+
         if (_clickMonitor is { } monitor)
         {
             MouseClickOverlayCompositor.Draw(
@@ -128,7 +135,52 @@ public sealed class GifRecordingService : IGifRecordingService
         _clickMonitor.Start();
     }
 
-    public async Task<string?> StopAsync()
+    public Task<string?> StopAsync() => StopAsync(discard: false);
+
+    public async Task PauseAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || IsPaused)
+            {
+                return;
+            }
+
+            _capture?.PauseEmitting();
+            IsPaused = true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task ResumeAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || !IsPaused)
+            {
+                return;
+            }
+
+            _capture?.ResumeEmitting();
+            IsPaused = false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task CancelAsync()
+    {
+        await StopAsync(discard: true).ConfigureAwait(false);
+    }
+
+    private async Task<string?> StopAsync(bool discard)
     {
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
@@ -147,6 +199,7 @@ public sealed class GifRecordingService : IGifRecordingService
             _clickMonitor?.Dispose();
             _clickMonitor = null;
             _branding = null;
+            IsPaused = false;
 
             List<CapturedFrame> frames;
             lock (_frameLock)
@@ -158,6 +211,11 @@ public sealed class GifRecordingService : IGifRecordingService
             _capture?.Dispose();
             _capture = null;
             IsRecording = false;
+
+            if (discard)
+            {
+                return null;
+            }
 
             if (frames.Count == 0)
             {

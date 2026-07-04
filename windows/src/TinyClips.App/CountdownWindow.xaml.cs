@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media.Animation;
 using TinyClips.Core.Capture;
 using Windows.Graphics;
 using WinRT.Interop;
@@ -31,6 +32,7 @@ public sealed partial class CountdownWindow : Window
 
         _remaining = Math.Max(1, seconds);
         CountText.Text = _remaining.ToString();
+        RootBorder.Opacity = 0;
 
         ConfigurePresenter();
 
@@ -49,6 +51,8 @@ public sealed partial class CountdownWindow : Window
         // shown. Applying SetWindowRgn before the first present leaves the surface blank,
         // which is why the countdown stopped appearing.
         window.CenterOnMonitor(monitor);
+        window.AnimateFade(RootBorder, 1, 180).Begin();
+        window.AnimateCountText(finalSecond: window._remaining == 1);
         window._timer.Start();
         return window._completed.Task;
     }
@@ -63,6 +67,7 @@ public sealed partial class CountdownWindow : Window
 
             // Hide immediately so the window is gone from the very first recorded frame,
             // then give the compositor a beat before signalling completion.
+            await AnimateFadeAsync(RootBorder, 0, 140);
             AppWindow.Hide();
             await Task.Delay(80);
             _completed.TrySetResult();
@@ -70,7 +75,51 @@ public sealed partial class CountdownWindow : Window
             return;
         }
 
+        AnimateCountText(finalSecond: _remaining == 1);
+    }
+
+    private void AnimateCountText(bool finalSecond)
+    {
         CountText.Text = _remaining.ToString();
+        CountText.FontSize = finalSecond ? 78 : 64;
+        CountText.Opacity = 0;
+        CountScale.ScaleX = finalSecond ? 1.35 : 1.18;
+        CountScale.ScaleY = finalSecond ? 1.35 : 1.18;
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(CreateAnimation(CountText, "Opacity", 1, 220));
+        storyboard.Children.Add(CreateAnimation(CountScale, "ScaleX", 1, finalSecond ? 320 : 220));
+        storyboard.Children.Add(CreateAnimation(CountScale, "ScaleY", 1, finalSecond ? 320 : 220));
+        storyboard.Begin();
+    }
+
+    private Task AnimateFadeAsync(UIElement target, double to, int milliseconds)
+    {
+        var completion = new TaskCompletionSource();
+        var storyboard = AnimateFade(target, to, milliseconds);
+        storyboard.Completed += (_, _) => completion.TrySetResult();
+        storyboard.Begin();
+        return completion.Task;
+    }
+
+    private Storyboard AnimateFade(UIElement target, double to, int milliseconds)
+    {
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(CreateAnimation(target, "Opacity", to, milliseconds));
+        return storyboard;
+    }
+
+    private static DoubleAnimation CreateAnimation(DependencyObject target, string property, double to, int milliseconds)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = TimeSpan.FromMilliseconds(milliseconds),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        return animation;
     }
 
     private void ConfigurePresenter()

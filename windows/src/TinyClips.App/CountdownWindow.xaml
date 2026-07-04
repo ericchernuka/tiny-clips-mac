@@ -18,10 +18,16 @@
             x:Name="CountText"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
+            AutomationProperties.Name="Countdown"
             AutomationProperties.LiveSetting="Assertive"
             FontSize="64"
             FontWeight="SemiBold"
             Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-            Text="3" />
+            RenderTransformOrigin="0.5,0.5"
+            Text="3">
+            <TextBlock.RenderTransform>
+                <ScaleTransform x:Name="CountScale" ScaleX="1" ScaleY="1" />
+            </TextBlock.RenderTransform>
+        </TextBlock>
     </Border>
 </Window>

@@ -53,15 +53,48 @@
                         Text="Stop from tray" />
                 </StackPanel>
 
-                <Button
-                    x:Name="StopButton"
+                <StackPanel
                     Grid.Column="2"
-                    AutomationProperties.AutomationId="StopRecordingButton"
-                    AutomationProperties.Name="Stop recording"
-                    Click="OnStopClick"
-                    Content="Stop"
-                    Style="{StaticResource AccentButtonStyle}"
-                    ToolTipService.ToolTip="Stop recording" />
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <Button
+                        x:Name="PauseButton"
+                        AutomationProperties.AutomationId="PauseRecordingButton"
+                        AutomationProperties.Name="Pause recording"
+                        Click="OnPauseClick"
+                        Content="Pause"
+                        ToolTipService.ToolTip="Pause recording" />
+                    <Button
+                        x:Name="ResumeButton"
+                        AutomationProperties.AutomationId="ResumeRecordingButton"
+                        AutomationProperties.Name="Resume recording"
+                        Click="OnResumeClick"
+                        Content="Resume"
+                        ToolTipService.ToolTip="Resume recording"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="RestartButton"
+                        AutomationProperties.AutomationId="RestartRecordingButton"
+                        AutomationProperties.Name="Restart recording"
+                        Click="OnRestartClick"
+                        Content="Restart"
+                        ToolTipService.ToolTip="Discard this take and immediately start over" />
+                    <Button
+                        x:Name="DiscardButton"
+                        AutomationProperties.AutomationId="DiscardRecordingButton"
+                        AutomationProperties.Name="Discard recording"
+                        Click="OnDiscardClick"
+                        Content="Discard"
+                        ToolTipService.ToolTip="Discard recording" />
+                    <Button
+                        x:Name="StopButton"
+                        AutomationProperties.AutomationId="StopRecordingButton"
+                        AutomationProperties.Name="Stop recording"
+                        Click="OnStopClick"
+                        Content="Stop"
+                        Style="{StaticResource AccentButtonStyle}"
+                        ToolTipService.ToolTip="Stop recording" />
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

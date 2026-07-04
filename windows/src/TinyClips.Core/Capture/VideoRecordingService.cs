@@ -77,6 +77,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     public bool IsRecording { get; private set; }
 
+    public bool IsPaused { get; private set; }
+
     public event EventHandler<string?>? RecordingCompleted;
 
     public event EventHandler<string>? WebcamCaptureFailed;
@@ -222,6 +224,11 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     private void OnFrameReady(CapturedFrame frame, TimeSpan pts)
     {
+        if (IsPaused)
+        {
+            return;
+        }
+
         DrawClickOverlay(frame, pts);
         _branding?.Draw(frame.BgraPixels, frame.Width, frame.Height);
 
@@ -805,11 +812,63 @@ public sealed class VideoRecordingService : IVideoRecordingService
     }
 
 
-    public async Task<string?> StopAsync()
+    public Task<string?> StopAsync() => StopAsync(discard: false);
+
+    public async Task PauseAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || IsPaused)
+            {
+                return;
+            }
+
+            _recordingTimeline?.Pause();
+            _capture?.PauseEmitting();
+            _audio?.Pause();
+            IsPaused = true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task ResumeAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || !IsPaused)
+            {
+                return;
+            }
+
+            _recordingTimeline?.Resume();
+            if (_recordingTimeline is { } timeline)
+            {
+                _audio?.Resume(timeline);
+            }
+            _capture?.ResumeEmitting();
+            IsPaused = false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task CancelAsync()
+    {
+        await StopAsync(discard: true).ConfigureAwait(false);
+    }
+
+    private async Task<string?> StopAsync(bool discard)
     {
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
-            return _outputPath;
+            return discard ? null : _outputPath;
         }
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -822,6 +881,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             _limitTimer?.Dispose();
             _limitTimer = null;
+            IsPaused = false;
 
             _clickMonitor?.Dispose();
             _clickMonitor = null;
@@ -865,7 +925,25 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             IsRecording = false;
             var path = _outputPath;
-            RecordingCompleted?.Invoke(this, path);
+            if (discard && !string.IsNullOrEmpty(path))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch
+                {
+                    // Best-effort cleanup of discarded output.
+                }
+
+                path = null;
+            }
+            else
+            {
+                RecordingCompleted?.Invoke(this, path);
+            }
+
+            _outputPath = path;
             return path;
         }
         finally

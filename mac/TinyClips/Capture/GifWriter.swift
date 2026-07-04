@@ -9,6 +9,7 @@ class GifWriter: NSObject, @unchecked Sendable {
     private var frames: [CGImage] = []
     private var frameDelay: Double = 0.1
     private var maxWidth: CGFloat = 640
+    private var isPaused = false
     private let processingQueue = DispatchQueue(label: "com.tinyclips.gif-processing")
     private let ciContext = CIContext()
 
@@ -59,6 +60,27 @@ class GifWriter: NSObject, @unchecked Sendable {
         let capturedFrames = processingQueue.sync { self.frames }
         guard !capturedFrames.isEmpty else {
             throw CaptureError.noFrames
+        }
+
+        func pause() {
+            processingQueue.async {
+                self.isPaused = true
+            }
+        }
+
+        func resume() {
+            processingQueue.async {
+                self.isPaused = false
+            }
+        }
+
+        func cancel() async {
+            try? await stream?.stopCapture()
+            stream = nil
+            processingQueue.sync {
+                frames.removeAll()
+                isPaused = false
+            }
         }
 
         return GifCaptureData(frames: capturedFrames, frameDelay: frameDelay, maxWidth: maxWidth)
@@ -137,6 +159,7 @@ extension GifWriter: SCStreamOutput {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
 
+        guard !isPaused else { return }
         frames.append(cgImage)
     }
 }

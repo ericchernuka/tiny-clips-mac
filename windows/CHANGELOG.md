@@ -6,6 +6,7 @@ own `CHANGELOG.md` at the repository root.
 ## [Unreleased]
 
 ### Added
+- **Richer in-progress recording controls** - the Windows recording overlay now supports pause, resume, restart, discard, and stop while keeping the panel out of captured output.
 - **Remove audio export option for video trimming** - the Windows video trimmer now offers a clear Remove audio checkbox and renders no-audio exports when enabled.
 - **Webcam picture-in-picture overlay for video recordings** - added webcam controls in Settings (enable, device, shape, corner, size, rounded-corner value) and integrated webcam compositing into recorded video frames.
 - **Video encoder profile is now selectable in Settings** - choose between **High** (default; B-frames + CABAC for the best quality and smallest files) and **Baseline** (no B-frames, for maximum player compatibility) under Settings → Video → Encoder profile.
@@ -16,6 +17,7 @@ own `CHANGELOG.md` at the repository root.
 - **Webcam-unavailable notification** - if the webcam can't start (for example camera access is blocked in Privacy settings) or is lost mid-recording, the app now shows a toast explaining why and that the screen recording continued without it, instead of silently dropping the overlay.
 
 ### Improved
+- **Countdown animation polish** - the Windows countdown overlay now fades in/out, animates each number, and gives the final second stronger emphasis while remaining excluded from capture.
 - **Screenshot editor background settings now round the screenshot content itself** — the Image corners control now explicitly clips the screenshot preview content to match the rounded-corner export behavior.
 - **Video/GIF recording now matches the macOS target-first setup flow** — after choosing Region,
   Screen, or Window, Windows now shows a pre-record panel before countdown. Video captures can pick

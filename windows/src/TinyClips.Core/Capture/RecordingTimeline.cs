@@ -8,6 +8,10 @@ namespace TinyClips.Core.Capture;
 /// </summary>
 internal sealed class RecordingTimeline
 {
+    private readonly object _gate = new();
+    private TimeSpan _pausedDuration;
+    private TimeSpan? _pauseStartedAt;
+
     private RecordingTimeline(TimeSpan origin)
     {
         Origin = origin;
@@ -21,7 +25,50 @@ internal sealed class RecordingTimeline
 
     internal static RecordingTimeline FromOrigin(TimeSpan origin) => new(origin);
 
-    public TimeSpan Normalize(TimeSpan sourceTimestamp) => sourceTimestamp - Origin;
+    public bool IsPaused
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _pauseStartedAt is not null;
+            }
+        }
+    }
+
+    public void Pause()
+    {
+        lock (_gate)
+        {
+            _pauseStartedAt ??= GetSystemRelativeTime();
+        }
+    }
+
+    public void Resume()
+    {
+        lock (_gate)
+        {
+            if (_pauseStartedAt is { } pausedAt)
+            {
+                _pausedDuration += GetSystemRelativeTime() - pausedAt;
+                _pauseStartedAt = null;
+            }
+        }
+    }
+
+    public TimeSpan Normalize(TimeSpan sourceTimestamp)
+    {
+        lock (_gate)
+        {
+            var paused = _pausedDuration;
+            if (_pauseStartedAt is { } pausedAt)
+            {
+                paused += sourceTimestamp > pausedAt ? sourceTimestamp - pausedAt : TimeSpan.Zero;
+            }
+
+            return sourceTimestamp - Origin - paused;
+        }
+    }
 
     private static TimeSpan GetSystemRelativeTime() =>
         Stopwatch.GetElapsedTime(0, Stopwatch.GetTimestamp());
