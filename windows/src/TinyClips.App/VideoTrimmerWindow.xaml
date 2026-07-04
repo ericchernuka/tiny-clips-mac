@@ -168,7 +168,7 @@
                 Grid.Column="0"
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
-                Spacing="8">
+                Spacing="12">
                 <TextBlock
                     VerticalAlignment="Center"
                     Style="{StaticResource BodyStrongTextBlockStyle}"
@@ -194,6 +194,13 @@
                     <ComboBoxItem Content="4x" Tag="4" />
                     <ComboBoxItem Content="5x" Tag="5" />
                 </ComboBox>
+                <CheckBox
+                    x:Name="RemoveAudioCheck"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="VideoRemoveAudioCheck"
+                    AutomationProperties.Name="Remove audio from export"
+                    Content="Remove audio"
+                    ToolTipService.ToolTip="Remove the audio track from the exported video." />
             </StackPanel>
 
             <StackPanel
@@ -207,8 +214,9 @@
                     Click="OnDone"
                     Content="Cancel" />
                 <Button
+                    x:Name="SaveOriginalButton"
                     AutomationProperties.AutomationId="VideoSaveOriginalButton"
-                    Click="OnDone"
+                    Click="OnSaveOriginal"
                     Content="Keep original" />
                 <Button
                     x:Name="SaveTrimmedButton"

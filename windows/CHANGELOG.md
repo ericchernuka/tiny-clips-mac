@@ -8,6 +8,7 @@ own `CHANGELOG.md` at the repository root.
 ### Added
 - **Capture analytics in Settings** - Tiny Clips for Windows now tracks screenshots, videos, and GIFs taken per day on the local device, shows the last 7 or 30 days in a stacked chart under Settings → Analytics, and lets you reset that history.
 - **Extended capture analytics** - added lifetime (all-time) totals per capture type, per-type checkboxes to show/hide screenshots/videos/GIFs on the chart, hover tooltips with exact daily counts, a "busiest day of week" and "most active hour" insights breakdown, and a Copy Summary button that puts a quick text summary of your capture activity on the clipboard.
+- **Remove audio export option for video trimming** - the Windows video trimmer now offers a clear Remove audio checkbox and renders no-audio exports when enabled.
 - **Webcam picture-in-picture overlay for video recordings** - added webcam controls in Settings (enable, device, shape, corner, size, rounded-corner value) and integrated webcam compositing into recorded video frames.
 - **Video encoder profile is now selectable in Settings** - choose between **High** (default; B-frames + CABAC for the best quality and smallest files) and **Baseline** (no B-frames, for maximum player compatibility) under Settings → Video → Encoder profile.
 - **Webcam capture pipeline in Core** - added `MediaCapture` + `MediaFrameReader` based webcam capture service and overlay compositor support in `VideoRecordingService`.
