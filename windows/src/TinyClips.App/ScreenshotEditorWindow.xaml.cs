@@ -1414,26 +1414,7 @@ public sealed partial class ScreenshotEditorWindow : Window
         ImageCard.Height = imgH * scale;
         var scaledCornerRadius = Math.Min(_canvasCornerRadius * scale, Math.Min(ImageCard.Width, ImageCard.Height) / 2.0);
         ImageCard.CornerRadius = new CornerRadius(scaledCornerRadius);
-        PreviewImage.Clip = scaledCornerRadius > 0
-            ? CreateRoundedRectGeometry(ImageCard.Width, ImageCard.Height, scaledCornerRadius)
-            : null;
         ImageCard.Translation = new Vector3(0, 0, (float)(_canvasShadow > 0 ? Math.Max(8, _canvasShadow) : 0));
-    }
-
-    private static PathGeometry CreateRoundedRectGeometry(double w, double h, double r)
-    {
-        var figure = new PathFigure { IsClosed = true, StartPoint = new Point(r, 0) };
-        figure.Segments.Add(new LineSegment { Point = new Point(w - r, 0) });
-        figure.Segments.Add(new QuadraticBezierSegment { Point1 = new Point(w, 0), Point2 = new Point(w, r) });
-        figure.Segments.Add(new LineSegment { Point = new Point(w, h - r) });
-        figure.Segments.Add(new QuadraticBezierSegment { Point1 = new Point(w, h), Point2 = new Point(w - r, h) });
-        figure.Segments.Add(new LineSegment { Point = new Point(r, h) });
-        figure.Segments.Add(new QuadraticBezierSegment { Point1 = new Point(0, h), Point2 = new Point(0, h - r) });
-        figure.Segments.Add(new LineSegment { Point = new Point(0, r) });
-        figure.Segments.Add(new QuadraticBezierSegment { Point1 = new Point(0, 0), Point2 = new Point(r, 0) });
-        var geo = new PathGeometry();
-        geo.Figures.Add(figure);
-        return geo;
     }
 
     private Brush MakeBackgroundBrush()
