@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 - Extended macOS capture analytics with lifetime (all-time) totals per capture type, a per-type series toggle to show/hide screenshots/videos/GIFs on the chart, hover tooltips with exact daily counts, a "busiest day of week" and "most active hour" insights breakdown, and Copy Summary / Share buttons for a quick text summary of your capture activity.
 - Added a **Remove audio** option to the macOS video trimmer so exports can deliberately omit the audio track while preserving audio by default.
 
+### Fixed
+- Fixed the macOS Settings → Analytics view freezing with "Publishing changes from within view updates is not allowed" faults, caused by the analytics history being pruned (and its published state reassigned) while the view was rendering. Pruning now runs only at launch and when a capture is recorded.
+
 ### Improved
 - Added SF Symbol icons to each action in the macOS menu bar menu so capture and app commands are easier to scan at a glance.
 - macOS screenshot editor image-corner and shadow controls now apply to the actual screenshot content instead of the padded export background, matching the editor preview and saved output.
