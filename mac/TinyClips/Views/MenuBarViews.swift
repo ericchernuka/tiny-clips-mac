@@ -47,7 +47,7 @@ struct MenuBarContentView: View {
             Button {
                 captureManager.startGifRecording()
             } label: {
-                Label("Record GIF...", systemImage: "livephoto.play")
+                Label("Record GIF...", systemImage: "photo.on.rectangle")
             }
             .keyboardShortcut(gifKey, modifiers: gifModifiers)
             .accessibilityHint("Starts GIF recording.")
