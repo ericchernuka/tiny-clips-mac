@@ -1414,14 +1414,6 @@ public sealed partial class ScreenshotEditorWindow : Window
         ImageCard.Height = imgH * scale;
         var scaledCornerRadius = Math.Min(_canvasCornerRadius * scale, Math.Min(ImageCard.Width, ImageCard.Height) / 2.0);
         ImageCard.CornerRadius = new CornerRadius(scaledCornerRadius);
-        PreviewImage.Clip = scaledCornerRadius > 0
-            ? new RectangleGeometry
-            {
-                Rect = new Rect(0, 0, ImageCard.Width, ImageCard.Height),
-                RadiusX = scaledCornerRadius,
-                RadiusY = scaledCornerRadius,
-            }
-            : null;
         ImageCard.Translation = new Vector3(0, 0, (float)(_canvasShadow > 0 ? Math.Max(8, _canvasShadow) : 0));
     }
 

@@ -6,6 +6,7 @@ own `CHANGELOG.md` at the repository root.
 ## [Unreleased]
 
 ### Added
+- **Remove audio export option for video trimming** - the Windows video trimmer now offers a clear Remove audio checkbox and renders no-audio exports when enabled.
 - **Webcam picture-in-picture overlay for video recordings** - added webcam controls in Settings (enable, device, shape, corner, size, rounded-corner value) and integrated webcam compositing into recorded video frames.
 - **Video encoder profile is now selectable in Settings** - choose between **High** (default; B-frames + CABAC for the best quality and smallest files) and **Baseline** (no B-frames, for maximum player compatibility) under Settings → Video → Encoder profile.
 - **Webcam capture pipeline in Core** - added `MediaCapture` + `MediaFrameReader` based webcam capture service and overlay compositor support in `VideoRecordingService`.
