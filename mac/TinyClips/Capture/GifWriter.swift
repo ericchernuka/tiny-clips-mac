@@ -62,28 +62,28 @@ class GifWriter: NSObject, @unchecked Sendable {
             throw CaptureError.noFrames
         }
 
-        func pause() {
-            processingQueue.async {
-                self.isPaused = true
-            }
-        }
-
-        func resume() {
-            processingQueue.async {
-                self.isPaused = false
-            }
-        }
-
-        func cancel() async {
-            try? await stream?.stopCapture()
-            stream = nil
-            processingQueue.sync {
-                frames.removeAll()
-                isPaused = false
-            }
-        }
-
         return GifCaptureData(frames: capturedFrames, frameDelay: frameDelay, maxWidth: maxWidth)
+    }
+
+    func pause() {
+        processingQueue.async {
+            self.isPaused = true
+        }
+    }
+
+    func resume() {
+        processingQueue.async {
+            self.isPaused = false
+        }
+    }
+
+    func cancel() async {
+        try? await stream?.stopCapture()
+        stream = nil
+        processingQueue.sync {
+            frames.removeAll()
+            isPaused = false
+        }
     }
 
     static func writeGIF(frames: [CGImage], frameDelay: Double, maxWidth: CGFloat, to url: URL) throws {

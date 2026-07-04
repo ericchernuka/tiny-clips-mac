@@ -192,19 +192,32 @@ public sealed class CaptureSettingsTests
     }
 
     [Fact]
-    public void ResetToDefaults_RevertsChangedValues()
+    public void ResetToDefaults_ClearsAnalyticsCacheSoStaleDataCannotReappear()
     {
-        var settings = CreateSettings();
+        var settingsService = new TestSettingsService();
+        var analytics = new ClipAnalyticsService(settingsService);
+        var settings = new CaptureSettings(settingsService, analytics);
 
         settings.FileNameTemplate = "Changed";
         settings.CopyScreenshotToClipboard = false;
         settings.GifFrameRate = 99;
+        analytics.RecordCapture(CaptureType.Screenshot);
+        analytics.RecordCapture(CaptureType.Video);
 
         settings.ResetToDefaults();
 
         Assert.Equal("TinyClips {date} at {time}", settings.FileNameTemplate);
         Assert.True(settings.CopyScreenshotToClipboard);
         Assert.Equal(10.0, settings.GifFrameRate);
+        Assert.Equal(string.Empty, settingsService.Get("captureAnalyticsHistoryV1", string.Empty));
+
+        // Regression check: recording after reset must not resurrect the cleared history by
+        // re-serializing a stale in-memory cache that ResetToDefaults() didn't know about.
+        analytics.RecordCapture(CaptureType.Gif);
+        var today = Assert.Single(analytics.GetDailyCounts(1));
+        Assert.Equal(0, today.ScreenshotCount);
+        Assert.Equal(0, today.VideoCount);
+        Assert.Equal(1, today.GifCount);
     }
 
     private static ICaptureSettings CreateSettings() => new CaptureSettings(new TestSettingsService());

@@ -46,6 +46,11 @@
                     Icon="Setting"
                     Tag="General" />
                 <NavigationViewItem
+                    AutomationProperties.AutomationId="AnalyticsNavigationItem"
+                    Content="Analytics"
+                    Icon="BarChart"
+                    Tag="Analytics" />
+                <NavigationViewItem
                     AutomationProperties.AutomationId="ScreenshotNavigationItem"
                     Content="Screenshot"
                     Icon="Camera"
@@ -330,6 +335,393 @@
                                </ComboBox>
                            </Grid>
                        </Border>
+                   </StackPanel>
+
+                   <StackPanel
+                       x:Name="AnalyticsSection"
+                       Spacing="8"
+                       Visibility="Collapsed">
+                       <TextBlock
+                           Margin="4,16,0,4"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           Text="Analytics" />
+
+                       <TextBlock
+                           Margin="4,4,0,0"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Text="Capture history" />
+
+                       <Border Style="{StaticResource SettingCardStyle}">
+                           <StackPanel Spacing="16">
+                               <Grid ColumnSpacing="16">
+                                   <Grid.ColumnDefinitions>
+                                       <ColumnDefinition Width="*" />
+                                       <ColumnDefinition Width="Auto" />
+                                   </Grid.ColumnDefinitions>
+                                   <StackPanel VerticalAlignment="Center">
+                                       <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Daily captures" />
+                                       <TextBlock
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Text="Screenshots, videos, and GIFs taken on this device during the selected range." />
+                                   </StackPanel>
+                                   <ComboBox
+                                       Grid.Column="1"
+                                       Width="150"
+                                       VerticalAlignment="Center"
+                                       AutomationProperties.AutomationId="AnalyticsRangeComboBox"
+                                       AutomationProperties.Name="Analytics range"
+                                       SelectedIndex="{x:Bind ViewModel.AnalyticsRangeIndex, Mode=TwoWay}">
+                                       <ComboBoxItem Content="Last 7 days" />
+                                       <ComboBoxItem Content="Last 30 days" />
+                                   </ComboBox>
+                               </Grid>
+
+                               <StackPanel Orientation="Horizontal" Spacing="16">
+                                   <StackPanel Orientation="Horizontal" Spacing="6">
+                                       <Border
+                                           Width="10"
+                                           Height="10"
+                                           CornerRadius="5"
+                                           Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                       <CheckBox
+                                           AutomationProperties.AutomationId="ShowScreenshotsInChartCheckBox"
+                                           Content="Screenshots"
+                                           IsChecked="{x:Bind ViewModel.ShowScreenshotsInChart, Mode=TwoWay}" />
+                                   </StackPanel>
+                                   <StackPanel Orientation="Horizontal" Spacing="6">
+                                       <Border
+                                           Width="10"
+                                           Height="10"
+                                           CornerRadius="5"
+                                           Background="{ThemeResource SystemFillColorCriticalBrush}" />
+                                       <CheckBox
+                                           AutomationProperties.AutomationId="ShowVideosInChartCheckBox"
+                                           Content="Videos"
+                                           IsChecked="{x:Bind ViewModel.ShowVideosInChart, Mode=TwoWay}" />
+                                   </StackPanel>
+                                   <StackPanel Orientation="Horizontal" Spacing="6">
+                                       <Border
+                                           Width="10"
+                                           Height="10"
+                                           CornerRadius="5"
+                                           Background="{ThemeResource SystemFillColorSuccessBrush}" />
+                                       <CheckBox
+                                           AutomationProperties.AutomationId="ShowGifsInChartCheckBox"
+                                           Content="GIFs"
+                                           IsChecked="{x:Bind ViewModel.ShowGifsInChart, Mode=TwoWay}" />
+                                   </StackPanel>
+                               </StackPanel>
+
+                               <ScrollViewer
+                                   HorizontalScrollMode="Auto"
+                                   HorizontalScrollBarVisibility="Hidden"
+                                   VerticalScrollMode="Disabled"
+                                   VerticalScrollBarVisibility="Disabled">
+                                   <ItemsControl ItemsSource="{x:Bind ViewModel.AnalyticsDays, Mode=OneWay}">
+                                       <ItemsControl.ItemsPanel>
+                                           <ItemsPanelTemplate>
+                                               <StackPanel Orientation="Horizontal" Spacing="8" />
+                                           </ItemsPanelTemplate>
+                                       </ItemsControl.ItemsPanel>
+                                       <ItemsControl.ItemTemplate>
+                                           <DataTemplate x:DataType="local:CaptureAnalyticsDayViewModel">
+                                               <StackPanel
+                                                   Width="24"
+                                                   Spacing="6"
+                                                   VerticalAlignment="Bottom"
+                                                   AutomationProperties.Name="{x:Bind AccessibilitySummary}"
+                                                   ToolTipService.ToolTip="{x:Bind AccessibilitySummary}">
+                                                   <Grid
+                                                       Height="160"
+                                                       VerticalAlignment="Bottom">
+                                                       <StackPanel
+                                                           VerticalAlignment="Bottom"
+                                                           Spacing="0">
+                                                           <Border
+                                                               Height="{x:Bind GifHeight}"
+                                                               Background="{ThemeResource SystemFillColorSuccessBrush}"
+                                                               CornerRadius="2,2,0,0" />
+                                                           <Border
+                                                               Height="{x:Bind VideoHeight}"
+                                                               Background="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               CornerRadius="2,2,0,0" />
+                                                           <Border
+                                                               Height="{x:Bind ScreenshotHeight}"
+                                                               Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                               CornerRadius="2,2,0,0" />
+                                                       </StackPanel>
+                                                   </Grid>
+                                                   <TextBlock
+                                                       HorizontalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Text="{x:Bind DateLabel}" />
+                                               </StackPanel>
+                                           </DataTemplate>
+                                       </ItemsControl.ItemTemplate>
+                                   </ItemsControl>
+                               </ScrollViewer>
+
+                               <TextBlock
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Counts are stored locally and automatically roll over after 30 days." />
+
+                               <TextBlock
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="No captures yet for this range. Take a screenshot, video, or GIF to start the chart."
+                                   Visibility="{x:Bind ViewModel.AnalyticsEmptyStateVisibility, Mode=OneWay}" />
+                           </StackPanel>
+                       </Border>
+
+                       <TextBlock
+                           Margin="4,16,0,0"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Text="Totals" />
+
+                       <Grid ColumnSpacing="12">
+                           <Grid.ColumnDefinitions>
+                               <ColumnDefinition Width="*" />
+                               <ColumnDefinition Width="*" />
+                               <ColumnDefinition Width="*" />
+                           </Grid.ColumnDefinitions>
+
+                           <Border
+                               Grid.Column="0"
+                               Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
+                               BorderThickness="1"
+                               CornerRadius="8"
+                               Padding="12">
+                               <StackPanel Spacing="6">
+                                   <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Screenshots" />
+                                   <TextBlock
+                                       Style="{StaticResource TitleTextBlockStyle}"
+                                       Text="{x:Bind ViewModel.AnalyticsScreenshotTotal, Mode=OneWay}" />
+                               </StackPanel>
+                           </Border>
+
+                           <Border
+                               Grid.Column="1"
+                               Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                               BorderThickness="1"
+                               CornerRadius="8"
+                               Padding="12">
+                               <StackPanel Spacing="6">
+                                   <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Videos" />
+                                   <TextBlock
+                                       Style="{StaticResource TitleTextBlockStyle}"
+                                       Text="{x:Bind ViewModel.AnalyticsVideoTotal, Mode=OneWay}" />
+                               </StackPanel>
+                           </Border>
+
+                           <Border
+                               Grid.Column="2"
+                               Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                               BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
+                               BorderThickness="1"
+                               CornerRadius="8"
+                               Padding="12">
+                               <StackPanel Spacing="6">
+                                   <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="GIFs" />
+                                   <TextBlock
+                                       Style="{StaticResource TitleTextBlockStyle}"
+                                       Text="{x:Bind ViewModel.AnalyticsGifTotal, Mode=OneWay}" />
+                               </StackPanel>
+                           </Border>
+                       </Grid>
+
+                       <TextBlock
+                           Margin="4,16,0,0"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Text="Lifetime totals" />
+
+                       <Border Style="{StaticResource SettingCardStyle}">
+                           <StackPanel Spacing="12">
+                               <Grid ColumnSpacing="12">
+                                   <Grid.ColumnDefinitions>
+                                       <ColumnDefinition Width="*" />
+                                       <ColumnDefinition Width="*" />
+                                       <ColumnDefinition Width="*" />
+                                   </Grid.ColumnDefinitions>
+
+                                   <Border
+                                       Grid.Column="0"
+                                       Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
+                                       BorderThickness="1"
+                                       CornerRadius="8"
+                                       Padding="12">
+                                       <StackPanel Spacing="6">
+                                           <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Screenshots" />
+                                           <TextBlock
+                                               Style="{StaticResource TitleTextBlockStyle}"
+                                               Text="{x:Bind ViewModel.LifetimeScreenshotTotal, Mode=OneWay}" />
+                                       </StackPanel>
+                                   </Border>
+
+                                   <Border
+                                       Grid.Column="1"
+                                       Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                                       BorderThickness="1"
+                                       CornerRadius="8"
+                                       Padding="12">
+                                       <StackPanel Spacing="6">
+                                           <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Videos" />
+                                           <TextBlock
+                                               Style="{StaticResource TitleTextBlockStyle}"
+                                               Text="{x:Bind ViewModel.LifetimeVideoTotal, Mode=OneWay}" />
+                                       </StackPanel>
+                                   </Border>
+
+                                   <Border
+                                       Grid.Column="2"
+                                       Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                       BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
+                                       BorderThickness="1"
+                                       CornerRadius="8"
+                                       Padding="12">
+                                       <StackPanel Spacing="6">
+                                           <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="GIFs" />
+                                           <TextBlock
+                                               Style="{StaticResource TitleTextBlockStyle}"
+                                               Text="{x:Bind ViewModel.LifetimeGifTotal, Mode=OneWay}" />
+                                       </StackPanel>
+                                   </Border>
+                               </Grid>
+
+                               <TextBlock
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                                   <Run Text="{x:Bind ViewModel.LifetimeCaptureTotal, Mode=OneWay}" />
+                                   <Run Text="captures since you started using Tiny Clips." />
+                               </TextBlock>
+                           </StackPanel>
+                       </Border>
+
+                       <TextBlock
+                           Margin="4,16,0,0"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Text="Insights" />
+
+                       <Border Style="{StaticResource SettingCardStyle}">
+                           <StackPanel Spacing="16">
+                               <StackPanel Spacing="6">
+                                   <TextBlock
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="Busiest day (selected range)" />
+                                   <TextBlock
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Text="{x:Bind ViewModel.BusiestWeekdayLabel, Mode=OneWay}" />
+                                   <ItemsControl ItemsSource="{x:Bind ViewModel.WeekdayBreakdown, Mode=OneWay}">
+                                       <ItemsControl.ItemsPanel>
+                                           <ItemsPanelTemplate>
+                                               <StackPanel Orientation="Horizontal" Spacing="10" />
+                                           </ItemsPanelTemplate>
+                                       </ItemsControl.ItemsPanel>
+                                       <ItemsControl.ItemTemplate>
+                                           <DataTemplate x:DataType="local:WeekdayBreakdownViewModel">
+                                               <StackPanel
+                                                   Width="32"
+                                                   Spacing="4"
+                                                   VerticalAlignment="Bottom"
+                                                   AutomationProperties.Name="{x:Bind AccessibilitySummary}"
+                                                   ToolTipService.ToolTip="{x:Bind AccessibilitySummary}">
+                                                   <Grid Height="60" VerticalAlignment="Bottom">
+                                                       <Border
+                                                           Height="{x:Bind Height}"
+                                                           VerticalAlignment="Bottom"
+                                                           CornerRadius="2,2,0,0">
+                                                           <Border.Background>
+                                                               <SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="{x:Bind BarOpacity}" />
+                                                           </Border.Background>
+                                                       </Border>
+                                                   </Grid>
+                                                   <TextBlock
+                                                       HorizontalAlignment="Center"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Text="{x:Bind DayLabel}" />
+                                               </StackPanel>
+                                           </DataTemplate>
+                                       </ItemsControl.ItemTemplate>
+                                   </ItemsControl>
+                               </StackPanel>
+
+                               <StackPanel Spacing="6">
+                                   <TextBlock
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="Most active hour (all-time)" />
+                                   <TextBlock
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Text="{x:Bind ViewModel.MostActiveHourLabel, Mode=OneWay}" />
+                                   <ScrollViewer
+                                       HorizontalScrollMode="Auto"
+                                       HorizontalScrollBarVisibility="Hidden"
+                                       VerticalScrollMode="Disabled"
+                                       VerticalScrollBarVisibility="Disabled">
+                                       <ItemsControl ItemsSource="{x:Bind ViewModel.HourlyBreakdown, Mode=OneWay}">
+                                           <ItemsControl.ItemsPanel>
+                                               <ItemsPanelTemplate>
+                                                   <StackPanel Orientation="Horizontal" Spacing="4" />
+                                               </ItemsPanelTemplate>
+                                           </ItemsControl.ItemsPanel>
+                                           <ItemsControl.ItemTemplate>
+                                               <DataTemplate x:DataType="local:HourBreakdownViewModel">
+                                                   <StackPanel
+                                                       Width="16"
+                                                       Spacing="4"
+                                                       VerticalAlignment="Bottom"
+                                                       AutomationProperties.Name="{x:Bind AccessibilitySummary}"
+                                                       ToolTipService.ToolTip="{x:Bind AccessibilitySummary}">
+                                                       <Grid Height="60" VerticalAlignment="Bottom">
+                                                           <Border
+                                                               Height="{x:Bind Height}"
+                                                               VerticalAlignment="Bottom"
+                                                               CornerRadius="1,1,0,0">
+                                                               <Border.Background>
+                                                                   <SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="{x:Bind BarOpacity}" />
+                                                               </Border.Background>
+                                                           </Border>
+                                                       </Grid>
+                                                   </StackPanel>
+                                               </DataTemplate>
+                                           </ItemsControl.ItemTemplate>
+                                       </ItemsControl>
+                                   </ScrollViewer>
+                               </StackPanel>
+                           </StackPanel>
+                       </Border>
+
+                       <TextBlock
+                           Margin="4,16,0,0"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Text="Share" />
+
+                       <Border Style="{StaticResource SettingCardStyle}">
+                           <StackPanel Spacing="8">
+                               <Button
+                                   x:Name="CopyAnalyticsSummaryButton"
+                                   HorizontalAlignment="Left"
+                                   AutomationProperties.AutomationId="CopyAnalyticsSummaryButton"
+                                   Click="OnCopyAnalyticsSummary"
+                                   Content="Copy Summary" />
+                               <TextBlock
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Copies a quick text summary of your capture activity for the selected range to the clipboard." />
+                           </StackPanel>
+                       </Border>
+
+                       <Button
+                           HorizontalAlignment="Left"
+                           AutomationProperties.AutomationId="ResetAnalyticsButton"
+                           Click="OnResetAnalytics"
+                           Content="Reset capture analytics…" />
                    </StackPanel>
 
                    <StackPanel

@@ -20,6 +20,7 @@ public sealed class GifRecordingService : IGifRecordingService
     private readonly IMonitorService _monitors;
     private readonly IClipStorageService _storage;
     private readonly ICaptureSettings _settings;
+    private readonly IClipAnalyticsService _analytics;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _frameLock = new();
 
@@ -37,11 +38,13 @@ public sealed class GifRecordingService : IGifRecordingService
     public GifRecordingService(
         IMonitorService monitors,
         IClipStorageService storage,
-        ICaptureSettings settings)
+        ICaptureSettings settings,
+        IClipAnalyticsService analytics)
     {
         _monitors = monitors;
         _storage = storage;
         _settings = settings;
+        _analytics = analytics;
     }
 
     public bool IsRecording { get; private set; }
@@ -232,6 +235,7 @@ public sealed class GifRecordingService : IGifRecordingService
             var bytes = await EncodeGifAsync(frames).ConfigureAwait(false);
             await File.WriteAllBytesAsync(path, bytes).ConfigureAwait(false);
 
+            _analytics.RecordCapture(CaptureType.Gif);
             RecordingCompleted?.Invoke(this, path);
             return path;
         }

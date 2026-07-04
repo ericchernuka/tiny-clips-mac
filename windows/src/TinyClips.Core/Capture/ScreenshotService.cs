@@ -15,17 +15,20 @@ public sealed class ScreenshotService : IScreenshotService
     private readonly IMonitorService _monitors;
     private readonly IClipStorageService _storage;
     private readonly ICaptureSettings _settings;
+    private readonly IClipAnalyticsService _analytics;
 
     public ScreenshotService(
         IScreenCaptureService capture,
         IMonitorService monitors,
         IClipStorageService storage,
-        ICaptureSettings settings)
+        ICaptureSettings settings,
+        IClipAnalyticsService analytics)
     {
         _capture = capture;
         _monitors = monitors;
         _storage = storage;
         _settings = settings;
+        _analytics = analytics;
     }
 
     public async Task<string> CaptureFullScreenAsync(CancellationToken cancellationToken = default)
@@ -63,6 +66,7 @@ public sealed class ScreenshotService : IScreenshotService
         }
 
         await File.WriteAllBytesAsync(path, encoded, cancellationToken).ConfigureAwait(false);
+        _analytics.RecordCapture(CaptureType.Screenshot);
         return path;
     }
 

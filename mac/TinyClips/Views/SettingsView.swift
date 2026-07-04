@@ -5,6 +5,7 @@ import Combine
 
 enum SettingsTab: String, CaseIterable {
     case general = "General"
+    case analytics = "Analytics"
     case screenshot = "Screenshot"
     case video = "Video"
     case gif = "GIF"
@@ -16,6 +17,7 @@ enum SettingsTab: String, CaseIterable {
     var icon: String {
         switch self {
         case .general: return "gearshape"
+        case .analytics: return "chart.bar.xaxis"
         case .screenshot: return "camera"
         case .video: return "video"
         case .gif: return "photo.on.rectangle"
@@ -37,6 +39,7 @@ enum SettingsTab: String, CaseIterable {
 
 struct SettingsView: View {
     @ObservedObject private var settings = CaptureSettings.shared
+    @ObservedObject private var captureAnalytics = CaptureAnalyticsStore.shared
     @ObservedObject private var sparkleController = SparkleController.shared
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
 #if APPSTORE
@@ -70,6 +73,8 @@ struct SettingsView: View {
                         resetAllSettings: resetAllSettings,
                         showInDockBinding: showInDockBinding
                     )
+                case .analytics:
+                    AnalyticsSettingsSection(store: captureAnalytics)
                 case .screenshot:
                     ScreenshotSettingsSection(settings: settings)
                 case .video:

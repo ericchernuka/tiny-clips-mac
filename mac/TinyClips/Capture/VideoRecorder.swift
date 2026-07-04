@@ -64,9 +64,6 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
     private var isPaused = false
     private var pauseStartedAt: CMTime?
     private var totalPausedDuration = CMTime.zero
-    private var isPaused = false
-    private var pauseStartedAt: CMTime?
-    private var totalPausedDuration = CMTime.zero
     /// Presentation timestamp (host-clock based) of the first webcam frame written.
     /// Compared against the screen recorder's first sample time to align the webcam
     /// overlay with the audio timeline. Intentionally preserved across `reset()`.
@@ -149,97 +146,6 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
             throw CaptureError.saveFailed
         }
 
-        func pause() {
-            writingQueue.async {
-                guard !self.isPaused else { return }
-                self.isPaused = true
-                self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
-            }
-            captureQueue.async {
-                if let session = self.session, session.isRunning {
-                    session.stopRunning()
-                }
-            }
-        }
-
-        func resume() {
-            writingQueue.async {
-                guard self.isPaused else { return }
-                if let pauseStartedAt = self.pauseStartedAt {
-                    let now = CMClockGetTime(CMClockGetHostTimeClock())
-                    self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
-                }
-                self.pauseStartedAt = nil
-                self.isPaused = false
-            }
-            captureQueue.async {
-                self.session?.startRunning()
-            }
-        }
-
-        func cancel() async {
-            captureQueue.sync {
-                if let session, session.isRunning {
-                    session.stopRunning()
-                }
-            }
-            writingQueue.sync {
-                writer?.cancelWriting()
-            }
-            if let outputURL {
-                try? FileManager.default.removeItem(at: outputURL)
-            }
-            reset()
-        }
-
-        func pause() {
-            writingQueue.async {
-                guard !self.isPaused else { return }
-                self.isPaused = true
-                self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
-            }
-            microphoneQueue.async {
-                self.microphoneSession?.stopRunning()
-            }
-        }
-
-        func resume() {
-            writingQueue.async {
-                guard self.isPaused else { return }
-                if let pauseStartedAt = self.pauseStartedAt {
-                    let now = CMClockGetTime(CMClockGetHostTimeClock())
-                    self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
-                }
-                self.pauseStartedAt = nil
-                self.isPaused = false
-            }
-            microphoneQueue.async {
-                self.microphoneSession?.startRunning()
-            }
-        }
-
-        func cancel() async {
-            defer { recordingStartedAtUptime = nil }
-            stopMicrophoneCapture()
-            try? await stream?.stopCapture()
-            stream = nil
-            writingQueue.sync {
-                writer?.cancelWriting()
-            }
-            if let outputURL {
-                try? FileManager.default.removeItem(at: outputURL)
-            }
-            writer = nil
-            videoInput = nil
-            systemAudioInput = nil
-            micAudioInput = nil
-            outputURL = nil
-            hasStartedWriting = false
-            isPaused = false
-            pauseStartedAt = nil
-            totalPausedDuration = .zero
-        }
-
         captureQueue.sync {
             if let session, session.isRunning {
                 session.stopRunning()
@@ -275,6 +181,49 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
                 }
             }
         }
+    }
+
+    func pause() {
+        writingQueue.async {
+            guard !self.isPaused else { return }
+            self.isPaused = true
+            self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+        captureQueue.async {
+            if let session = self.session, session.isRunning {
+                session.stopRunning()
+            }
+        }
+    }
+
+    func resume() {
+        writingQueue.async {
+            guard self.isPaused else { return }
+            if let pauseStartedAt = self.pauseStartedAt {
+                let now = CMClockGetTime(CMClockGetHostTimeClock())
+                self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
+            }
+            self.pauseStartedAt = nil
+            self.isPaused = false
+        }
+        captureQueue.async {
+            self.session?.startRunning()
+        }
+    }
+
+    func cancel() async {
+        captureQueue.sync {
+            if let session, session.isRunning {
+                session.stopRunning()
+            }
+        }
+        writingQueue.sync {
+            writer?.cancelWriting()
+        }
+        if let outputURL {
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        reset()
     }
 
     private func reset() {
@@ -359,6 +308,9 @@ class VideoRecorder: NSObject, @unchecked Sendable {
     private var microphoneObservers: [NSObjectProtocol] = []
     private var lastMicSignalAt = CACurrentMediaTime()
     private var hasStartedWriting = false
+    private var isPaused = false
+    private var pauseStartedAt: CMTime?
+    private var totalPausedDuration = CMTime.zero
     private var recordSystemAudio = false
     private var recordMicrophone = false
     private var selectedMicrophoneID = ""
@@ -663,6 +615,36 @@ class VideoRecorder: NSObject, @unchecked Sendable {
         }
     }
 
+    func pause() {
+        writingQueue.async {
+            guard !self.isPaused else { return }
+            self.isPaused = true
+            self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+        microphoneQueue.async {
+            self.microphoneSession?.stopRunning()
+        }
+    }
+
+    func resume() {
+        writingQueue.async {
+            guard self.isPaused else { return }
+            if let pauseStartedAt = self.pauseStartedAt {
+                let now = CMClockGetTime(CMClockGetHostTimeClock())
+                self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
+            }
+            self.pauseStartedAt = nil
+            self.isPaused = false
+        }
+        microphoneQueue.async {
+            self.microphoneSession?.startRunning()
+        }
+    }
+
+    func cancel() async {
+        await resetAfterFailedStart(removeOutputFile: true)
+    }
+
     private func stopMicrophoneCapture() {
         if let session = microphoneSession {
             if session.isRunning {
@@ -689,6 +671,9 @@ class VideoRecorder: NSObject, @unchecked Sendable {
         systemAudioInput = nil
         micAudioInput = nil
         hasStartedWriting = false
+        isPaused = false
+        pauseStartedAt = nil
+        totalPausedDuration = .zero
         recordSystemAudio = false
         recordMicrophone = false
         selectedMicrophoneID = ""
