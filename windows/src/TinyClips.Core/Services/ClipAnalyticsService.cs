@@ -170,7 +170,7 @@ public sealed class ClipAnalyticsService : IClipAnalyticsService
             return JsonSerializer.Deserialize<Dictionary<string, DailyCountsState>>(raw, _serializerOptions)
                 ?? new Dictionary<string, DailyCountsState>(StringComparer.Ordinal);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
             return new Dictionary<string, DailyCountsState>(StringComparer.Ordinal);
         }
@@ -189,7 +189,7 @@ public sealed class ClipAnalyticsService : IClipAnalyticsService
             return JsonSerializer.Deserialize<LifetimeCountsState>(raw, _serializerOptions)
                 ?? new LifetimeCountsState();
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
             return new LifetimeCountsState();
         }
@@ -208,7 +208,7 @@ public sealed class ClipAnalyticsService : IClipAnalyticsService
             return JsonSerializer.Deserialize<Dictionary<int, int>>(raw, _serializerOptions)
                 ?? new Dictionary<int, int>();
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
             return new Dictionary<int, int>();
         }

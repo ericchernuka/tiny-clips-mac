@@ -832,11 +832,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshAnalytics();
     }
 
-    partial void OnShowScreenshotsInChartChanged(bool value) => RefreshAnalyticsChartOnly();
+    partial void OnShowScreenshotsInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowScreenshotsInChart = true);
 
-    partial void OnShowVideosInChartChanged(bool value) => RefreshAnalyticsChartOnly();
+    partial void OnShowVideosInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowVideosInChart = true);
 
-    partial void OnShowGifsInChartChanged(bool value) => RefreshAnalyticsChartOnly();
+    partial void OnShowGifsInChartChanged(bool value) =>
+        RefreshAnalyticsChartOrKeepSeriesSelected(value, () => ShowGifsInChart = true);
 
     private void Persist(Action apply)
     {
@@ -887,6 +890,17 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Copies the current analytics summary text to the clipboard.</summary>
     public Task CopyAnalyticsSummaryAsync() => ClipboardService.CopyTextAsync(BuildAnalyticsSummaryText());
+
+    private void RefreshAnalyticsChartOrKeepSeriesSelected(bool value, Action keepSeriesSelected)
+    {
+        if (!value && !ShowScreenshotsInChart && !ShowVideosInChart && !ShowGifsInChart)
+        {
+            keepSeriesSelected();
+            return;
+        }
+
+        RefreshAnalyticsChartOnly();
+    }
 
     /// <summary>Re-renders just the chart bar heights/visibility for the active range
     /// without updating totals, lifetime counts, or insight summaries.</summary>

@@ -894,11 +894,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
             var fileInfo = new FileInfo(path);
             return fileInfo.Exists && fileInfo.Length > 0;
         }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return false;
         }
