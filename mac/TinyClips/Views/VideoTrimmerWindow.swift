@@ -645,7 +645,7 @@ private class TrimmerViewModel: ObservableObject {
     func exportVideo(trimmed: Bool, completion: @escaping (URL?) -> Void) {
         isExporting = true
 
-        let outputSuffix = trimmed ? " (trimmed)" : " (no audio)"
+        let outputSuffix = trimmed ? (removeAudio ? " (trimmed, no audio)" : " (trimmed)") : " (no audio)"
         let outputURL = sourceURL.deletingLastPathComponent()
             .appendingPathComponent(sourceURL.deletingPathExtension().lastPathComponent + "\(outputSuffix).mp4")
 
