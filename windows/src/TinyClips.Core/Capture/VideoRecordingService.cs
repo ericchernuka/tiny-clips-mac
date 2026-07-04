@@ -41,6 +41,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private TimeSpan _frameDuration;
     private Timer? _limitTimer;
     private int _stopping;
+    private int _discardRequested;
 
     private MouseClickMonitor? _clickMonitor;
     private MouseClickOverlayStyle _clickStyle;
@@ -849,10 +850,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
             }
 
             _recordingTimeline?.Resume();
-            if (_recordingTimeline is { } timeline)
-            {
-                _audio?.Resume(timeline);
-            }
+            _audio?.Resume();
             _capture?.ResumeEmitting();
             IsPaused = false;
         }
@@ -869,6 +867,11 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     private async Task<string?> StopAsync(bool discard)
     {
+        if (discard)
+        {
+            Interlocked.Exchange(ref _discardRequested, 1);
+        }
+
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
             return discard ? null : _outputPath;
@@ -879,6 +882,12 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             if (!IsRecording)
             {
+                if (discard || Interlocked.Exchange(ref _discardRequested, 0) == 1)
+                {
+                    DeleteOutputFileIfPresent(_outputPath);
+                    _outputPath = null;
+                }
+
                 return null;
             }
 
@@ -928,17 +937,10 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             IsRecording = false;
             var path = _outputPath;
-            if (discard && !string.IsNullOrEmpty(path))
+            var shouldDiscard = discard || Interlocked.Exchange(ref _discardRequested, 0) == 1;
+            if (shouldDiscard && !string.IsNullOrEmpty(path))
             {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch
-                {
-                    // Best-effort cleanup of discarded output.
-                }
-
+                DeleteOutputFileIfPresent(path);
                 path = null;
             }
             else
@@ -958,6 +960,23 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             Interlocked.Exchange(ref _stopping, 0);
             _gate.Release();
+        }
+    }
+
+    private static void DeleteOutputFileIfPresent(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup of discarded output.
         }
     }
 

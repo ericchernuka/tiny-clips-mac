@@ -132,6 +132,9 @@ public sealed class RecordingTimelineTests
         var origin = TimeSpan.FromSeconds(10);
         var provider = new TimelineAlignedWaveProvider(format);
         provider.BeginTimeline(origin);
+        provider.AddSamples(ToBytes(1, 2), 4, origin);
+
+        Assert.Equal(new short[] { 1, 2 }, ReadSamples(provider, 2));
 
         provider.Pause();
         provider.AddSamples(ToBytes(1, 2), 4, origin);
@@ -139,6 +142,27 @@ public sealed class RecordingTimelineTests
         provider.AddSamples(ToBytes(3, 4), 4, origin + TimeSpan.FromSeconds(1));
 
         Assert.Equal(new short[] { 3, 4 }, ReadSamples(provider, 2));
+    }
+
+    [Fact]
+    public void Resume_AppendsContiguouslyWithoutRealigningFirstPacket()
+    {
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format)
+        {
+            Latency = TimeSpan.FromMilliseconds(3),
+        };
+        provider.BeginTimeline(origin);
+        provider.AddSamples(ToBytes(1, 2, 3, 4, 5), 10, origin);
+
+        Assert.Equal(new short[] { 4, 5 }, ReadSamples(provider, 2));
+
+        provider.Pause();
+        provider.Resume();
+        provider.AddSamples(ToBytes(6, 7), 4, origin + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(new short[] { 6, 7 }, ReadSamples(provider, 2));
     }
 
     private static byte[] ToBytes(params short[] samples)

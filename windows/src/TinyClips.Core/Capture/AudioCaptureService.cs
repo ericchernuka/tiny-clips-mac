@@ -275,7 +275,7 @@ public sealed class AudioCaptureService : IDisposable
         }
     }
 
-    internal void Resume(RecordingTimeline timeline)
+    internal void Resume()
     {
         lock (_gate)
         {
@@ -283,10 +283,8 @@ public sealed class AudioCaptureService : IDisposable
             {
                 return;
             }
-
             foreach (var buffer in _buffers)
             {
-                buffer.BeginTimeline(timeline.Origin);
                 buffer.Resume();
             }
 

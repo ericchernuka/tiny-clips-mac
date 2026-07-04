@@ -18,7 +18,6 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
     private bool _timelineStarted;
     private bool _aligned;
     private bool _paused;
-    private bool _resumeAtNextPacket;
 
     public TimelineAlignedWaveProvider(WaveFormat waveFormat)
     {
@@ -53,7 +52,6 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
         _timelineStarted = true;
         _aligned = false;
         _paused = false;
-        _resumeAtNextPacket = false;
     }
 
     public void Pause()
@@ -65,9 +63,7 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
     public void Resume()
     {
         _buffer.ClearBuffer();
-        _aligned = false;
         _paused = false;
-        _resumeAtNextPacket = true;
     }
 
     public void AddSamples(byte[] samples, int count, TimeSpan sourceTimestamp)
@@ -92,10 +88,7 @@ internal sealed class TimelineAlignedWaveProvider : IWaveProvider
             // input latency so captured sound lands at the wall-clock moment it actually occurred
             // (WASAPI timestamps the buffer read, which trails the real acoustic capture time).
             var sourceOffset = sourceTimestamp - _origin - _latency;
-            var desiredStartFrame = _resumeAtNextPacket
-                ? 0
-                : (long)Math.Round(sourceOffset.Ticks * WaveFormat.SampleRate / (double)TimeSpan.TicksPerSecond);
-            _resumeAtNextPacket = false;
+            var desiredStartFrame = (long)Math.Round(sourceOffset.Ticks * WaveFormat.SampleRate / (double)TimeSpan.TicksPerSecond);
 
             if (desiredStartFrame + packetFrames <= 0)
             {
