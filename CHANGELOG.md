@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 - Added a new macOS Settings → Analytics view that tracks daily screenshot, video, and GIF capture counts locally, shows rolling 7-day or 30-day bar charts, and lets you reset the stored history.
 - Extended macOS capture analytics with lifetime (all-time) totals per capture type, a per-type series toggle to show/hide screenshots/videos/GIFs on the chart, hover tooltips with exact daily counts, a "busiest day of week" and "most active hour" insights breakdown, and Copy Summary / Share buttons for a quick text summary of your capture activity.
 
+### Improved
+- Added SF Symbol icons to each action in the macOS menu bar menu so capture and app commands are easier to scan at a glance.
+
 ## v1.5.1-mac - 2026-07-03
 
 ### Improved

@@ -28,28 +28,36 @@ struct MenuBarContentView: View {
 
     var body: some View {
         if !captureManager.isRecording {
-            Button("Screenshot…") {
+            Button {
                 captureManager.takeScreenshot()
+            } label: {
+                Label("Screenshot…", systemImage: "camera")
             }
             .keyboardShortcut(screenshotKey, modifiers: screenshotModifiers)
             .accessibilityHint("Starts screenshot capture.")
 
-            Button("Record Video...") {
+            Button {
                 captureManager.startVideoRecording()
+            } label: {
+                Label("Record Video...", systemImage: "video")
             }
             .keyboardShortcut(videoKey, modifiers: videoModifiers)
             .accessibilityHint("Starts video recording.")
 
-            Button("Record GIF...") {
+            Button {
                 captureManager.startGifRecording()
+            } label: {
+                Label("Record GIF...", systemImage: "livephoto.play")
             }
             .keyboardShortcut(gifKey, modifiers: gifModifiers)
             .accessibilityHint("Starts GIF recording.")
 
             Divider()
         } else {
-            Button("Stop Recording") {
+            Button {
                 captureManager.stopRecording()
+            } label: {
+                Label("Stop Recording", systemImage: "stop.circle")
             }
             .keyboardShortcut(".", modifiers: .command)
             .accessibilityHint("Stops the current recording.")
@@ -57,54 +65,68 @@ struct MenuBarContentView: View {
             Divider()
         }
 #if !APPSTORE
-        Button("Check for Updates\u{2026}") {
+        Button {
             // Open Settings first so Sparkle has a parent window for its update dialog.
             // Without a key window (which doesn't exist after the menu bar menu closes),
             // Sparkle cannot present its UI and shows "Update failed" instead.
             openWindow(id: "settings-window")
             bringSettingsWindowToFront()
             checkForUpdatesAfterSettingsWindowAppears()
+        } label: {
+            Label("Check for Updates\u{2026}", systemImage: "arrow.trianglehead.clockwise")
         }
 #endif
-        Button("Clips Manager…") {
+        Button {
             openWindow(id: "clips-manager")
             bringClipsManagerWindowToFront()
+        } label: {
+            Label("Clips Manager…", systemImage: "film.stack")
         }
 
 #if APPSTORE
         if appStoreClipCountForReview >= 25 && !appStoreReviewRequested {
-            Button("Rate TinyClips…") {
+            Button {
                 appStoreReviewRequested = true
                 requestReview()
+            } label: {
+                Label("Rate TinyClips…", systemImage: "star.bubble")
             }
         }
 #endif
 
-        Button("Guide…") {
+        Button {
             captureManager.showGuide()
+        } label: {
+            Label("Guide…", systemImage: "book")
         }
 
 #if APPSTORE
-        Button("Support Tiny Clips…") {
+        Button {
             SettingsWindowManager.shared.selectedTab = .pro
             openWindow(id: "settings-window")
             bringSettingsWindowToFront()
+        } label: {
+            Label("Support Tiny Clips…", systemImage: "heart")
         }
         .accessibilityHint("Opens support and tip options.")
 #endif
 
-        Button("Settings…") {
+        Button {
             PerformanceSignposts.beginSettingsOpen()
             openWindow(id: "settings-window")
             bringSettingsWindowToFront()
+        } label: {
+            Label("Settings…", systemImage: "gearshape")
         }
         .keyboardShortcut(",", modifiers: .command)
         .accessibilityHint("Opens TinyClips settings.")
 
         Divider()
 
-        Button("Quit") {
+        Button {
             NSApplication.shared.terminate(nil)
+        } label: {
+            Label("Quit", systemImage: "power")
         }
         .keyboardShortcut("q", modifiers: .command)
     }
