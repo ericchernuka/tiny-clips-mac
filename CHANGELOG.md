@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Added a **Remove audio** option to the macOS video trimmer so exports can deliberately omit the audio track while preserving audio by default.
+
 ## v1.5.1-mac - 2026-07-03
 
 ### Improved

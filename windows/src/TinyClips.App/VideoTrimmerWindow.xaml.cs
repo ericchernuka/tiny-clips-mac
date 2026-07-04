@@ -9,6 +9,7 @@ using TinyClips.Core.Services;
 using Windows.Graphics.Imaging;
 using Windows.Media.Core;
 using Windows.Media.Editing;
+using Windows.Media.MediaProperties;
 using Windows.Media.Playback;
 using Windows.Storage;
 
@@ -370,8 +371,32 @@ public sealed partial class VideoTrimmerWindow : Window
             return;
         }
 
+        var outputPath = await ExportVideoAsync(trimmed: true);
+        Completed?.Invoke(this, outputPath);
+        Close();
+    }
+
+    private async void OnSaveOriginal(object sender, RoutedEventArgs e)
+    {
+        if (RemoveAudioCheck.IsChecked == true)
+        {
+            var outputPath = await ExportVideoAsync(trimmed: false);
+            Completed?.Invoke(this, outputPath);
+        }
+        else
+        {
+            Completed?.Invoke(this, null);
+        }
+
+        Close();
+    }
+
+    private async Task<string?> ExportVideoAsync(bool trimmed)
+    {
         BusyBar.Visibility = Visibility.Visible;
+        SaveOriginalButton.IsEnabled = false;
         SaveTrimmedButton.IsEnabled = false;
+        RemoveAudioCheck.IsEnabled = false;
         string? outputPath = null;
 
         try
@@ -380,8 +405,11 @@ public sealed partial class VideoTrimmerWindow : Window
 
             var file = await StorageFile.GetFileFromPathAsync(_filePath);
             var clip = await MediaClip.CreateFromFileAsync(file);
-            clip.TrimTimeFromStart = TimeSpan.FromSeconds(_startSeconds);
-            clip.TrimTimeFromEnd = TimeSpan.FromSeconds(Math.Max(0, _duration.TotalSeconds - _endSeconds));
+            if (trimmed)
+            {
+                clip.TrimTimeFromStart = TimeSpan.FromSeconds(_startSeconds);
+                clip.TrimTimeFromEnd = TimeSpan.FromSeconds(Math.Max(0, _duration.TotalSeconds - _endSeconds));
+            }
 
             var composition = new MediaComposition();
             composition.Clips.Add(clip);
@@ -392,12 +420,26 @@ public sealed partial class VideoTrimmerWindow : Window
             // rendered MP4 keeps its original timing. Re-timing the output would require a
             // frame-level pipeline (e.g. FFmpeg) that is outside this WinRT-only trimmer.
             var storage = App.Services.GetRequiredService<IClipStorageService>();
-            outputPath = storage.GenerateFilePath(CaptureType.Video, ".mp4", " (trimmed)");
+            var removeAudio = RemoveAudioCheck.IsChecked == true;
+            var suffix = trimmed
+                ? (removeAudio ? " (trimmed, no audio)" : " (trimmed)")
+                : " (no audio)";
+            outputPath = storage.GenerateFilePath(CaptureType.Video, ".mp4", suffix);
             var folder = await StorageFolder.GetFolderFromPathAsync(System.IO.Path.GetDirectoryName(outputPath)!);
             var outFile = await folder.CreateFileAsync(
                 System.IO.Path.GetFileName(outputPath), CreationCollisionOption.GenerateUniqueName);
 
-            await composition.RenderToFileAsync(outFile, MediaTrimmingPreference.Precise);
+            if (removeAudio)
+            {
+                var profile = composition.CreateDefaultEncodingProfile();
+                profile.Audio = null;
+                await composition.RenderToFileAsync(outFile, MediaTrimmingPreference.Precise, profile);
+            }
+            else
+            {
+                await composition.RenderToFileAsync(outFile, MediaTrimmingPreference.Precise);
+            }
+
             outputPath = outFile.Path;
         }
         catch (Exception ex)
@@ -408,11 +450,12 @@ public sealed partial class VideoTrimmerWindow : Window
         finally
         {
             BusyBar.Visibility = Visibility.Collapsed;
+            SaveOriginalButton.IsEnabled = true;
             SaveTrimmedButton.IsEnabled = true;
+            RemoveAudioCheck.IsEnabled = true;
         }
 
-        Completed?.Invoke(this, outputPath);
-        Close();
+        return outputPath;
     }
 
     private void OnDone(object sender, RoutedEventArgs e)

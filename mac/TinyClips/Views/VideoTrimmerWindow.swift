@@ -182,10 +182,15 @@ private struct VideoTrimmerView: View {
                 .pickerStyle(.menu)
                 .frame(width: 120)
                 .accessibilityLabel("Playback speed")
-                .help("Choose the export playback speed. Audio is kept only at 1x.")
+                .help("Choose the export playback speed.")
 
-                if viewModel.speed != 1.0 {
-                    Text("Audio will be removed on export")
+                Toggle("Remove audio", isOn: $viewModel.removeAudio)
+                    .accessibilityLabel("Remove audio")
+                    .help("Remove the audio track from the exported video. Preview audio is unchanged.")
+                    .toggleStyle(.checkbox)
+
+                if viewModel.removeAudio {
+                    Text("Export will have no audio")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -222,12 +227,19 @@ private struct VideoTrimmerView: View {
                     Divider()
 
                     Button("Save Without Trimming", systemImage: "film") {
-                        onDone(videoURL)
+                        if viewModel.removeAudio {
+                            viewModel.exportVideo(trimmed: false) { resultURL in
+                                guard let resultURL else { return }
+                                DispatchQueue.main.async { onDone(resultURL) }
+                            }
+                        } else {
+                            onDone(videoURL)
+                        }
                     }
-                    .help("Save the original video without trimming.")
+                    .help(viewModel.removeAudio ? "Export the full video without audio." : "Save the original video without trimming.")
 
                     Button("Save Trimmed", systemImage: "scissors") {
-                        viewModel.exportTrimmed { resultURL in
+                        viewModel.exportVideo(trimmed: true) { resultURL in
                             guard let resultURL else { return }
                             DispatchQueue.main.async { onDone(resultURL) }
                         }
@@ -440,6 +452,7 @@ private class TrimmerViewModel: ObservableObject {
     @Published var isPlaying = false
     @Published var isExporting = false
     @Published var speed: Double = 1.0
+    @Published var removeAudio = false
     @Published private(set) var frameStepDuration: Double = 1.0 / 30.0
 
     func applySpeedChange() {
@@ -629,17 +642,18 @@ private class TrimmerViewModel: ObservableObject {
         }
     }
 
-    func exportTrimmed(completion: @escaping (URL?) -> Void) {
+    func exportVideo(trimmed: Bool, completion: @escaping (URL?) -> Void) {
         isExporting = true
 
-        let trimmedURL = sourceURL.deletingLastPathComponent()
-            .appendingPathComponent(sourceURL.deletingPathExtension().lastPathComponent + " (trimmed).mp4")
+        let outputSuffix = trimmed ? " (trimmed)" : " (no audio)"
+        let outputURL = sourceURL.deletingLastPathComponent()
+            .appendingPathComponent(sourceURL.deletingPathExtension().lastPathComponent + "\(outputSuffix).mp4")
 
         // Clean up any existing file at the destination
-        try? FileManager.default.removeItem(at: trimmedURL)
+        try? FileManager.default.removeItem(at: outputURL)
 
-        let startTime = CMTime(seconds: trimStart, preferredTimescale: 600)
-        let endTime = CMTime(seconds: trimEnd, preferredTimescale: 600)
+        let startTime = CMTime(seconds: trimmed ? trimStart : 0, preferredTimescale: 600)
+        let endTime = CMTime(seconds: trimmed ? trimEnd : duration, preferredTimescale: 600)
         let timeRange = CMTimeRange(start: startTime, end: endTime)
 
         Task {
@@ -661,11 +675,14 @@ private class TrimmerViewModel: ObservableObject {
                     toDuration: targetDuration
                 )
 
-                // Copy audio only at 1x speed
-                if speed == 1.0,
+                if !removeAudio,
                    let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first,
                    let compositionAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
                     try? compositionAudio.insertTimeRange(timeRange, of: audioTrack, at: .zero)
+                    compositionAudio.scaleTimeRange(
+                        CMTimeRange(start: .zero, duration: timeRange.duration),
+                        toDuration: targetDuration
+                    )
                 }
 
                 guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
@@ -673,13 +690,13 @@ private class TrimmerViewModel: ObservableObject {
                     completion(nil)
                     return
                 }
-                session.outputURL = trimmedURL
+                session.outputURL = outputURL
                 session.outputFileType = .mp4
 
-                try await session.export(to: trimmedURL, as: .mp4)
+                try await session.export(to: outputURL, as: .mp4)
                 try? FileManager.default.removeItem(at: self.sourceURL)
                 self.isExporting = false
-                completion(trimmedURL)
+                completion(outputURL)
             } catch {
                 self.isExporting = false
                 completion(nil)
