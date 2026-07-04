@@ -458,6 +458,9 @@ class CaptureSettings: ObservableObject {
             UserDefaults.standard.removeObject(forKey: key)
         }
         UploadcareCredentialsStore.shared.clearAll()
+        Task { @MainActor in
+            CaptureAnalyticsStore.shared.clear()
+        }
         objectWillChange.send()
     }
 }

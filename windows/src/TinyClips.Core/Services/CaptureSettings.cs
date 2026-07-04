@@ -5,10 +5,12 @@ namespace TinyClips.Core.Services;
 public sealed class CaptureSettings : ICaptureSettings
 {
     private readonly ISettingsService _settings;
+    private readonly IClipAnalyticsService? _analytics;
 
-    public CaptureSettings(ISettingsService settings)
+    public CaptureSettings(ISettingsService settings, IClipAnalyticsService? analytics = null)
     {
         _settings = settings;
+        _analytics = analytics;
     }
 
     public string SaveDirectory
@@ -558,6 +560,7 @@ public sealed class CaptureSettings : ICaptureSettings
         ShowRegionIndicator = true;
         IncludeTinyClipsInCapture = false;
         ShowBrandingOverlay = false;
+        _analytics?.Clear();
         ScreenshotHotKeyCode = 53;
         ScreenshotHotKeyModifiers = 6;
         VideoHotKeyCode = 54;
