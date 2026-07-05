@@ -50,9 +50,10 @@ class CountdownWindow: NSPanel {
                     context.duration = 0.16
                     self.animator().alphaValue = 0
                 } completionHandler: {
-                    self.orderOut(nil)
-                    self.completion?()
+                    let completion = self.completion
                     self.completion = nil
+                    self.orderOut(nil)
+                    completion?()
                 }
             } else {
                 self.updateDisplay()

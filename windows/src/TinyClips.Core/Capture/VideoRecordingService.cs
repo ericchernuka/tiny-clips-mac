@@ -882,6 +882,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             if (!IsRecording)
             {
+                IsPaused = false;
+
                 if (discard || Interlocked.Exchange(ref _discardRequested, 0) == 1)
                 {
                     DeleteOutputFileIfPresent(_outputPath);

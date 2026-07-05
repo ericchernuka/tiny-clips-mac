@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 class StopRecordingPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+
     convenience init(
         captureManager: CaptureManager,
         onPauseResume: @escaping () -> Void,
@@ -41,7 +43,8 @@ class StopRecordingPanel: NSPanel {
             let y = screen.frame.maxY - frame.height - 60
             setFrameOrigin(NSPoint(x: x, y: y))
         }
-        orderFront(nil)
+        makeKeyAndOrderFront(nil)
+        NSApp.activate()
     }
 }
 

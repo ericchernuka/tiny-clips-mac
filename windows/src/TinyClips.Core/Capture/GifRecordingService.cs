@@ -28,6 +28,7 @@ public sealed class GifRecordingService : IGifRecordingService
     private List<CapturedFrame>? _frames;
     private double _fps;
     private int _stopping;
+    private int _discardRequested;
 
     private MouseClickMonitor? _clickMonitor;
     private MouseClickOverlayStyle _clickStyle;
@@ -185,6 +186,11 @@ public sealed class GifRecordingService : IGifRecordingService
 
     private async Task<string?> StopAsync(bool discard)
     {
+        if (discard)
+        {
+            Interlocked.Exchange(ref _discardRequested, 1);
+        }
+
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
             return null;
@@ -195,6 +201,15 @@ public sealed class GifRecordingService : IGifRecordingService
         {
             if (!IsRecording)
             {
+                IsPaused = false;
+                if (ConsumeDiscardRequested(discard))
+                {
+                    lock (_frameLock)
+                    {
+                        _frames = null;
+                    }
+                }
+
                 return null;
             }
 
@@ -215,7 +230,7 @@ public sealed class GifRecordingService : IGifRecordingService
             _capture = null;
             IsRecording = false;
 
-            if (discard)
+            if (ConsumeDiscardRequested(discard))
             {
                 return null;
             }
@@ -233,7 +248,17 @@ public sealed class GifRecordingService : IGifRecordingService
             }
 
             var bytes = await EncodeGifAsync(frames).ConfigureAwait(false);
+            if (ConsumeDiscardRequested(discard))
+            {
+                return null;
+            }
+
             await File.WriteAllBytesAsync(path, bytes).ConfigureAwait(false);
+            if (ConsumeDiscardRequested(discard))
+            {
+                DeleteOutputFileIfPresent(path);
+                return null;
+            }
 
             _analytics.RecordCapture(CaptureType.Gif);
             RecordingCompleted?.Invoke(this, path);
@@ -243,6 +268,21 @@ public sealed class GifRecordingService : IGifRecordingService
         {
             Interlocked.Exchange(ref _stopping, 0);
             _gate.Release();
+        }
+    }
+
+    private bool ConsumeDiscardRequested(bool discard) =>
+        discard || Interlocked.Exchange(ref _discardRequested, 0) == 1;
+
+    private static void DeleteOutputFileIfPresent(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup of discarded output.
         }
     }
 

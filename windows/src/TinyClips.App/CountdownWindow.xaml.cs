@@ -23,7 +23,7 @@ public sealed partial class CountdownWindow : Window
     private const uint WdaExcludeFromCapture = 0x11;
 
     private readonly DispatcherQueueTimer _timer;
-    private readonly TaskCompletionSource _completed = new();
+    private readonly TaskCompletionSource<bool> _completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _remaining;
 
     private CountdownWindow(int seconds)
@@ -70,7 +70,7 @@ public sealed partial class CountdownWindow : Window
             await AnimateFadeAsync(RootBorder, 0, 140);
             AppWindow.Hide();
             await Task.Delay(80);
-            _completed.TrySetResult();
+            _completed.TrySetResult(true);
             Close();
             return;
         }
@@ -95,9 +95,9 @@ public sealed partial class CountdownWindow : Window
 
     private Task AnimateFadeAsync(UIElement target, double to, int milliseconds)
     {
-        var completion = new TaskCompletionSource();
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var storyboard = AnimateFade(target, to, milliseconds);
-        storyboard.Completed += (_, _) => completion.TrySetResult();
+        storyboard.Completed += (_, _) => completion.TrySetResult(true);
         storyboard.Begin();
         return completion.Task;
     }
