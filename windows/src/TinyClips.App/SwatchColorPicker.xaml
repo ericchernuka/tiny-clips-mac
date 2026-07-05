@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="TinyClips.App.SwatchColorPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--  Preset color swatches shown first, plus a Custom… button that opens the native picker.  -->
+    <StackPanel Spacing="6">
+        <VariableSizedWrapGrid
+            x:Name="PART_Swatches"
+            AutomationProperties.Name="Preset colors"
+            ItemHeight="34"
+            ItemWidth="34"
+            Orientation="Horizontal" />
+
+        <Button
+            x:Name="PART_CustomButton"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Left"
+            AutomationProperties.Name="Custom color">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Border
+                    x:Name="PART_CurrentSwatch"
+                    Width="22"
+                    Height="22"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4" />
+                <TextBlock VerticalAlignment="Center" Text="Custom…" />
+            </StackPanel>
+            <Button.Flyout>
+                <Flyout>
+                    <ColorPicker
+                        x:Name="PART_Picker"
+                        ColorChanged="OnPickerColorChanged"
+                        ColorSpectrumShape="Ring"
+                        IsColorChannelTextInputVisible="False"
+                        IsHexInputVisible="True" />
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+    </StackPanel>
+</UserControl>

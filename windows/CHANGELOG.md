@@ -20,6 +20,7 @@ own `CHANGELOG.md` at the repository root.
 
 ### Improved
 - **Countdown animation polish** - the Windows countdown overlay now fades in/out, animates each number, and gives the final second stronger emphasis while remaining excluded from capture.
+- **Faster editor color picking with preset swatches** — the screenshot editor color controls (stroke, fill, text, and number badge) now show common preset color swatches first with a **Custom…** button that opens the full native color picker, so the common case is a single click while full precision/opacity stays available. The reusable `SwatchColorPicker` control is applied across those inspector color surfaces.
 - **Screenshot editor background settings now round the screenshot content itself** — the Image corners control now explicitly clips the screenshot preview content to match the rounded-corner export behavior.
 - **Video/GIF recording now matches the macOS target-first setup flow** — after choosing Region,
   Screen, or Window, Windows now shows a pre-record panel before countdown. Video captures can pick

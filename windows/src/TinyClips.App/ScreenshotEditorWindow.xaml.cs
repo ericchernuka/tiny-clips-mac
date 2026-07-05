@@ -204,9 +204,7 @@ public sealed partial class ScreenshotEditorWindow : Window
         };
 
         AnnotationColorPicker.Color = _strokeColor;
-        ColorSwatch.Background = new SolidColorBrush(_strokeColor);
         NumberColorPicker.Color = _numberTextColor;
-        NumberColorSwatch.Background = new SolidColorBrush(_numberTextColor);
         RedactionCombo.SelectedIndex = 1;
         RedactStyleCombo.SelectedIndex = 0;
 
@@ -252,7 +250,6 @@ public sealed partial class ScreenshotEditorWindow : Window
         FontSizeSlider.Value = _textFontSize;
         FillCheck.IsChecked = _fillEnabled;
         FillColorPicker.Color = _fillColor;
-        FillColorSwatch.Background = new SolidColorBrush(_fillEnabled ? _fillColor : Colors.Transparent);
         UpdateInspectorHeaders();
 
         _inspectorInitializing = false;
@@ -476,7 +473,6 @@ public sealed partial class ScreenshotEditorWindow : Window
         if (hasColor)
         {
             AnnotationColorPicker.Color = ann.Color;
-            ColorSwatch.Background = new SolidColorBrush(ann.Color);
         }
         if (isShape)
         {
@@ -488,7 +484,6 @@ public sealed partial class ScreenshotEditorWindow : Window
             FillCheck.IsChecked = hasFill;
             var pick = hasFill ? ann.FillColor : _fillColor;
             FillColorPicker.Color = pick;
-            FillColorSwatch.Background = new SolidColorBrush(hasFill ? ann.FillColor : Colors.Transparent);
         }
         if (isText)
         {
@@ -499,7 +494,6 @@ public sealed partial class ScreenshotEditorWindow : Window
         {
             NumberSizeSlider.Value = ann.SizeScale;
             NumberColorPicker.Color = ann.TextColor;
-            NumberColorSwatch.Background = new SolidColorBrush(ann.TextColor);
         }
         if (isRedact)
         {
@@ -537,10 +531,9 @@ public sealed partial class ScreenshotEditorWindow : Window
         yield return (ToolRedact, EditTool.Redact);
     }
 
-    private void OnColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnColorChanged(object? sender, Color color)
     {
-        _strokeColor = args.NewColor;
-        ColorSwatch.Background = new SolidColorBrush(_strokeColor);
+        _strokeColor = color;
         if (_selectedAnnotation is not null)
         {
             _selectedAnnotation.Color = _strokeColor;
@@ -548,10 +541,9 @@ public sealed partial class ScreenshotEditorWindow : Window
         }
     }
 
-    private void OnNumberColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnNumberColorChanged(object? sender, Color color)
     {
-        _numberTextColor = args.NewColor;
-        NumberColorSwatch.Background = new SolidColorBrush(_numberTextColor);
+        _numberTextColor = color;
         if (_selectedAnnotation is { Tool: EditTool.Counter } ann)
         {
             ann.TextColor = _numberTextColor;
@@ -602,7 +594,6 @@ public sealed partial class ScreenshotEditorWindow : Window
         }
 
         _fillEnabled = FillCheck.IsChecked == true;
-        FillColorSwatch.Background = new SolidColorBrush(_fillEnabled ? _fillColor : Colors.Transparent);
         if (_selectedAnnotation is { Tool: EditTool.Rectangle or EditTool.Ellipse } ann)
         {
             ann.FillColor = _fillEnabled ? _fillColor : Colors.Transparent;
@@ -610,17 +601,16 @@ public sealed partial class ScreenshotEditorWindow : Window
         }
     }
 
-    private void OnFillColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnFillColorChanged(object? sender, Color color)
     {
         if (_inspectorInitializing)
         {
             return;
         }
 
-        _fillColor = args.NewColor;
+        _fillColor = color;
         _fillEnabled = true;
         FillCheck.IsChecked = true;
-        FillColorSwatch.Background = new SolidColorBrush(_fillColor);
         if (_selectedAnnotation is { Tool: EditTool.Rectangle or EditTool.Ellipse } ann)
         {
             ann.FillColor = _fillColor;
