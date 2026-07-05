@@ -97,6 +97,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
                 throw new InvalidOperationException("A recording is already in progress.");
             }
 
+            Interlocked.Exchange(ref _discardRequested, 0);
+
             var captureTarget = target ?? CaptureTarget.Monitor(
                 (_monitors.GetPrimaryMonitor()
                     ?? throw new InvalidOperationException("No monitor was found to record.")).HMonitor);
@@ -865,6 +867,12 @@ public sealed class VideoRecordingService : IVideoRecordingService
         await StopAsync(discard: true).ConfigureAwait(false);
     }
 
+    private bool ConsumeDiscardRequested(bool discard)
+    {
+        var latched = Interlocked.Exchange(ref _discardRequested, 0) == 1;
+        return discard || latched;
+    }
+
     private async Task<string?> StopAsync(bool discard)
     {
         if (discard)
@@ -884,7 +892,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
             {
                 IsPaused = false;
 
-                if (discard || Interlocked.Exchange(ref _discardRequested, 0) == 1)
+                if (ConsumeDiscardRequested(discard))
                 {
                     DeleteOutputFileIfPresent(_outputPath);
                     _outputPath = null;
@@ -939,7 +947,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             IsRecording = false;
             var path = _outputPath;
-            var shouldDiscard = discard || Interlocked.Exchange(ref _discardRequested, 0) == 1;
+            var shouldDiscard = ConsumeDiscardRequested(discard);
             if (shouldDiscard && !string.IsNullOrEmpty(path))
             {
                 DeleteOutputFileIfPresent(path);

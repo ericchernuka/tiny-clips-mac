@@ -64,6 +64,8 @@ public sealed class GifRecordingService : IGifRecordingService
                 throw new InvalidOperationException("A GIF recording is already in progress.");
             }
 
+            Interlocked.Exchange(ref _discardRequested, 0);
+
             var captureTarget = target ?? CaptureTarget.Monitor(
                 (_monitors.GetPrimaryMonitor()
                     ?? throw new InvalidOperationException("No monitor was found to record.")).HMonitor);
@@ -271,8 +273,11 @@ public sealed class GifRecordingService : IGifRecordingService
         }
     }
 
-    private bool ConsumeDiscardRequested(bool discard) =>
-        discard || Interlocked.Exchange(ref _discardRequested, 0) == 1;
+    private bool ConsumeDiscardRequested(bool discard)
+    {
+        var latched = Interlocked.Exchange(ref _discardRequested, 0) == 1;
+        return discard || latched;
+    }
 
     private static void DeleteOutputFileIfPresent(string path)
     {
