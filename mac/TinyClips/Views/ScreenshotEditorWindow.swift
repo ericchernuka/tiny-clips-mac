@@ -673,7 +673,7 @@ private struct ScreenshotEditorView: View {
             }
 
             if showsFillColorPicker {
-                SwatchColorPicker(label: "Fill", color: $viewModel.selectedFillColor, supportsOpacity: true)
+                SwatchColorPicker(label: "Fill", color: $viewModel.selectedFillColor, supportsOpacity: true, allowsTransparent: true)
             }
 
             if showsNumberTextColorPicker {
@@ -1062,14 +1062,29 @@ private struct WallpaperPresetSwatch: View {
     }
 }
 
+private func isEffectivelyClear(_ color: Color) -> Bool {
+    guard let resolved = NSColor(color).usingColorSpace(.deviceRGB) else {
+        return false
+    }
+    return resolved.alphaComponent < 0.01
+}
+
 private struct AnnotationColorSwatch: View {
     let color: Color
     let isSelected: Bool
+    var isTransparent: Bool = false
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5)
-                .fill(color)
+                .fill(isTransparent ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(color))
+                .overlay {
+                    if isTransparent {
+                        Image(systemName: "slash.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator, lineWidth: 1))
                 .frame(width: 18, height: 18)
 
@@ -1083,27 +1098,108 @@ private struct AnnotationColorSwatch: View {
     }
 }
 
-/// Reusable color control: shows common preset swatches first, plus a trailing
-/// native "Custom…" color well for full precision/opacity. Used across the
-/// editor's annotation and background color surfaces.
+/// Compact preview of the current color shown on the closed dropdown control.
+private struct ColorPreviewSwatch: View {
+    let color: Color
+    var isTransparent: Bool = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(isTransparent ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(color))
+            .overlay {
+                if isTransparent {
+                    Image(systemName: "slash")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator, lineWidth: 1))
+            .frame(width: 22, height: 16)
+    }
+}
+
+/// Reusable color control: a dropdown that previews the current color and opens
+/// a popover of common preset swatches plus a native "Custom…" color well for
+/// full precision/opacity. When `allowsTransparent` is set it also offers a
+/// "None" (transparent) option. Used across the editor's annotation and
+/// background color surfaces.
 private struct SwatchColorPicker: View {
     let label: String
     @Binding var color: Color
     var supportsOpacity: Bool = true
+    var allowsTransparent: Bool = false
+
+    @State private var isPresented = false
 
     private let columns = Array(repeating: GridItem(.fixed(22), spacing: 6), count: 6)
 
+    private var isClear: Bool {
+        allowsTransparent && isEffectivelyClear(color)
+    }
+
+    private var currentColorName: String {
+        if isClear {
+            return "None"
+        }
+        if let match = annotationColorPresets.first(where: { annotationColorsEqual($0.color, color) }) {
+            return match.name
+        }
+        return "Custom"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Spacer()
+
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    ColorPreviewSwatch(color: color, isTransparent: isClear)
+                    Text(currentColorName)
+                        .font(.caption)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("\(label) color")
+            .accessibilityValue(currentColorName)
+            .accessibilityHint("Opens color options")
+            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+                popoverContent
+            }
+        }
+    }
+
+    private var popoverContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                if allowsTransparent {
+                    Button {
+                        color = .clear
+                        isPresented = false
+                    } label: {
+                        AnnotationColorSwatch(color: .clear, isSelected: isClear, isTransparent: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help("None (transparent)")
+                    .accessibilityLabel("No \(label.lowercased())")
+                    .accessibilityValue(isClear ? "Selected" : "Not selected")
+                }
+
                 ForEach(annotationColorPresets) { preset in
-                    let isSelected = annotationColorsEqual(preset.color, color)
+                    let isSelected = !isClear && annotationColorsEqual(preset.color, color)
                     Button {
                         color = preset.color
+                        isPresented = false
                     } label: {
                         AnnotationColorSwatch(color: preset.color, isSelected: isSelected)
                     }
@@ -1112,15 +1208,23 @@ private struct SwatchColorPicker: View {
                     .accessibilityLabel("\(preset.name) \(label.lowercased())")
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 }
+            }
 
+            Divider()
+
+            HStack {
+                Text("Custom")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
                 ColorPicker("", selection: $color, supportsOpacity: supportsOpacity)
                     .labelsHidden()
-                    .frame(width: 22, height: 22)
-                    .help("Custom color")
                     .accessibilityLabel("Custom \(label.lowercased()) color")
                     .accessibilityHint("Opens the full color picker")
             }
         }
+        .padding(12)
+        .frame(width: 208)
     }
 }
 

@@ -7,40 +7,85 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!--  Preset color swatches shown first, plus a Custom… button that opens the native picker.  -->
-    <StackPanel Spacing="6">
-        <VariableSizedWrapGrid
-            x:Name="PART_Swatches"
-            AutomationProperties.Name="Preset colors"
-            ItemHeight="34"
-            ItemWidth="34"
-            Orientation="Horizontal" />
+    <!--  Dropdown that previews the current color and opens preset swatches + a Custom picker.  -->
+    <Button
+        x:Name="PART_DropButton"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border
+                x:Name="PART_CurrentSwatch"
+                Grid.Column="0"
+                Width="22"
+                Height="22"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="4">
+                <FontIcon
+                    x:Name="PART_TransparentGlyph"
+                    FontFamily="{StaticResource SymbolThemeFontFamily}"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE711;"
+                    Visibility="Collapsed" />
+            </Border>
+            <TextBlock
+                x:Name="PART_ColorLabel"
+                Grid.Column="1"
+                Margin="10,0,0,0"
+                VerticalAlignment="Center"
+                Text="Pick color" />
+            <FontIcon
+                Grid.Column="2"
+                Margin="8,0,0,0"
+                FontFamily="{StaticResource SymbolThemeFontFamily}"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE70D;" />
+        </Grid>
+        <Button.Flyout>
+            <Flyout>
+                <StackPanel MinWidth="224" Spacing="10">
+                    <VariableSizedWrapGrid
+                        x:Name="PART_Swatches"
+                        AutomationProperties.Name="Preset colors"
+                        ItemHeight="34"
+                        ItemWidth="34"
+                        Orientation="Horizontal" />
 
-        <Button
-            x:Name="PART_CustomButton"
-            HorizontalAlignment="Stretch"
-            HorizontalContentAlignment="Left"
-            AutomationProperties.Name="Custom color">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Border
-                    x:Name="PART_CurrentSwatch"
-                    Width="22"
-                    Height="22"
-                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4" />
-                <TextBlock VerticalAlignment="Center" Text="Custom…" />
-            </StackPanel>
-            <Button.Flyout>
-                <Flyout>
-                    <ColorPicker
-                        x:Name="PART_Picker"
-                        ColorChanged="OnPickerColorChanged"
-                        ColorSpectrumShape="Ring"
-                        IsColorChannelTextInputVisible="False"
-                        IsHexInputVisible="True" />
-                </Flyout>
-            </Button.Flyout>
-        </Button>
-    </StackPanel>
+                    <Button
+                        x:Name="PART_CustomButton"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        AutomationProperties.Name="Custom color">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Border
+                                x:Name="PART_CustomSwatch"
+                                Width="22"
+                                Height="22"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4" />
+                            <TextBlock VerticalAlignment="Center" Text="Custom…" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <Flyout>
+                                <ColorPicker
+                                    x:Name="PART_Picker"
+                                    ColorChanged="OnPickerColorChanged"
+                                    ColorSpectrumShape="Ring"
+                                    IsColorChannelTextInputVisible="False"
+                                    IsHexInputVisible="True" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+            </Flyout>
+        </Button.Flyout>
+    </Button>
 </UserControl>

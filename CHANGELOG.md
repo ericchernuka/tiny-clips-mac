@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - Added SF Symbol icons to each action in the macOS menu bar menu so capture and app commands are easier to scan at a glance.
 - macOS screenshot editor image-corner and shadow controls now apply to the actual screenshot content instead of the padded export background, matching the editor preview and saved output.
 - macOS screenshot editor color controls (stroke, fill, text, number badge, and background) now show common preset color swatches first with a **Custom…** option that opens the full native color picker, so picking a common color is a single click while full precision stays available.
+- macOS screenshot editor color controls are now compact dropdowns that preview the current color and its name; the shape **Fill** control adds a **None** option so rectangles and circles can be left unfilled.
 
 ## v1.5.1-mac - 2026-07-03
 

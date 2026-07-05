@@ -249,7 +249,7 @@ public sealed partial class ScreenshotEditorWindow : Window
         NumberSizeSlider.Value = _numberScale;
         FontSizeSlider.Value = _textFontSize;
         FillCheck.IsChecked = _fillEnabled;
-        FillColorPicker.Color = _fillColor;
+        FillColorPicker.Color = _fillEnabled ? _fillColor : Colors.Transparent;
         UpdateInspectorHeaders();
 
         _inspectorInitializing = false;
@@ -482,7 +482,7 @@ public sealed partial class ScreenshotEditorWindow : Window
         {
             var hasFill = ann.FillColor.A > 0;
             FillCheck.IsChecked = hasFill;
-            var pick = hasFill ? ann.FillColor : _fillColor;
+            var pick = hasFill ? ann.FillColor : Colors.Transparent;
             FillColorPicker.Color = pick;
         }
         if (isText)
@@ -594,6 +594,7 @@ public sealed partial class ScreenshotEditorWindow : Window
         }
 
         _fillEnabled = FillCheck.IsChecked == true;
+        FillColorPicker.Color = _fillEnabled ? _fillColor : Colors.Transparent;
         if (_selectedAnnotation is { Tool: EditTool.Rectangle or EditTool.Ellipse } ann)
         {
             ann.FillColor = _fillEnabled ? _fillColor : Colors.Transparent;
@@ -605,6 +606,19 @@ public sealed partial class ScreenshotEditorWindow : Window
     {
         if (_inspectorInitializing)
         {
+            return;
+        }
+
+        if (color.A == 0)
+        {
+            // "None" swatch clears the fill without discarding the last chosen color.
+            _fillEnabled = false;
+            FillCheck.IsChecked = false;
+            if (_selectedAnnotation is { Tool: EditTool.Rectangle or EditTool.Ellipse } cleared)
+            {
+                cleared.FillColor = Colors.Transparent;
+                RedrawOverlay();
+            }
             return;
         }
 
