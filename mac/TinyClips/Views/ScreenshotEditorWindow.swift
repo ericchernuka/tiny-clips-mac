@@ -317,10 +317,10 @@ private func annotationColorsEqual(_ lhs: Color, _ rhs: Color) -> Bool {
     left.getRed(&lr, green: &lg, blue: &lb, alpha: &la)
     right.getRed(&rr, green: &rg, blue: &rb, alpha: &ra)
 
-    return abs(lr - rr) < 0.01 &&
-        abs(lg - rg) < 0.01 &&
-        abs(lb - rb) < 0.01 &&
-        abs(la - ra) < 0.01
+    return abs(lr - rr) < 0.0001 &&
+        abs(lg - rg) < 0.0001 &&
+        abs(lb - rb) < 0.0001 &&
+        abs(la - ra) < 0.0001
 }
 
 private func redactionBrightness(for row: Int, column: Int, preset: RedactionBlurPreset) -> Double {
