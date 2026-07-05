@@ -267,33 +267,12 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Text="Color" />
-                            <Button
-                                x:Name="ColorButton"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
+                            <local:SwatchColorPicker
+                                x:Name="AnnotationColorPicker"
                                 AutomationProperties.AutomationId="EditorColorButton"
-                                AutomationProperties.Name="Color">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Border
-                                        x:Name="ColorSwatch"
-                                        Width="22"
-                                        Height="22"
-                                        Background="Red"
-                                        CornerRadius="4" />
-                                    <TextBlock VerticalAlignment="Center" Text="Pick color" />
-                                </StackPanel>
-                                <Button.Flyout>
-                                    <Flyout>
-                                        <ColorPicker
-                                            x:Name="AnnotationColorPicker"
-                                            ColorChanged="OnColorChanged"
-                                            ColorSpectrumShape="Ring"
-                                            IsAlphaEnabled="False"
-                                            IsColorChannelTextInputVisible="False"
-                                            IsHexInputVisible="True" />
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
+                                AutomationProperties.Name="Color"
+                                ColorChanged="OnColorChanged"
+                                IsAlphaEnabled="False" />
                         </StackPanel>
 
                         <!--  Stroke width  -->
@@ -333,35 +312,12 @@
                                 Checked="OnFillToggled"
                                 Content="Fill shape"
                                 Unchecked="OnFillToggled" />
-                            <Button
-                                x:Name="FillColorButton"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
+                            <local:SwatchColorPicker
+                                x:Name="FillColorPicker"
                                 AutomationProperties.AutomationId="EditorFillColorButton"
-                                AutomationProperties.Name="Fill color">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Border
-                                        x:Name="FillColorSwatch"
-                                        Width="22"
-                                        Height="22"
-                                        Background="Transparent"
-                                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="4" />
-                                    <TextBlock VerticalAlignment="Center" Text="Fill color" />
-                                </StackPanel>
-                                <Button.Flyout>
-                                    <Flyout>
-                                        <ColorPicker
-                                            x:Name="FillColorPicker"
-                                            ColorChanged="OnFillColorChanged"
-                                            ColorSpectrumShape="Ring"
-                                            IsAlphaEnabled="True"
-                                            IsColorChannelTextInputVisible="False"
-                                            IsHexInputVisible="True" />
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
+                                AutomationProperties.Name="Fill color"
+                                ColorChanged="OnFillColorChanged"
+                                IsAlphaEnabled="True" />
                         </StackPanel>
 
                         <!--  Text  -->
@@ -400,35 +356,12 @@
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Style="{StaticResource CaptionTextBlockStyle}"
                                     Text="Number color" />
-                                <Button
-                                    x:Name="NumberColorButton"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
+                                <local:SwatchColorPicker
+                                    x:Name="NumberColorPicker"
                                     AutomationProperties.AutomationId="EditorNumberColorButton"
-                                    AutomationProperties.Name="Number color">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Border
-                                            x:Name="NumberColorSwatch"
-                                            Width="22"
-                                            Height="22"
-                                            Background="White"
-                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="4" />
-                                        <TextBlock VerticalAlignment="Center" Text="Pick color" />
-                                    </StackPanel>
-                                    <Button.Flyout>
-                                        <Flyout>
-                                            <ColorPicker
-                                                x:Name="NumberColorPicker"
-                                                ColorChanged="OnNumberColorChanged"
-                                                ColorSpectrumShape="Ring"
-                                                IsAlphaEnabled="False"
-                                                IsColorChannelTextInputVisible="False"
-                                                IsHexInputVisible="True" />
-                                        </Flyout>
-                                    </Button.Flyout>
-                                </Button>
+                                    AutomationProperties.Name="Number color"
+                                    ColorChanged="OnNumberColorChanged"
+                                    IsAlphaEnabled="False" />
                             </StackPanel>
                         </StackPanel>
 

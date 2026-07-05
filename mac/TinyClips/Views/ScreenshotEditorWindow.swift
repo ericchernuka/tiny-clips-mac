@@ -283,6 +283,46 @@ private enum EditorPopover: String, Identifiable {
     var id: Self { self }
 }
 
+private struct AnnotationColorPreset: Identifiable {
+    let id: String
+    let name: String
+    let color: Color
+}
+
+/// Common preset colors offered before the native "Custom…" picker across the
+/// editor's annotation color surfaces (stroke, fill, text, badge, background).
+private let annotationColorPresets: [AnnotationColorPreset] = [
+    AnnotationColorPreset(id: "black", name: "Black", color: .black),
+    AnnotationColorPreset(id: "white", name: "White", color: .white),
+    AnnotationColorPreset(id: "gray", name: "Gray", color: Color(red: 0.55, green: 0.55, blue: 0.57)),
+    AnnotationColorPreset(id: "red", name: "Red", color: Color(red: 0.90, green: 0.20, blue: 0.18)),
+    AnnotationColorPreset(id: "orange", name: "Orange", color: Color(red: 1.00, green: 0.58, blue: 0.16)),
+    AnnotationColorPreset(id: "yellow", name: "Yellow", color: Color(red: 1.00, green: 0.84, blue: 0.20)),
+    AnnotationColorPreset(id: "green", name: "Green", color: Color(red: 0.24, green: 0.70, blue: 0.34)),
+    AnnotationColorPreset(id: "teal", name: "Teal", color: Color(red: 0.00, green: 0.72, blue: 0.72)),
+    AnnotationColorPreset(id: "blue", name: "Blue", color: Color(red: 0.20, green: 0.52, blue: 0.96)),
+    AnnotationColorPreset(id: "purple", name: "Purple", color: Color(red: 0.55, green: 0.35, blue: 0.90)),
+    AnnotationColorPreset(id: "pink", name: "Pink", color: Color(red: 1.00, green: 0.36, blue: 0.66)),
+    AnnotationColorPreset(id: "brown", name: "Brown", color: Color(red: 0.60, green: 0.40, blue: 0.24)),
+]
+
+private func annotationColorsEqual(_ lhs: Color, _ rhs: Color) -> Bool {
+    guard let left = NSColor(lhs).usingColorSpace(.deviceRGB),
+          let right = NSColor(rhs).usingColorSpace(.deviceRGB) else {
+        return false
+    }
+
+    var lr: CGFloat = 0, lg: CGFloat = 0, lb: CGFloat = 0, la: CGFloat = 0
+    var rr: CGFloat = 0, rg: CGFloat = 0, rb: CGFloat = 0, ra: CGFloat = 0
+    left.getRed(&lr, green: &lg, blue: &lb, alpha: &la)
+    right.getRed(&rr, green: &rg, blue: &rb, alpha: &ra)
+
+    return abs(lr - rr) < 0.0001 &&
+        abs(lg - rg) < 0.0001 &&
+        abs(lb - rb) < 0.0001 &&
+        abs(la - ra) < 0.0001
+}
+
 private func redactionBrightness(for row: Int, column: Int, preset: RedactionBlurPreset) -> Double {
     let phase = Double((row + column) % preset.cycleLength)
     return min(0.82, preset.baseBrightness + phase * preset.contrastStep)
@@ -629,15 +669,15 @@ private struct ScreenshotEditorView: View {
     private var styleControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let primaryColorLabel {
-                ColorPicker(primaryColorLabel, selection: primaryColorBinding, supportsOpacity: true)
+                SwatchColorPicker(label: primaryColorLabel, color: primaryColorBinding, supportsOpacity: true)
             }
 
             if showsFillColorPicker {
-                ColorPicker("Fill", selection: $viewModel.selectedFillColor, supportsOpacity: true)
+                SwatchColorPicker(label: "Fill", color: $viewModel.selectedFillColor, supportsOpacity: true)
             }
 
             if showsNumberTextColorPicker {
-                ColorPicker("Text", selection: numberTextColorBinding, supportsOpacity: true)
+                SwatchColorPicker(label: "Text", color: numberTextColorBinding, supportsOpacity: true)
             }
 
             if viewModel.showsTextStyleControls {
@@ -713,10 +753,10 @@ private struct ScreenshotEditorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                ColorPicker("Color", selection: $viewModel.backgroundColor, supportsOpacity: true)
+                SwatchColorPicker(label: "Color", color: $viewModel.backgroundColor, supportsOpacity: true)
 
                 if viewModel.backgroundStyle == .gradient {
-                    ColorPicker("Color 2", selection: $viewModel.backgroundSecondaryColor, supportsOpacity: true)
+                    SwatchColorPicker(label: "Color 2", color: $viewModel.backgroundSecondaryColor, supportsOpacity: true)
                 }
 
                 HStack(spacing: 8) {
@@ -1019,6 +1059,68 @@ private struct WallpaperPresetSwatch: View {
             }
         }
         .frame(width: 28, height: 28)
+    }
+}
+
+private struct AnnotationColorSwatch: View {
+    let color: Color
+    let isSelected: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(color)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator, lineWidth: 1))
+                .frame(width: 18, height: 18)
+
+            if isSelected {
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .frame(width: 22, height: 22)
+            }
+        }
+        .frame(width: 22, height: 22)
+    }
+}
+
+/// Reusable color control: shows common preset swatches first, plus a trailing
+/// native "Custom…" color well for full precision/opacity. Used across the
+/// editor's annotation and background color surfaces.
+private struct SwatchColorPicker: View {
+    let label: String
+    @Binding var color: Color
+    var supportsOpacity: Bool = true
+
+    private let columns = Array(repeating: GridItem(.fixed(22), spacing: 6), count: 6)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                ForEach(annotationColorPresets) { preset in
+                    let isSelected = annotationColorsEqual(preset.color, color)
+                    Button {
+                        color = preset.color
+                    } label: {
+                        AnnotationColorSwatch(color: preset.color, isSelected: isSelected)
+                    }
+                    .buttonStyle(.plain)
+                    .help(preset.name)
+                    .accessibilityLabel("\(preset.name) \(label.lowercased())")
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                }
+
+                ColorPicker("", selection: $color, supportsOpacity: supportsOpacity)
+                    .labelsHidden()
+                    .frame(width: 22, height: 22)
+                    .help("Custom color")
+                    .accessibilityLabel("Custom \(label.lowercased()) color")
+                    .accessibilityHint("Opens the full color picker")
+            }
+        }
     }
 }
 
