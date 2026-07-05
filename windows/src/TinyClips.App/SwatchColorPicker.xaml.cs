@@ -10,14 +10,14 @@ using Color = Windows.UI.Color;
 namespace TinyClips.App;
 
 /// <summary>
-/// Reusable color control for the editor: shows a grid of common preset color swatches first,
-/// plus a "Custom…" button that opens the platform-native full color picker. Used across the
-/// editor's annotation color surfaces (stroke, fill, text, number badge) so the common case is a
-/// single tap while full precision/opacity stays available through Custom.
+/// Reusable color control for the editor: a dropdown button that previews the current color and
+/// opens a flyout with a grid of common preset color swatches plus a "Custom…" button that reveals
+/// the platform-native full color picker. When <see cref="AllowTransparent"/> is set it also offers
+/// a "None" (transparent) swatch so surfaces like shape fill can be cleared.
 /// </summary>
 /// <remarks>
-/// Assigning <see cref="Color"/> programmatically re-syncs the picker and selection ring without
-/// raising <see cref="ColorChanged"/>, so hosts can push state in (e.g. when selecting an
+/// Assigning <see cref="Color"/> programmatically re-syncs the picker, preview, and selection ring
+/// without raising <see cref="ColorChanged"/>, so hosts can push state in (e.g. when selecting an
 /// annotation) with no feedback loop. <see cref="ColorChanged"/> fires only for user input.
 /// </remarks>
 public sealed partial class SwatchColorPicker : UserControl
@@ -41,6 +41,7 @@ public sealed partial class SwatchColorPicker : UserControl
     };
 
     private readonly List<Button> _swatchButtons = new();
+    private Button? _transparentButton;
     private bool _syncing;
 
     public SwatchColorPicker()
@@ -74,6 +75,19 @@ public sealed partial class SwatchColorPicker : UserControl
         set => SetValue(IsAlphaEnabledProperty, value);
     }
 
+    public static readonly DependencyProperty AllowTransparentProperty = DependencyProperty.Register(
+        nameof(AllowTransparent),
+        typeof(bool),
+        typeof(SwatchColorPicker),
+        new PropertyMetadata(false, OnAllowTransparentChanged));
+
+    /// <summary>When true, a leading "None" (transparent) swatch is offered.</summary>
+    public bool AllowTransparent
+    {
+        get => (bool)GetValue(AllowTransparentProperty);
+        set => SetValue(AllowTransparentProperty, value);
+    }
+
     /// <summary>Raised only when the user selects a preset swatch or changes the custom picker.</summary>
     public event EventHandler<Color>? ColorChanged;
 
@@ -87,8 +101,45 @@ public sealed partial class SwatchColorPicker : UserControl
         ((SwatchColorPicker)d).PART_Picker.IsAlphaEnabled = (bool)e.NewValue;
     }
 
+    private static void OnAllowTransparentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var control = (SwatchColorPicker)d;
+        control.BuildSwatches();
+        control.SyncFromColor(control.Color);
+    }
+
     private void BuildSwatches()
     {
+        PART_Swatches.Children.Clear();
+        _swatchButtons.Clear();
+        _transparentButton = null;
+
+        if (AllowTransparent)
+        {
+            var noneButton = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0),
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(Colors.Transparent),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(48, 0, 0, 0)),
+                Content = new FontIcon
+                {
+                    FontFamily = (FontFamily)Application.Current.Resources["SymbolThemeFontFamily"],
+                    FontSize = 12,
+                    Glyph = "\uE711",
+                },
+            };
+            ToolTipService.SetToolTip(noneButton, "None (transparent)");
+            AutomationProperties.SetName(noneButton, "None");
+            noneButton.Click += OnTransparentClick;
+            _transparentButton = noneButton;
+            PART_Swatches.Children.Add(noneButton);
+        }
+
         foreach (var preset in Presets)
         {
             var button = new Button
@@ -119,6 +170,11 @@ public sealed partial class SwatchColorPicker : UserControl
         }
     }
 
+    private void OnTransparentClick(object sender, RoutedEventArgs e)
+    {
+        ApplyColor(Colors.Transparent);
+    }
+
     private void OnPickerColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
         if (_syncing)
@@ -147,28 +203,59 @@ public sealed partial class SwatchColorPicker : UserControl
     {
         _syncing = true;
 
-        if (!ColorsEqual(PART_Picker.Color, color))
+        var transparent = IsTransparent(color);
+
+        if (!transparent && !ColorsEqual(PART_Picker.Color, color))
         {
             PART_Picker.Color = color;
         }
 
-        PART_CurrentSwatch.Background = new SolidColorBrush(color);
-        UpdateSelectionVisuals(color);
+        PART_CurrentSwatch.Background = new SolidColorBrush(transparent ? Colors.Transparent : color);
+        PART_CustomSwatch.Background = new SolidColorBrush(transparent ? Colors.Transparent : color);
+        PART_TransparentGlyph.Visibility = transparent ? Visibility.Visible : Visibility.Collapsed;
+        PART_ColorLabel.Text = DescribeColor(color, transparent);
+
+        UpdateSelectionVisuals(color, transparent);
 
         _syncing = false;
     }
 
-    private void UpdateSelectionVisuals(Color color)
+    private string DescribeColor(Color color, bool transparent)
+    {
+        if (transparent && AllowTransparent)
+        {
+            return "None";
+        }
+
+        foreach (var preset in Presets)
+        {
+            if (ColorsEqual(preset.Color, color))
+            {
+                return preset.Name;
+            }
+        }
+
+        return "Custom";
+    }
+
+    private void UpdateSelectionVisuals(Color color, bool transparent)
     {
         var accent = AccentBrush();
-        var idle = new SolidColorBrush(Windows.UI.Color.FromArgb(48, 0, 0, 0));
+        Brush Idle() => new SolidColorBrush(Windows.UI.Color.FromArgb(48, 0, 0, 0));
+
+        if (_transparentButton is not null)
+        {
+            var selected = transparent && AllowTransparent;
+            _transparentButton.BorderBrush = selected ? accent : Idle();
+            _transparentButton.BorderThickness = new Thickness(selected ? 2 : 1);
+        }
 
         foreach (var button in _swatchButtons)
         {
             if (button.Tag is ColorSwatchPreset preset)
             {
-                var selected = ColorsEqual(preset.Color, color);
-                button.BorderBrush = selected ? accent : idle;
+                var selected = !transparent && ColorsEqual(preset.Color, color);
+                button.BorderBrush = selected ? accent : Idle();
                 button.BorderThickness = new Thickness(selected ? 2 : 1);
             }
         }
@@ -184,6 +271,8 @@ public sealed partial class SwatchColorPicker : UserControl
 
         return new SolidColorBrush(Colors.DodgerBlue);
     }
+
+    private static bool IsTransparent(Color color) => color.A == 0;
 
     private static bool ColorsEqual(Color a, Color b) =>
         a.A == b.A && a.R == b.R && a.G == b.G && a.B == b.B;

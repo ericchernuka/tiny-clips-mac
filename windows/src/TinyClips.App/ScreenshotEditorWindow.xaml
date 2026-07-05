@@ -316,6 +316,7 @@
                                 x:Name="FillColorPicker"
                                 AutomationProperties.AutomationId="EditorFillColorButton"
                                 AutomationProperties.Name="Fill color"
+                                AllowTransparent="True"
                                 ColorChanged="OnFillColorChanged"
                                 IsAlphaEnabled="True" />
                         </StackPanel>
