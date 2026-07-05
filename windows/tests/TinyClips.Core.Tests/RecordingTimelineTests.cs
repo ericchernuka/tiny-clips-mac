@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using NAudio.Wave;
 using TinyClips.Core.Capture;
 
@@ -13,6 +14,23 @@ public sealed class RecordingTimelineTests
 
         Assert.Equal(TimeSpan.FromMilliseconds(125), timeline.Normalize(origin + TimeSpan.FromMilliseconds(125)));
         Assert.Equal(TimeSpan.FromMilliseconds(-25), timeline.Normalize(origin - TimeSpan.FromMilliseconds(25)));
+    }
+
+    [Fact]
+    public void Normalize_SubtractsPausedDuration()
+    {
+        var origin = SystemRelativeNow();
+        var timeline = RecordingTimeline.FromOrigin(origin);
+
+        timeline.Pause();
+        Thread.Sleep(50);
+        timeline.Resume();
+
+        var sampleTimestamp = SystemRelativeNow() + TimeSpan.FromMilliseconds(100);
+        var rawElapsed = sampleTimestamp - origin;
+        var normalized = timeline.Normalize(sampleTimestamp);
+
+        Assert.InRange((rawElapsed - normalized).TotalMilliseconds, 20, 5000);
     }
 
     [Fact]
@@ -107,6 +125,46 @@ public sealed class RecordingTimelineTests
         Assert.Equal(new short[] { 4, 5 }, ReadSamples(provider, 2));
     }
 
+    [Fact]
+    public void Pause_DropsSamplesUntilResume()
+    {
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format);
+        provider.BeginTimeline(origin);
+        provider.AddSamples(ToBytes(1, 2), 4, origin);
+
+        Assert.Equal(new short[] { 1, 2 }, ReadSamples(provider, 2));
+
+        provider.Pause();
+        provider.AddSamples(ToBytes(1, 2), 4, origin);
+        provider.Resume();
+        provider.AddSamples(ToBytes(3, 4), 4, origin + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(new short[] { 3, 4 }, ReadSamples(provider, 2));
+    }
+
+    [Fact]
+    public void Resume_AppendsContiguouslyWithoutRealigningFirstPacket()
+    {
+        var format = new WaveFormat(1000, 16, 1);
+        var origin = TimeSpan.FromSeconds(10);
+        var provider = new TimelineAlignedWaveProvider(format)
+        {
+            Latency = TimeSpan.FromMilliseconds(3),
+        };
+        provider.BeginTimeline(origin);
+        provider.AddSamples(ToBytes(1, 2, 3, 4, 5), 10, origin);
+
+        Assert.Equal(new short[] { 4, 5 }, ReadSamples(provider, 2));
+
+        provider.Pause();
+        provider.Resume();
+        provider.AddSamples(ToBytes(6, 7), 4, origin + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(new short[] { 6, 7 }, ReadSamples(provider, 2));
+    }
+
     private static byte[] ToBytes(params short[] samples)
     {
         var bytes = new byte[samples.Length * sizeof(short)];
@@ -122,4 +180,7 @@ public sealed class RecordingTimelineTests
         Buffer.BlockCopy(bytes, 0, samples, 0, bytes.Length);
         return samples;
     }
+
+    private static TimeSpan SystemRelativeNow() =>
+        Stopwatch.GetElapsedTime(0, Stopwatch.GetTimestamp());
 }

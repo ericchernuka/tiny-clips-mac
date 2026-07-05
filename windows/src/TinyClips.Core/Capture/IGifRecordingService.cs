@@ -9,6 +9,8 @@ public interface IGifRecordingService
 {
     bool IsRecording { get; }
 
+    bool IsPaused { get; }
+
     /// <summary>Raised when a recording finishes (manual stop or time-limit), with the saved file path.</summary>
     event EventHandler<string?>? RecordingCompleted;
 
@@ -21,4 +23,10 @@ public interface IGifRecordingService
 
     /// <summary>Stops recording, encodes the GIF and returns the saved path (or null if nothing recorded).</summary>
     Task<string?> StopAsync();
+
+    Task PauseAsync();
+
+    Task ResumeAsync();
+
+    Task CancelAsync();
 }

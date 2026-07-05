@@ -47,6 +47,7 @@ internal sealed class ContinuousCaptureSession : IDisposable
     private int _fullWidth;
     private int _fullHeight;
     private volatile bool _running;
+    private volatile bool _emittingPaused;
 
     /// <summary>Raised at the target frame rate: tightly-packed BGRA8 + relative PTS.</summary>
     public event Action<CapturedFrame, TimeSpan>? FrameReady;
@@ -125,15 +126,32 @@ internal sealed class ContinuousCaptureSession : IDisposable
 
             _timeline = timeline ?? RecordingTimeline.StartNow();
             _loggedFirstEmit = false;
+            _emittingPaused = false;
 
             // Steady-rate pump: re-emits the latest captured frame even when WGC is idle.
             _pump = new Timer(OnPump, null, TimeSpan.Zero, _frameInterval);
         }
     }
 
+    public void PauseEmitting()
+    {
+        lock (_sync)
+        {
+            _emittingPaused = true;
+            _latestPixels = null;
+            _latestWidth = 0;
+            _latestHeight = 0;
+        }
+    }
+
+    public void ResumeEmitting()
+    {
+        _emittingPaused = false;
+    }
+
     private void OnFrameArrived(Direct3D11CaptureFramePool pool, object? args)
     {
-        if (!_running)
+        if (!_running || _emittingPaused)
         {
             return;
         }

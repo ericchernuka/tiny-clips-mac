@@ -43,7 +43,9 @@ public partial class App : Application
     private RegionIndicatorWindow? _recordingRegionIndicator;
     private DispatcherTimer? _recordingTimer;
     private DateTime _recordingStartedUtc;
+    private TimeSpan _recordingElapsedBeforePause;
     private TargetSelection? _activeRecordingSelection;
+    private CaptureType? _activeRecordingType;
     private CaptureTile? _videoTile;
     private CaptureTile? _gifTile;
     private TrayPopupWindow? _trayPopup;
@@ -409,6 +411,7 @@ public partial class App : Application
                 case CaptureType.Video:
                     settings.VideoRecordingTimeLimitMinutes = (int)Math.Round(Math.Max(0, pick.VideoTimeLimitMinutes));
                     _activeRecordingSelection = selection;
+                    _activeRecordingType = CaptureType.Video;
                     ShowRecordingRegionIndicator(selection);
                     if (!showDisabledStopDuringCountdown)
                     {
@@ -421,6 +424,7 @@ public partial class App : Application
 
                 case CaptureType.Gif:
                     _activeRecordingSelection = selection;
+                    _activeRecordingType = CaptureType.Gif;
                     ShowRecordingRegionIndicator(selection);
                     if (!showDisabledStopDuringCountdown)
                     {
@@ -439,6 +443,7 @@ public partial class App : Application
             UpdateRecordingState();
             CloseRecordingRegionIndicator();
             _activeRecordingSelection = null;
+            _activeRecordingType = null;
             HideRecordingIndicatorIfNotRecording();
         }
     }
@@ -736,6 +741,7 @@ public partial class App : Application
             HideProcessingIndicator();
             CloseRecordingRegionIndicator();
             _activeRecordingSelection = null;
+            _activeRecordingType = null;
             if (_isExiting)
             {
                 return;
@@ -795,6 +801,138 @@ public partial class App : Application
             CloseRecordingRegionIndicatorIfNotRecording();
             HideRecordingIndicatorIfNotRecording();
             _activeRecordingSelection = null;
+            _activeRecordingType = null;
+        }
+    }
+
+    private async Task PauseActiveRecordingAsync()
+    {
+        var video = Services.GetRequiredService<IVideoRecordingService>();
+        var gif = Services.GetRequiredService<IGifRecordingService>();
+
+        if (video.IsRecording)
+        {
+            if (video.IsPaused)
+            {
+                return;
+            }
+
+            await video.PauseAsync();
+        }
+        else if (gif.IsRecording)
+        {
+            if (gif.IsPaused)
+            {
+                return;
+            }
+
+            await gif.PauseAsync();
+        }
+        else
+        {
+            return;
+        }
+
+        _recordingElapsedBeforePause += DateTime.UtcNow - _recordingStartedUtc;
+        StopRecordingTimer();
+        _recordingIndicator?.UpdateElapsed(_recordingElapsedBeforePause);
+        _recordingIndicator?.SetPaused(true);
+    }
+
+    private async Task ResumeActiveRecordingAsync()
+    {
+        var video = Services.GetRequiredService<IVideoRecordingService>();
+        var gif = Services.GetRequiredService<IGifRecordingService>();
+
+        if (video.IsRecording)
+        {
+            if (!video.IsPaused)
+            {
+                return;
+            }
+
+            await video.ResumeAsync();
+        }
+        else if (gif.IsRecording)
+        {
+            if (!gif.IsPaused)
+            {
+                return;
+            }
+
+            await gif.ResumeAsync();
+        }
+        else
+        {
+            return;
+        }
+
+        _recordingStartedUtc = DateTime.UtcNow;
+        _recordingIndicator?.SetPaused(false);
+        StartRecordingTimer();
+    }
+
+    private async Task RestartActiveRecordingAsync()
+    {
+        if (_activeRecordingSelection is not { } selection || _activeRecordingType is not { } type)
+        {
+            return;
+        }
+
+        await DiscardActiveRecordingAsync(clearActiveSelection: false);
+        _activeRecordingSelection = selection;
+        _activeRecordingType = type;
+        ShowRecordingRegionIndicator(selection);
+        ShowRecordingIndicator(type, selection, stopEnabled: false, startTimer: false);
+
+        if (type == CaptureType.Video)
+        {
+            var settings = Services.GetRequiredService<ICaptureSettings>();
+            await Services.GetRequiredService<IVideoRecordingService>()
+                .StartAsync(selection.Target, selection.Region, settings.VideoRecordingTimeLimitMinutes);
+        }
+        else
+        {
+            await Services.GetRequiredService<IGifRecordingService>().StartAsync(selection.Target, selection.Region);
+        }
+
+        ActivateRecordingIndicatorForStartedCapture();
+        UpdateRecordingState();
+    }
+
+    private Task DiscardActiveRecordingAsync() => DiscardActiveRecordingAsync(clearActiveSelection: true);
+
+    private async Task DiscardActiveRecordingAsync(bool clearActiveSelection)
+    {
+        try
+        {
+            var video = Services.GetRequiredService<IVideoRecordingService>();
+            var gif = Services.GetRequiredService<IGifRecordingService>();
+
+            if (video.IsRecording)
+            {
+                await video.CancelAsync();
+            }
+            else if (gif.IsRecording)
+            {
+                await gif.CancelAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to discard active recording: {ex}");
+        }
+        finally
+        {
+            HideProcessingIndicator();
+            HideRecordingIndicator();
+            CloseRecordingRegionIndicator();
+            UpdateRecordingState();
+            if (clearActiveSelection)
+            {
+                _activeRecordingSelection = null;
+                _activeRecordingType = null;
+            }
         }
     }
 
@@ -855,6 +993,10 @@ public partial class App : Application
         var settings = Services.GetRequiredService<ICaptureSettings>();
         var window = new RecordingIndicatorWindow(hotKeys.StopRecordingDisplayString);
         window.StopRequested = () => _ = StopActiveRecordingAsync();
+        window.PauseRequested = () => _ = PauseActiveRecordingAsync();
+        window.ResumeRequested = () => _ = ResumeActiveRecordingAsync();
+        window.RestartRequested = () => _ = RestartActiveRecordingAsync();
+        window.DiscardRequested = () => _ = DiscardActiveRecordingAsync();
         window.Closed += (_, _) =>
         {
             if (ReferenceEquals(_recordingIndicator, window))
@@ -879,6 +1021,7 @@ public partial class App : Application
         if (startTimer)
         {
             _recordingStartedUtc = DateTime.UtcNow;
+            _recordingElapsedBeforePause = TimeSpan.Zero;
             StartRecordingTimer();
         }
     }
@@ -886,6 +1029,7 @@ public partial class App : Application
     private void ActivateRecordingIndicatorForStartedCapture()
     {
         _recordingStartedUtc = DateTime.UtcNow;
+        _recordingElapsedBeforePause = TimeSpan.Zero;
         _recordingIndicator?.SetStopEnabled(true);
         StartRecordingTimer();
     }
@@ -900,7 +1044,7 @@ public partial class App : Application
 
     private void OnRecordingTimerTick(object? sender, object e)
     {
-        _recordingIndicator?.UpdateElapsed(DateTime.UtcNow - _recordingStartedUtc);
+        _recordingIndicator?.UpdateElapsed(_recordingElapsedBeforePause + (DateTime.UtcNow - _recordingStartedUtc));
     }
 
     private void HideRecordingIndicatorIfNotRecording()

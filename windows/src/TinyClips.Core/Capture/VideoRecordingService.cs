@@ -41,6 +41,7 @@ public sealed class VideoRecordingService : IVideoRecordingService
     private TimeSpan _frameDuration;
     private Timer? _limitTimer;
     private int _stopping;
+    private int _discardRequested;
 
     private MouseClickMonitor? _clickMonitor;
     private MouseClickOverlayStyle _clickStyle;
@@ -80,6 +81,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     public bool IsRecording { get; private set; }
 
+    public bool IsPaused { get; private set; }
+
     public event EventHandler<string?>? RecordingCompleted;
 
     public event EventHandler<string>? WebcamCaptureFailed;
@@ -93,6 +96,8 @@ public sealed class VideoRecordingService : IVideoRecordingService
             {
                 throw new InvalidOperationException("A recording is already in progress.");
             }
+
+            Interlocked.Exchange(ref _discardRequested, 0);
 
             var captureTarget = target ?? CaptureTarget.Monitor(
                 (_monitors.GetPrimaryMonitor()
@@ -225,6 +230,11 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
     private void OnFrameReady(CapturedFrame frame, TimeSpan pts)
     {
+        if (IsPaused)
+        {
+            return;
+        }
+
         DrawClickOverlay(frame, pts);
         _branding?.Draw(frame.BgraPixels, frame.Width, frame.Height);
 
@@ -808,11 +818,71 @@ public sealed class VideoRecordingService : IVideoRecordingService
     }
 
 
-    public async Task<string?> StopAsync()
+    public Task<string?> StopAsync() => StopAsync(discard: false);
+
+    public async Task PauseAsync()
     {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || IsPaused)
+            {
+                return;
+            }
+
+            _recordingTimeline?.Pause();
+            _capture?.PauseEmitting();
+            _audio?.Pause();
+            IsPaused = true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task ResumeAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || !IsPaused)
+            {
+                return;
+            }
+
+            _recordingTimeline?.Resume();
+            _audio?.Resume();
+            _capture?.ResumeEmitting();
+            IsPaused = false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task CancelAsync()
+    {
+        await StopAsync(discard: true).ConfigureAwait(false);
+    }
+
+    private bool ConsumeDiscardRequested(bool discard)
+    {
+        var latched = Interlocked.Exchange(ref _discardRequested, 0) == 1;
+        return discard || latched;
+    }
+
+    private async Task<string?> StopAsync(bool discard)
+    {
+        if (discard)
+        {
+            Interlocked.Exchange(ref _discardRequested, 1);
+        }
+
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
-            return _outputPath;
+            return discard ? null : _outputPath;
         }
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -820,11 +890,20 @@ public sealed class VideoRecordingService : IVideoRecordingService
         {
             if (!IsRecording)
             {
+                IsPaused = false;
+
+                if (ConsumeDiscardRequested(discard))
+                {
+                    DeleteOutputFileIfPresent(_outputPath);
+                    _outputPath = null;
+                }
+
                 return null;
             }
 
             _limitTimer?.Dispose();
             _limitTimer = null;
+            IsPaused = false;
 
             _clickMonitor?.Dispose();
             _clickMonitor = null;
@@ -868,17 +947,46 @@ public sealed class VideoRecordingService : IVideoRecordingService
 
             IsRecording = false;
             var path = _outputPath;
-            if (HasNonEmptyOutputFile(path))
+            var shouldDiscard = ConsumeDiscardRequested(discard);
+            if (shouldDiscard && !string.IsNullOrEmpty(path))
             {
-                _analytics.RecordCapture(CaptureType.Video);
+                DeleteOutputFileIfPresent(path);
+                path = null;
             }
-            RecordingCompleted?.Invoke(this, path);
+            else
+            {
+                if (HasNonEmptyOutputFile(path))
+                {
+                    _analytics.RecordCapture(CaptureType.Video);
+                }
+
+                RecordingCompleted?.Invoke(this, path);
+            }
+
+            _outputPath = path;
             return path;
         }
         finally
         {
             Interlocked.Exchange(ref _stopping, 0);
             _gate.Release();
+        }
+    }
+
+    private static void DeleteOutputFileIfPresent(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup of discarded output.
         }
     }
 

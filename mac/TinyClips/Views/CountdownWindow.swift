@@ -31,7 +31,12 @@ class CountdownWindow: NSPanel {
             let y = screen.frame.midY - frame.height / 2
             setFrameOrigin(NSPoint(x: x, y: y))
         }
+        alphaValue = 0
         orderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            animator().alphaValue = 1
+        }
         startCountdown()
     }
 
@@ -41,9 +46,15 @@ class CountdownWindow: NSPanel {
             self.remaining -= 1
             if self.remaining <= 0 {
                 timer.invalidate()
-                self.orderOut(nil)
-                self.completion?()
-                self.completion = nil
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.16
+                    self.animator().alphaValue = 0
+                } completionHandler: {
+                    let completion = self.completion
+                    self.completion = nil
+                    self.orderOut(nil)
+                    completion?()
+                }
             } else {
                 self.updateDisplay()
             }
@@ -81,9 +92,13 @@ private struct CountdownView: View {
                 .font(.system(size: 48, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
+                .scaleEffect(remaining == 1 ? 1.25 : 1)
+                .opacity(remaining == 1 ? 1 : 0.92)
+                .animation(.spring(response: 0.28, dampingFraction: 0.72), value: remaining)
                 .accessibilityLabel("Countdown")
                 .accessibilityValue("\(remaining) seconds")
         }
         .frame(width: 120, height: 120)
+        .transition(.opacity.combined(with: .scale(scale: 0.92)))
     }
 }

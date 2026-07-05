@@ -61,6 +61,9 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
     private var videoInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var hasStartedWriting = false
+    private var isPaused = false
+    private var pauseStartedAt: CMTime?
+    private var totalPausedDuration = CMTime.zero
     /// Presentation timestamp (host-clock based) of the first webcam frame written.
     /// Compared against the screen recorder's first sample time to align the webcam
     /// overlay with the audio timeline. Intentionally preserved across `reset()`.
@@ -180,12 +183,58 @@ final class WebcamRecorder: NSObject, @unchecked Sendable {
         }
     }
 
+    func pause() {
+        writingQueue.async {
+            guard !self.isPaused else { return }
+            self.isPaused = true
+            self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+        captureQueue.async {
+            if let session = self.session, session.isRunning {
+                session.stopRunning()
+            }
+        }
+    }
+
+    func resume() {
+        writingQueue.async {
+            guard self.isPaused else { return }
+            if let pauseStartedAt = self.pauseStartedAt {
+                let now = CMClockGetTime(CMClockGetHostTimeClock())
+                self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
+            }
+            self.pauseStartedAt = nil
+            self.isPaused = false
+        }
+        captureQueue.async {
+            self.session?.startRunning()
+        }
+    }
+
+    func cancel() async {
+        captureQueue.sync {
+            if let session, session.isRunning {
+                session.stopRunning()
+            }
+        }
+        writingQueue.sync {
+            writer?.cancelWriting()
+        }
+        if let outputURL {
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        reset()
+    }
+
     private func reset() {
         session = nil
         writer = nil
         videoInput = nil
         outputURL = nil
         hasStartedWriting = false
+        isPaused = false
+        pauseStartedAt = nil
+        totalPausedDuration = .zero
     }
 
     private func debugLifecycle(_ message: String) {
@@ -203,19 +252,45 @@ extension WebcamRecorder: AVCaptureVideoDataOutputSampleBufferDelegate {
     ) {
         guard sampleBuffer.isValid else { return }
         guard let writer, let videoInput else { return }
+        guard !isPaused else { return }
+
+        let adjustedSampleBuffer = adjustedSampleBuffer(sampleBuffer) ?? sampleBuffer
 
         if !hasStartedWriting {
             guard writer.startWriting() else {
                 onWebcamError?(writer.error?.localizedDescription ?? CaptureError.saveFailed.localizedDescription)
                 return
             }
-            writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
-            firstSampleTime = sampleBuffer.presentationTimeStamp
+            writer.startSession(atSourceTime: adjustedSampleBuffer.presentationTimeStamp)
+            firstSampleTime = adjustedSampleBuffer.presentationTimeStamp
             hasStartedWriting = true
         }
 
         guard videoInput.isReadyForMoreMediaData else { return }
-        _ = videoInput.append(sampleBuffer)
+        _ = videoInput.append(adjustedSampleBuffer)
+    }
+
+    private func adjustedSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer? {
+        guard totalPausedDuration > .zero else { return sampleBuffer }
+        var timing = CMSampleTimingInfo()
+        guard CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing) == noErr else {
+            return sampleBuffer
+        }
+        if timing.presentationTimeStamp.isValid {
+            timing.presentationTimeStamp = CMTimeSubtract(timing.presentationTimeStamp, totalPausedDuration)
+        }
+        if timing.decodeTimeStamp.isValid {
+            timing.decodeTimeStamp = CMTimeSubtract(timing.decodeTimeStamp, totalPausedDuration)
+        }
+        var adjusted: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &adjusted
+        )
+        return status == noErr ? adjusted : sampleBuffer
     }
 }
 
@@ -233,6 +308,9 @@ class VideoRecorder: NSObject, @unchecked Sendable {
     private var microphoneObservers: [NSObjectProtocol] = []
     private var lastMicSignalAt = CACurrentMediaTime()
     private var hasStartedWriting = false
+    private var isPaused = false
+    private var pauseStartedAt: CMTime?
+    private var totalPausedDuration = CMTime.zero
     private var recordSystemAudio = false
     private var recordMicrophone = false
     private var selectedMicrophoneID = ""
@@ -405,8 +483,10 @@ class VideoRecorder: NSObject, @unchecked Sendable {
         }
 
         writingQueue.async { [weak self] in
-            guard let self, self.hasStartedWriting, let micAudioInput = self.micAudioInput, micAudioInput.isReadyForMoreMediaData else { return }
-            micAudioInput.append(sampleBuffer)
+            guard let self, !self.isPaused, self.hasStartedWriting, let micAudioInput = self.micAudioInput, micAudioInput.isReadyForMoreMediaData else { return }
+            if let adjustedSampleBuffer = self.adjustedSampleBuffer(sampleBuffer) {
+                micAudioInput.append(adjustedSampleBuffer)
+            }
         }
     }
 
@@ -535,6 +615,36 @@ class VideoRecorder: NSObject, @unchecked Sendable {
         }
     }
 
+    func pause() {
+        writingQueue.async {
+            guard !self.isPaused else { return }
+            self.isPaused = true
+            self.pauseStartedAt = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+        microphoneQueue.async {
+            self.microphoneSession?.stopRunning()
+        }
+    }
+
+    func resume() {
+        writingQueue.async {
+            guard self.isPaused else { return }
+            if let pauseStartedAt = self.pauseStartedAt {
+                let now = CMClockGetTime(CMClockGetHostTimeClock())
+                self.totalPausedDuration = CMTimeAdd(self.totalPausedDuration, CMTimeSubtract(now, pauseStartedAt))
+            }
+            self.pauseStartedAt = nil
+            self.isPaused = false
+        }
+        microphoneQueue.async {
+            self.microphoneSession?.startRunning()
+        }
+    }
+
+    func cancel() async {
+        await resetAfterFailedStart(removeOutputFile: true)
+    }
+
     private func stopMicrophoneCapture() {
         if let session = microphoneSession {
             if session.isRunning {
@@ -561,6 +671,9 @@ class VideoRecorder: NSObject, @unchecked Sendable {
         systemAudioInput = nil
         micAudioInput = nil
         hasStartedWriting = false
+        isPaused = false
+        pauseStartedAt = nil
+        totalPausedDuration = .zero
         recordSystemAudio = false
         recordMicrophone = false
         selectedMicrophoneID = ""
@@ -601,6 +714,7 @@ extension VideoRecorder: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard sampleBuffer.isValid else { return }
         guard let writer else { return }
+        guard !isPaused else { return }
 
         switch type {
         case .screen:
@@ -614,20 +728,24 @@ extension VideoRecorder: SCStreamOutput {
 
             guard let videoInput else { return }
 
+            guard let adjustedSampleBuffer = adjustedSampleBuffer(sampleBuffer) else { return }
+
             if !hasStartedWriting {
                 guard writer.startWriting() else { return }
-                writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
-                firstScreenSampleTime = sampleBuffer.presentationTimeStamp
+                writer.startSession(atSourceTime: adjustedSampleBuffer.presentationTimeStamp)
+                firstScreenSampleTime = adjustedSampleBuffer.presentationTimeStamp
                 hasStartedWriting = true
             }
 
             if videoInput.isReadyForMoreMediaData {
-                videoInput.append(sampleBuffer)
+                videoInput.append(adjustedSampleBuffer)
             }
 
         case .audio:
             guard hasStartedWriting, let systemAudioInput, systemAudioInput.isReadyForMoreMediaData else { return }
-            systemAudioInput.append(sampleBuffer)
+            if let adjustedSampleBuffer = adjustedSampleBuffer(sampleBuffer) {
+                systemAudioInput.append(adjustedSampleBuffer)
+            }
 
         case .microphone:
             break
@@ -635,5 +753,39 @@ extension VideoRecorder: SCStreamOutput {
         @unknown default:
             break
         }
+    }
+
+    private func adjustedSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer? {
+        guard totalPausedDuration > .zero else { return sampleBuffer }
+
+        let count = CMSampleBufferGetNumSamples(sampleBuffer)
+        var timing = Array(repeating: CMSampleTimingInfo(), count: max(1, count))
+        var timingCount = 0
+        let status = CMSampleBufferGetSampleTimingInfoArray(
+            sampleBuffer,
+            entryCount: timing.count,
+            arrayToFill: &timing,
+            entriesNeededOut: &timingCount
+        )
+        guard status == noErr else { return sampleBuffer }
+
+        for index in 0..<timingCount {
+            if timing[index].presentationTimeStamp.isValid {
+                timing[index].presentationTimeStamp = CMTimeSubtract(timing[index].presentationTimeStamp, totalPausedDuration)
+            }
+            if timing[index].decodeTimeStamp.isValid {
+                timing[index].decodeTimeStamp = CMTimeSubtract(timing[index].decodeTimeStamp, totalPausedDuration)
+            }
+        }
+
+        var adjusted: CMSampleBuffer?
+        let copyStatus = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: timingCount,
+            sampleTimingArray: timing,
+            sampleBufferOut: &adjusted
+        )
+        return copyStatus == noErr ? adjusted : sampleBuffer
     }
 }

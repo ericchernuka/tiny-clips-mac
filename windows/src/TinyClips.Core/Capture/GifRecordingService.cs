@@ -28,6 +28,7 @@ public sealed class GifRecordingService : IGifRecordingService
     private List<CapturedFrame>? _frames;
     private double _fps;
     private int _stopping;
+    private int _discardRequested;
 
     private MouseClickMonitor? _clickMonitor;
     private MouseClickOverlayStyle _clickStyle;
@@ -49,6 +50,8 @@ public sealed class GifRecordingService : IGifRecordingService
 
     public bool IsRecording { get; private set; }
 
+    public bool IsPaused { get; private set; }
+
     public event EventHandler<string?>? RecordingCompleted;
 
     public async Task StartAsync(CaptureTarget? target = null, PixelRect? region = null, CancellationToken cancellationToken = default)
@@ -60,6 +63,8 @@ public sealed class GifRecordingService : IGifRecordingService
             {
                 throw new InvalidOperationException("A GIF recording is already in progress.");
             }
+
+            Interlocked.Exchange(ref _discardRequested, 0);
 
             var captureTarget = target ?? CaptureTarget.Monitor(
                 (_monitors.GetPrimaryMonitor()
@@ -86,6 +91,11 @@ public sealed class GifRecordingService : IGifRecordingService
 
     private void OnFrameReady(CapturedFrame frame, TimeSpan pts)
     {
+        if (IsPaused)
+        {
+            return;
+        }
+
         if (_clickMonitor is { } monitor)
         {
             MouseClickOverlayCompositor.Draw(
@@ -131,8 +141,58 @@ public sealed class GifRecordingService : IGifRecordingService
         _clickMonitor.Start();
     }
 
-    public async Task<string?> StopAsync()
+    public Task<string?> StopAsync() => StopAsync(discard: false);
+
+    public async Task PauseAsync()
     {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || IsPaused)
+            {
+                return;
+            }
+
+            _capture?.PauseEmitting();
+            IsPaused = true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task ResumeAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!IsRecording || !IsPaused)
+            {
+                return;
+            }
+
+            _capture?.ResumeEmitting();
+            IsPaused = false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task CancelAsync()
+    {
+        await StopAsync(discard: true).ConfigureAwait(false);
+    }
+
+    private async Task<string?> StopAsync(bool discard)
+    {
+        if (discard)
+        {
+            Interlocked.Exchange(ref _discardRequested, 1);
+        }
+
         if (Interlocked.Exchange(ref _stopping, 1) == 1)
         {
             return null;
@@ -143,6 +203,15 @@ public sealed class GifRecordingService : IGifRecordingService
         {
             if (!IsRecording)
             {
+                IsPaused = false;
+                if (ConsumeDiscardRequested(discard))
+                {
+                    lock (_frameLock)
+                    {
+                        _frames = null;
+                    }
+                }
+
                 return null;
             }
 
@@ -150,6 +219,7 @@ public sealed class GifRecordingService : IGifRecordingService
             _clickMonitor?.Dispose();
             _clickMonitor = null;
             _branding = null;
+            IsPaused = false;
 
             List<CapturedFrame> frames;
             lock (_frameLock)
@@ -161,6 +231,11 @@ public sealed class GifRecordingService : IGifRecordingService
             _capture?.Dispose();
             _capture = null;
             IsRecording = false;
+
+            if (ConsumeDiscardRequested(discard))
+            {
+                return null;
+            }
 
             if (frames.Count == 0)
             {
@@ -175,7 +250,17 @@ public sealed class GifRecordingService : IGifRecordingService
             }
 
             var bytes = await EncodeGifAsync(frames).ConfigureAwait(false);
+            if (ConsumeDiscardRequested(discard))
+            {
+                return null;
+            }
+
             await File.WriteAllBytesAsync(path, bytes).ConfigureAwait(false);
+            if (ConsumeDiscardRequested(discard))
+            {
+                DeleteOutputFileIfPresent(path);
+                return null;
+            }
 
             _analytics.RecordCapture(CaptureType.Gif);
             RecordingCompleted?.Invoke(this, path);
@@ -185,6 +270,24 @@ public sealed class GifRecordingService : IGifRecordingService
         {
             Interlocked.Exchange(ref _stopping, 0);
             _gate.Release();
+        }
+    }
+
+    private bool ConsumeDiscardRequested(bool discard)
+    {
+        var latched = Interlocked.Exchange(ref _discardRequested, 0) == 1;
+        return discard || latched;
+    }
+
+    private static void DeleteOutputFileIfPresent(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup of discarded output.
         }
     }
 

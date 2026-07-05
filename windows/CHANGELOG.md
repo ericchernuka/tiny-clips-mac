@@ -6,6 +6,7 @@ own `CHANGELOG.md` at the repository root.
 ## [Unreleased]
 
 ### Added
+- **Richer in-progress recording controls** - the Windows recording overlay now supports pause, resume, restart, discard, and stop while keeping the panel out of captured output.
 - **Capture analytics in Settings** - Tiny Clips for Windows now tracks screenshots, videos, and GIFs taken per day on the local device, shows the last 7 or 30 days in a stacked chart under Settings → Analytics, and lets you reset that history.
 - **Extended capture analytics** - added lifetime (all-time) totals per capture type, per-type checkboxes to show/hide screenshots/videos/GIFs on the chart, hover tooltips with exact daily counts, a "busiest day of week" and "most active hour" insights breakdown, and a Copy Summary button that puts a quick text summary of your capture activity on the clipboard.
 - **Remove audio export option for video trimming** - the Windows video trimmer now offers a clear Remove audio checkbox and renders no-audio exports when enabled.
@@ -18,6 +19,7 @@ own `CHANGELOG.md` at the repository root.
 - **Webcam-unavailable notification** - if the webcam can't start (for example camera access is blocked in Privacy settings) or is lost mid-recording, the app now shows a toast explaining why and that the screen recording continued without it, instead of silently dropping the overlay.
 
 ### Improved
+- **Countdown animation polish** - the Windows countdown overlay now fades in/out, animates each number, and gives the final second stronger emphasis while remaining excluded from capture.
 - **Screenshot editor background settings now round the screenshot content itself** — the Image corners control now explicitly clips the screenshot preview content to match the rounded-corner export behavior.
 - **Video/GIF recording now matches the macOS target-first setup flow** — after choosing Region,
   Screen, or Window, Windows now shows a pre-record panel before countdown. Video captures can pick

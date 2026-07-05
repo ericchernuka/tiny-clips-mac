@@ -28,6 +28,7 @@ public sealed class AudioCaptureService : IDisposable
     private MixingSampleProvider? _mixer;
     private IWaveProvider? _output;
     private bool _disposed;
+    private bool _paused;
 
     public AudioCaptureService(bool captureSystem, bool captureMic, string? micDeviceId)
     {
@@ -83,7 +84,7 @@ public sealed class AudioCaptureService : IDisposable
             {
                 lock (_gate)
                 {
-                    if (!_disposed)
+                    if (!_disposed && !_paused)
                     {
                         buffer.AddSamples(data, count, sourceTimestamp);
                     }
@@ -182,7 +183,7 @@ public sealed class AudioCaptureService : IDisposable
         {
             lock (_gate)
             {
-                if (_disposed || _buffers.Count == 0)
+                if (_disposed || _paused || _buffers.Count == 0)
                 {
                     return 0;
                 }
@@ -215,7 +216,7 @@ public sealed class AudioCaptureService : IDisposable
     {
         lock (_gate)
         {
-            if (_disposed || _output is null)
+            if (_disposed || _paused || _output is null)
             {
                 return null;
             }
@@ -254,6 +255,40 @@ public sealed class AudioCaptureService : IDisposable
             {
                 buffer.BeginTimeline(timeline.Origin);
             }
+        }
+    }
+
+    internal void Pause()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _paused = true;
+            foreach (var buffer in _buffers)
+            {
+                buffer.Pause();
+            }
+        }
+    }
+
+    internal void Resume()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            foreach (var buffer in _buffers)
+            {
+                buffer.Resume();
+            }
+
+            _paused = false;
         }
     }
 

@@ -14,14 +14,15 @@ namespace TinyClips.App;
 /// </summary>
 public sealed partial class RecordingIndicatorWindow : Window
 {
-    private const int WidthDip = 260;
+    private const int WidthDip = 520;
     private const int HeightDip = 64;
     private const int TopOffsetDip = 24;
     private const int RegionOutsideOffsetDip = 12;
 
     private const uint WdaExcludeFromCapture = 0x11;
 
-    private bool _stopRequested;
+    private bool _finishRequested;
+    private string _stopHintText = "Stop from tray";
     private bool _closed;
 
     private bool _dragging;
@@ -32,15 +33,20 @@ public sealed partial class RecordingIndicatorWindow : Window
     {
         InitializeComponent();
 
-        HotKeyText.Text = string.IsNullOrWhiteSpace(stopHint)
+        _stopHintText = string.IsNullOrWhiteSpace(stopHint)
             ? "Stop from tray"
             : $"Stop: {stopHint}";
+        HotKeyText.Text = _stopHintText;
 
         ConfigurePresenter();
         Closed += OnClosed;
     }
 
     public Action? StopRequested { get; set; }
+    public Action? PauseRequested { get; set; }
+    public Action? ResumeRequested { get; set; }
+    public Action? RestartRequested { get; set; }
+    public Action? DiscardRequested { get; set; }
 
     public void ShowNear()
     {
@@ -71,7 +77,14 @@ public sealed partial class RecordingIndicatorWindow : Window
 
     public void SetStopEnabled(bool enabled)
     {
-        StopButton.IsEnabled = enabled && !_stopRequested;
+        SetControlsEnabled(enabled && !_finishRequested);
+    }
+
+    public void SetPaused(bool paused)
+    {
+        PauseButton.Visibility = paused ? Visibility.Collapsed : Visibility.Visible;
+        ResumeButton.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        HotKeyText.Text = paused ? "Paused" : _stopHintText;
     }
 
     public void ClosePanel()
@@ -83,22 +96,62 @@ public sealed partial class RecordingIndicatorWindow : Window
 
         _closed = true;
         StopRequested = null;
+        PauseRequested = null;
+        ResumeRequested = null;
+        RestartRequested = null;
+        DiscardRequested = null;
         Close();
+    }
+
+    private void OnPauseClick(object sender, RoutedEventArgs e)
+    {
+        PauseRequested?.Invoke();
+    }
+
+    private void OnResumeClick(object sender, RoutedEventArgs e)
+    {
+        ResumeRequested?.Invoke();
+    }
+
+    private void OnRestartClick(object sender, RoutedEventArgs e)
+    {
+        CompleteWith(RestartRequested);
+    }
+
+    private void OnDiscardClick(object sender, RoutedEventArgs e)
+    {
+        CompleteWith(DiscardRequested);
     }
 
     private void OnStopClick(object sender, RoutedEventArgs e)
     {
-        if (_stopRequested)
+        CompleteWith(StopRequested);
+    }
+
+    private void CompleteWith(Action? callback)
+    {
+        if (_finishRequested)
         {
             return;
         }
 
-        _stopRequested = true;
-        StopButton.IsEnabled = false;
-
-        var callback = StopRequested;
+        _finishRequested = true;
+        SetControlsEnabled(false);
         StopRequested = null;
+        PauseRequested = null;
+        ResumeRequested = null;
+        RestartRequested = null;
+        DiscardRequested = null;
         callback?.Invoke();
+    }
+
+    private void SetControlsEnabled(bool enabled)
+    {
+        PauseButton.IsEnabled = enabled;
+        ResumeButton.IsEnabled = enabled;
+        RestartButton.IsEnabled = enabled;
+        DiscardButton.IsEnabled = enabled;
+        StopButton.IsEnabled = enabled;
     }
 
     // Drag-anywhere support: pressing the Stop button is handled by the Button itself
@@ -216,6 +269,10 @@ public sealed partial class RecordingIndicatorWindow : Window
     {
         _closed = true;
         StopRequested = null;
+        PauseRequested = null;
+        ResumeRequested = null;
+        RestartRequested = null;
+        DiscardRequested = null;
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

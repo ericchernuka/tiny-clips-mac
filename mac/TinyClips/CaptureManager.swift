@@ -7,6 +7,19 @@ struct VideoRecordingArtifacts {
     let webcamRecordingURL: URL?
 }
 
+private enum ActiveRecordingRequest {
+    case video(
+        target: CaptureTarget,
+        systemAudio: Bool,
+        microphone: Bool,
+        selectedMicrophoneID: String,
+        webcamSelection: StartRecordingPanel.WebcamSelection,
+        mouseClicksEnabled: Bool,
+        timeLimitMinutes: Int
+    )
+    case gif(target: CaptureTarget, mouseClicksEnabled: Bool)
+}
+
 @MainActor
 class CaptureManager: ObservableObject {
     @Published var isRecording = false {
@@ -14,6 +27,7 @@ class CaptureManager: ObservableObject {
             updateStopHotKeyRegistration()
         }
     }
+    @Published var isRecordingPaused = false
     @Published var recordingMicrophoneEnabled = false
     @Published var activeMicrophoneName: String?
     @Published var activeWebcamName: String?
@@ -49,6 +63,7 @@ class CaptureManager: ObservableObject {
     private var recordingSessionCounter: UInt64 = 0
     private var activeRecordingSessionID: UInt64?
     private var finalizingSessionID: UInt64?
+    private var activeRecordingRequest: ActiveRecordingRequest?
     private var onboardingWindow: OnboardingWizardWindow?
     private var guideWindow: GuideWindow?
     private var screenPickerWindow: ScreenPickerWindow?
@@ -402,6 +417,16 @@ class CaptureManager: ObservableObject {
                     self.webcamRecorder = nil
                     self.activeRecordingRegion = target.region
                     self.isRecording = true
+                    self.isRecordingPaused = false
+                    self.activeRecordingRequest = .video(
+                        target: target,
+                        systemAudio: systemAudio,
+                        microphone: microphone,
+                        selectedMicrophoneID: selectedMicrophoneID,
+                        webcamSelection: webcamSelection,
+                        mouseClicksEnabled: mouseClicksEnabled,
+                        timeLimitMinutes: timeLimitMinutes
+                    )
                     self.activeMouseClickCaptureEnabledOverride = mouseClicksEnabled
                     self.startMouseClickMonitoringIfNeeded(for: .video, region: target.region)
                     self.recordingMicrophoneEnabled = false
@@ -446,6 +471,8 @@ class CaptureManager: ObservableObject {
                     self.resetRecordingAudioStatus()
                     self.activeWebcamName = nil
                     self.isRecording = false
+                    self.isRecordingPaused = false
+                    self.activeRecordingRequest = nil
                     self.activeRecordingRegion = nil
                     self.dismissRegionIndicator()
                     self.activeRecordingSessionID = nil
@@ -502,6 +529,8 @@ class CaptureManager: ObservableObject {
                     self.gifWriter = writer
                     self.activeRecordingRegion = target.region
                     self.isRecording = true
+                    self.isRecordingPaused = false
+                    self.activeRecordingRequest = .gif(target: target, mouseClicksEnabled: mouseClicksEnabled)
                     self.activeMouseClickCaptureEnabledOverride = mouseClicksEnabled
                     self.startMouseClickMonitoringIfNeeded(for: .gif, region: target.region)
 
@@ -512,6 +541,8 @@ class CaptureManager: ObservableObject {
                     _ = self.stopMouseClickMonitoring()
                     self.activeMouseClickCaptureEnabledOverride = nil
                     self.isRecording = false
+                    self.isRecordingPaused = false
+                    self.activeRecordingRequest = nil
                     self.activeRecordingRegion = nil
                     self.dismissRegionIndicator()
                     self.activeRecordingSessionID = nil
@@ -546,6 +577,8 @@ class CaptureManager: ObservableObject {
         resetRecordingAudioStatus()
         activeRecordingRegion = nil
         isRecording = false
+        isRecordingPaused = false
+        activeRecordingRequest = nil
         let stoppingSessionID = activeRecordingSessionID
         activeRecordingSessionID = nil
         finalizingSessionID = stoppingSessionID
@@ -556,6 +589,86 @@ class CaptureManager: ObservableObject {
             await self.stopRecordingFlow(stoppingSessionID: stoppingSessionID)
         }
         stopRecordingTask = task
+    }
+
+    func togglePauseRecording() {
+        guard isRecording else { return }
+        if isRecordingPaused {
+            videoRecorder?.resume()
+            webcamRecorder?.resume()
+            gifWriter?.resume()
+            isRecordingPaused = false
+        } else {
+            videoRecorder?.pause()
+            webcamRecorder?.pause()
+            gifWriter?.pause()
+            isRecordingPaused = true
+        }
+    }
+
+    func restartRecording() {
+        guard let request = activeRecordingRequest else { return }
+        Task {
+            await discardRecording(clearActiveRequest: false)
+            switch request {
+            case let .video(target, systemAudio, microphone, selectedMicrophoneID, webcamSelection, mouseClicksEnabled, timeLimitMinutes):
+                beginVideoRecording(
+                    target: target,
+                    systemAudio: systemAudio,
+                    microphone: microphone,
+                    selectedMicrophoneID: selectedMicrophoneID,
+                    webcamSelection: webcamSelection,
+                    mouseClicksEnabled: mouseClicksEnabled,
+                    timeLimitMinutes: timeLimitMinutes,
+                    countdownEnabled: false,
+                    countdownDuration: 0
+                )
+            case let .gif(target, mouseClicksEnabled):
+                beginGifRecording(
+                    target: target,
+                    mouseClicksEnabled: mouseClicksEnabled,
+                    countdownEnabled: false,
+                    countdownDuration: 0
+                )
+            }
+        }
+    }
+
+    func discardRecording() {
+        Task {
+            await discardRecording(clearActiveRequest: true)
+        }
+    }
+
+    private func discardRecording(clearActiveRequest: Bool) async {
+        guard isRecording || videoRecorder != nil || webcamRecorder != nil || gifWriter != nil else { return }
+        cancelVideoAutoStopTask()
+        dismissStopPanel()
+        dismissRegionIndicator()
+        _ = stopMouseClickMonitoring()
+        activeMouseClickCaptureEnabledOverride = nil
+        activeWebcamOverlaySelection = nil
+        resetRecordingAudioStatus()
+        activeRecordingRegion = nil
+        isRecording = false
+        isRecordingPaused = false
+        activeRecordingSessionID = nil
+
+        let recorder = videoRecorder
+        let webcam = webcamRecorder
+        let writer = gifWriter
+        videoRecorder = nil
+        webcamRecorder = nil
+        gifWriter = nil
+        lastVideoRecordingArtifacts = nil
+
+        if clearActiveRequest {
+            activeRecordingRequest = nil
+        }
+
+        await recorder?.cancel()
+        await webcam?.cancel()
+        await writer?.cancel()
     }
 
     private func stopRecordingFlow(stoppingSessionID: UInt64?) async {
@@ -933,6 +1046,8 @@ class CaptureManager: ObservableObject {
         pendingRecordingType = nil
         lastVideoRecordingArtifacts = nil
         activeWebcamOverlaySelection = nil
+        activeRecordingRequest = nil
+        isRecordingPaused = false
 
         _ = stopMouseClickMonitoring()
 
@@ -1076,9 +1191,21 @@ class CaptureManager: ObservableObject {
     }
 
     private func showStopPanel() {
-        let panel = StopRecordingPanel(captureManager: self) { [weak self] in
-            self?.stopRecording()
-        }
+        let panel = StopRecordingPanel(
+            captureManager: self,
+            onPauseResume: { [weak self] in
+                self?.togglePauseRecording()
+            },
+            onRestart: { [weak self] in
+                self?.restartRecording()
+            },
+            onDiscard: { [weak self] in
+                self?.discardRecording()
+            },
+            onStop: { [weak self] in
+                self?.stopRecording()
+            }
+        )
         panel.show(at: recordPanelPosition)
         self.stopPanel = panel
     }
