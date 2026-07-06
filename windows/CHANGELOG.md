@@ -20,6 +20,7 @@ own `CHANGELOG.md` at the repository root.
 
 ### Improved
 - **Countdown animation polish** - the Windows countdown overlay now fades in/out, animates each number, and gives the final second stronger emphasis while remaining excluded from capture.
+- **Smoother countdown number handoff** - each countdown tick now performs a quick ease-out before the next number eases in, and the final second now also shifts to a bolder weight for clearer emphasis.
 - **Faster editor color picking with preset swatches** — the screenshot editor color controls (stroke, fill, text, and number badge) now show common preset color swatches first with a **Custom…** button that opens the full native color picker, so the common case is a single click while full precision/opacity stays available. The reusable `SwatchColorPicker` control is applied across those inspector color surfaces.
 - **Editor color controls are now preview dropdowns** — each `SwatchColorPicker` collapses into a compact button that previews the current color and its name, opening the swatch grid and Custom picker on demand. The shape **Fill** control adds a **None** (transparent) swatch so rectangles and circles can be left unfilled directly from the color control.
 - **Screenshot editor background settings now round the screenshot content itself** — the Image corners control now explicitly clips the screenshot preview content to match the rounded-corner export behavior.
