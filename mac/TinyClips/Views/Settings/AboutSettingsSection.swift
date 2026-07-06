@@ -6,6 +6,29 @@ struct AboutSettingsSection: View {
     let appVersion: String
     let appBuild: String
 
+    private var applicationsFolderURL: URL {
+        FileManager.default.urls(for: .applicationDirectory, in: .localDomainMask).first
+            ?? URL(fileURLWithPath: "/Applications", isDirectory: true)
+    }
+
+    private var isInstalledInApplicationsFolder: Bool {
+        let bundleURL = Bundle.main.bundleURL.resolvingSymlinksInPath().standardizedFileURL
+        let applicationDirectories = [
+            FileManager.default.urls(for: .applicationDirectory, in: .localDomainMask).first,
+            FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first
+        ]
+            .compactMap { $0?.resolvingSymlinksInPath().standardizedFileURL }
+
+        return applicationDirectories.contains { applicationDirectory in
+            bundleURL.path == applicationDirectory.path ||
+            bundleURL.path.hasPrefix(applicationDirectory.path + "/")
+        }
+    }
+
+    private var latestReleaseURL: URL {
+        URL(string: "https://github.com/jamesmontemagno/tiny-clips/releases?q=-mac&expanded=true")!
+    }
+
     var body: some View {
         Section {
             HStack {
@@ -55,6 +78,24 @@ struct AboutSettingsSection: View {
                 sparkleController.checkForUpdates()
             }
             .help("Manually check for updates now.")
+
+            if !isInstalledInApplicationsFolder {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Move TinyClips to Applications for smoother updates.", systemImage: "folder.badge.plus")
+
+                    Text("When TinyClips runs outside the Applications folder, macOS may ask for extra permission before Sparkle can replace the app. Moving it into Applications makes future updates much smoother.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Link("Open Applications Folder", destination: applicationsFolderURL)
+                        .accessibilityHint("Opens the Applications folder in Finder so you can move TinyClips there for smoother updates.")
+                }
+                .padding(.vertical, 2)
+            }
+
+            Link("Download the Latest Version", destination: latestReleaseURL)
+                .help("If the automatic update check fails, download the newest release directly from GitHub.")
+                .accessibilityHint("Opens the latest TinyClips release on GitHub so you can update manually if the in-app update fails.")
         }
 #endif
     }

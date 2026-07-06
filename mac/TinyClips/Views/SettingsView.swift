@@ -42,9 +42,9 @@ struct SettingsView: View {
     @ObservedObject private var captureAnalytics = CaptureAnalyticsStore.shared
     @ObservedObject private var sparkleController = SparkleController.shared
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
+    @ObservedObject private var settingsWindowManager = SettingsWindowManager.shared
 #if APPSTORE
     @ObservedObject private var storeService = StoreService.shared
-    @ObservedObject private var settingsWindowManager = SettingsWindowManager.shared
 #endif
     @Environment(\.openWindow) private var openWindow
     @State private var selectedTab: SettingsTab? = .general
@@ -126,12 +126,11 @@ struct SettingsView: View {
         .onAppear {
             PerformanceSignposts.endSettingsOpenIfNeeded()
             refreshCaptureDevicesIfNeeded()
-#if APPSTORE
-            if let requestedTab = settingsWindowManager.selectedTab {
-                selectedTab = requestedTab
-                settingsWindowManager.selectedTab = nil
-            }
-#endif
+            applyRequestedTabIfNeeded()
+        }
+        .onReceive(settingsWindowManager.$selectedTab.compactMap { $0 }) { requestedTab in
+            selectedTab = requestedTab
+            settingsWindowManager.selectedTab = nil
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .video {
@@ -148,6 +147,12 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    private func applyRequestedTabIfNeeded() {
+        guard let requestedTab = settingsWindowManager.selectedTab else { return }
+        selectedTab = requestedTab
+        settingsWindowManager.selectedTab = nil
+    }
 
     private func chooseSaveDirectory() {
         DispatchQueue.main.async {

@@ -66,6 +66,7 @@ struct MenuBarContentView: View {
         }
 #if !APPSTORE
         Button {
+            SettingsWindowManager.shared.selectedTab = .about
             // Open Settings first so Sparkle has a parent window for its update dialog.
             // Without a key window (which doesn't exist after the menu bar menu closes),
             // Sparkle cannot present its UI and shows "Update failed" instead.
