@@ -6,6 +6,10 @@ struct AboutSettingsSection: View {
     let appVersion: String
     let appBuild: String
 
+    private var latestReleaseURL: URL {
+        URL(string: "https://github.com/jamesmontemagno/tiny-clips/releases/latest")!
+    }
+
     var body: some View {
         Section {
             HStack {
@@ -55,6 +59,10 @@ struct AboutSettingsSection: View {
                 sparkleController.checkForUpdates()
             }
             .help("Manually check for updates now.")
+
+            Link("Download the Latest Version", destination: latestReleaseURL)
+                .help("If the automatic update check fails, download the newest release directly from GitHub.")
+                .accessibilityHint("Opens the latest TinyClips release on GitHub so you can update manually if the in-app update fails.")
         }
 #endif
     }
