@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 ### Improved
 - Added a "Download the Latest Version" link to the macOS Settings → About section (Direct Download builds) so that when the in-app Sparkle update check fails with "An error occurred in retrieving update information", users always have a reliable path to update by downloading the newest release directly from GitHub.
 - macOS Settings → About now detects when a direct-download build is running outside the Applications folder and gently points users there first, reducing the extra permission prompts Sparkle may need during updates.
+- The macOS menu-bar **Check for Updates…** command now opens Settings directly to **About** first, so direct-download builds outside Applications see the smoother-update guidance before Sparkle prompts for extra permission.
 - Added SF Symbol icons to each action in the macOS menu bar menu so capture and app commands are easier to scan at a glance.
 - macOS screenshot editor image-corner and shadow controls now apply to the actual screenshot content instead of the padded export background, matching the editor preview and saved output.
 - macOS screenshot editor color controls (stroke, fill, text, number badge, and background) now show common preset color swatches first with a **Custom…** option that opens the full native color picker, so picking a common color is a single click while full precision stays available.
