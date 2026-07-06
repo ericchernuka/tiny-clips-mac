@@ -7,7 +7,7 @@ struct AboutSettingsSection: View {
     let appBuild: String
 
     private var latestReleaseURL: URL {
-        URL(string: "https://github.com/jamesmontemagno/tiny-clips/releases/latest")!
+        URL(string: "https://github.com/jamesmontemagno/tiny-clips/releases?q=-mac&expanded=true")!
     }
 
     var body: some View {
