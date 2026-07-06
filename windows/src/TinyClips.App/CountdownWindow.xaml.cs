@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -75,16 +76,12 @@ public sealed partial class CountdownWindow : Window
             return;
         }
 
-        AnimateCountText(finalSecond: _remaining == 1);
+        await AnimateCountTransitionAsync(finalSecond: _remaining == 1);
     }
 
     private void AnimateCountText(bool finalSecond)
     {
-        CountText.Text = _remaining.ToString();
-        CountText.FontSize = finalSecond ? 78 : 64;
-        CountText.Opacity = 0;
-        CountScale.ScaleX = finalSecond ? 1.35 : 1.18;
-        CountScale.ScaleY = finalSecond ? 1.35 : 1.18;
+        ApplyCountVisualState(finalSecond);
 
         var storyboard = new Storyboard();
         storyboard.Children.Add(CreateAnimation(CountText, "Opacity", 1, 220));
@@ -93,10 +90,43 @@ public sealed partial class CountdownWindow : Window
         storyboard.Begin();
     }
 
+    private async Task AnimateCountTransitionAsync(bool finalSecond)
+    {
+        await AnimateCountOutAsync();
+        AnimateCountText(finalSecond);
+    }
+
+    private Task AnimateCountOutAsync()
+    {
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(CreateAnimation(CountText, "Opacity", 0, 90));
+        storyboard.Children.Add(CreateAnimation(CountScale, "ScaleX", 0.94, 90));
+        storyboard.Children.Add(CreateAnimation(CountScale, "ScaleY", 0.94, 90));
+        return RunStoryboardAsync(storyboard);
+    }
+
+    private void ApplyCountVisualState(bool finalSecond)
+    {
+        CountText.Text = _remaining.ToString();
+        CountText.FontSize = finalSecond ? 78 : 64;
+        CountText.FontWeight = finalSecond ? FontWeights.Bold : FontWeights.SemiBold;
+        CountText.Opacity = 0.06;
+        CountScale.ScaleX = finalSecond ? 1.35 : 1.18;
+        CountScale.ScaleY = finalSecond ? 1.35 : 1.18;
+    }
+
     private Task AnimateFadeAsync(UIElement target, double to, int milliseconds)
     {
         var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var storyboard = AnimateFade(target, to, milliseconds);
+        storyboard.Completed += (_, _) => completion.TrySetResult(true);
+        storyboard.Begin();
+        return completion.Task;
+    }
+
+    private static Task RunStoryboardAsync(Storyboard storyboard)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         storyboard.Completed += (_, _) => completion.TrySetResult(true);
         storyboard.Begin();
         return completion.Task;

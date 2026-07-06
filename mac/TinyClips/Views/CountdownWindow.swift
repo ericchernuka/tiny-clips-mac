@@ -4,10 +4,16 @@ import SwiftUI
 class CountdownWindow: NSPanel {
     private var completion: (() -> Void)?
     private var countdownTimer: Timer?
+    private let countdownState: CountdownState
+    private let hostingView: NSHostingView<CountdownView>
     private var remaining: Int
+    private var didComplete = false
 
     init(duration: Int, completion: @escaping () -> Void) {
-        self.remaining = duration
+        let initialRemaining = max(1, duration)
+        self.remaining = initialRemaining
+        self.countdownState = CountdownState(remaining: initialRemaining)
+        self.hostingView = NSHostingView(rootView: CountdownView(state: countdownState))
         self.completion = completion
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 120, height: 120),
@@ -22,6 +28,8 @@ class CountdownWindow: NSPanel {
         self.hasShadow = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
+        hostingView.frame = NSRect(x: 0, y: 0, width: 120, height: 120)
+        self.contentView = hostingView
         updateDisplay()
     }
 
@@ -46,10 +54,13 @@ class CountdownWindow: NSPanel {
             self.remaining -= 1
             if self.remaining <= 0 {
                 timer.invalidate()
+                self.countdownTimer = nil
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.16
                     self.animator().alphaValue = 0
                 } completionHandler: {
+                    guard !self.didComplete else { return }
+                    self.didComplete = true
                     let completion = self.completion
                     self.completion = nil
                     self.orderOut(nil)
@@ -62,12 +73,11 @@ class CountdownWindow: NSPanel {
     }
 
     private func updateDisplay() {
-        let hostingView = NSHostingView(rootView: CountdownView(remaining: remaining))
-        hostingView.frame = NSRect(x: 0, y: 0, width: 120, height: 120)
-        self.contentView = hostingView
+        countdownState.remaining = remaining
     }
 
     func cancel() {
+        didComplete = true
         countdownTimer?.invalidate()
         countdownTimer = nil
         completion = nil
@@ -75,10 +85,20 @@ class CountdownWindow: NSPanel {
     }
 }
 
+private final class CountdownState: ObservableObject {
+    @Published var remaining: Int
+
+    init(remaining: Int) {
+        self.remaining = remaining
+    }
+}
+
 private struct CountdownView: View {
-    let remaining: Int
+    @ObservedObject var state: CountdownState
 
     var body: some View {
+        let remaining = state.remaining
+
         ZStack {
             Circle()
                 .fill(.black.opacity(0.75))

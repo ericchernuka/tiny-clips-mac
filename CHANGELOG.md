@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Fixed the macOS Settings → Analytics view freezing with "Publishing changes from within view updates is not allowed" faults, caused by the analytics history being pruned (and its published state reassigned) while the view was rendering. Pruning now runs only at launch and when a capture is recorded.
+- Fixed the macOS pre-capture countdown number transition so each tick now animates smoothly instead of rebuilding the SwiftUI hosting view every second (which prevented the numeric text transition from running).
 
 ### Improved
 - Added SF Symbol icons to each action in the macOS menu bar menu so capture and app commands are easier to scan at a glance.
