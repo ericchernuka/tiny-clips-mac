@@ -11,24 +11,24 @@
         <item>
             
             
-            <title>1.5.1</title>
+            <title>1.5.2</title>
             
             
-            <pubDate>Fri, 03 Jul 2026 15:22:10 +0000</pubDate>
+            <pubDate>Mon, 06 Jul 2026 05:58:40 +0000</pubDate>
             
             
-            <sparkle:version>50</sparkle:version>
+            <sparkle:version>51</sparkle:version>
             
             
-            <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
+            <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
             
             
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             
             
-            <description><![CDATA[<h3>What's Changed</h3><ul><li>Mark v1.5.1-mac release</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.5.0-mac...v1.5.1-mac">Full Changelog</a></p>]]></description>
-            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.1-mac</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.5.1-mac/TinyClips-v1.5.1-mac.zip" length="3400151" type="application/octet-stream" sparkle:edSignature="X2z0/41NWjtkBq7cDZr24XaRwNz7UhZKBHIgEUu9mARqOwMEzsGhinAgtFgaAkqt+T7bUNT4h6uKLiRhDxhMCA=="/>
+            <description><![CDATA[<h3>What's Changed</h3><ul><li>Merge pull request #137 from jamesmontemagno/motz-issue-129-editor-add-preset-color-swatches-with-c-577653</li></ul><p><a href="https://github.com/jamesmontemagno/tiny-clips/compare/v1.5.1-mac...v1.5.2-mac">Full Changelog</a></p>]]></description>
+            <sparkle:releaseNotesLink>https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.2-mac</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/jamesmontemagno/tiny-clips/releases/download/v1.5.2-mac/TinyClips-v1.5.2-mac.zip" length="3568725" type="application/octet-stream" sparkle:edSignature="rUBDyj2mAJhhPVMUqjaIfL+O7GVQsb4f4hvT49PPus4xfG9IELtCUzEreNHX3OGSvyaD5g4BSMd2f7Vy5qHfAw=="/>
             
         
         </item>
