@@ -110,18 +110,14 @@ public sealed partial class CountdownWindow : Window
         CountText.Text = _remaining.ToString();
         CountText.FontSize = finalSecond ? 78 : 64;
         CountText.FontWeight = finalSecond ? FontWeights.Bold : FontWeights.SemiBold;
-        CountText.Opacity = 0.06;
+        CountText.Opacity = 0;
         CountScale.ScaleX = finalSecond ? 1.35 : 1.18;
         CountScale.ScaleY = finalSecond ? 1.35 : 1.18;
     }
 
     private Task AnimateFadeAsync(UIElement target, double to, int milliseconds)
     {
-        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var storyboard = AnimateFade(target, to, milliseconds);
-        storyboard.Completed += (_, _) => completion.TrySetResult(true);
-        storyboard.Begin();
-        return completion.Task;
+        return RunStoryboardAsync(AnimateFade(target, to, milliseconds));
     }
 
     private static Task RunStoryboardAsync(Storyboard storyboard)
