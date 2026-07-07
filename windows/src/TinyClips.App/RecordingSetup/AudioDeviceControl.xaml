@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="TinyClips.App.RecordingSetup.AudioDeviceControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--  System audio + microphone toggles and the microphone device picker for the recording
+          setup bar. Owns the microphone flyout's cached menu items so ordinary selection changes
+          only flip IsChecked instead of rebuilding the flyout.  -->
+    <StackPanel Orientation="Horizontal" Spacing="8">
+        <ToggleButton
+            x:Name="SystemAudioToggle"
+            Width="34"
+            Height="34"
+            MinWidth="0"
+            Padding="0"
+            AutomationProperties.AutomationId="SetupSystemAudioButton"
+            AutomationProperties.Name="System audio"
+            Checked="OnSystemAudioToggleClicked"
+            Unchecked="OnSystemAudioToggleClicked"
+            ToolTipService.ToolTip="System audio">
+            <FontIcon x:Name="SystemAudioIcon" FontSize="14" Glyph="&#xE767;" />
+        </ToggleButton>
+
+        <ToggleButton
+            x:Name="MicrophoneToggle"
+            Width="34"
+            Height="34"
+            MinWidth="0"
+            Padding="0"
+            AutomationProperties.AutomationId="SetupMicrophoneButton"
+            AutomationProperties.Name="Microphone"
+            Checked="OnMicrophoneToggleClicked"
+            Unchecked="OnMicrophoneToggleClicked"
+            ToolTipService.ToolTip="Microphone">
+            <Grid Width="18" Height="18">
+                <FontIcon
+                    x:Name="MicrophoneIcon"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Glyph="&#xE720;" />
+                <Line
+                    x:Name="MicrophoneSlash"
+                    X1="3"
+                    X2="15"
+                    Y1="15"
+                    Y2="3"
+                    Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                    StrokeEndLineCap="Round"
+                    StrokeThickness="2"
+                    Visibility="Collapsed" />
+            </Grid>
+        </ToggleButton>
+
+        <DropDownButton
+            x:Name="MicrophoneDeviceButton"
+            AutomationProperties.AutomationId="SetupMicrophoneDeviceButton"
+            AutomationProperties.Name="Microphone device"
+            ToolTipService.ToolTip="Microphone device">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE720;" />
+                <TextBlock
+                    x:Name="MicrophoneDeviceLabel"
+                    Width="120"
+                    VerticalAlignment="Center"
+                    Text="System default"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <DropDownButton.Flyout>
+                <MenuFlyout x:Name="MicrophoneFlyout" />
+            </DropDownButton.Flyout>
+        </DropDownButton>
+    </StackPanel>
+</UserControl>

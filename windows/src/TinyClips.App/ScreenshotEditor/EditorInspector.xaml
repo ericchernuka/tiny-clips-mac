@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="TinyClips.App.ScreenshotEditor.EditorInspector"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:TinyClips.App"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border
+        Width="252"
+        VerticalAlignment="Stretch"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="{ThemeResource ControlCornerRadius}">
+        <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Padding="14" Spacing="14">
+                <TextBlock
+                    x:Name="InspectorTitle"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Tool" />
+
+                <!--  Color  -->
+                <StackPanel x:Name="ColorSection" Spacing="6">
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="Color" />
+                    <local:SwatchColorPicker
+                        x:Name="AnnotationColorPicker"
+                        AutomationProperties.AutomationId="EditorColorButton"
+                        AutomationProperties.Name="Color"
+                        ColorChanged="OnColorChanged"
+                        IsAlphaEnabled="False" />
+                </StackPanel>
+
+                <!--  Stroke width  -->
+                <StackPanel x:Name="StrokeSection" Spacing="2">
+                    <Slider
+                        x:Name="StrokeSlider"
+                        AutomationProperties.AutomationId="EditorStrokeSlider"
+                        AutomationProperties.Name="Stroke width"
+                        Header="Stroke"
+                        Maximum="40"
+                        Minimum="1"
+                        StepFrequency="1"
+                        ValueChanged="OnStrokeChanged" />
+                </StackPanel>
+
+                <!--  Arrow style  -->
+                <StackPanel x:Name="ArrowStyleSection" Spacing="2">
+                    <ComboBox
+                        x:Name="ArrowStyleCombo"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.AutomationId="EditorArrowStyleCombo"
+                        AutomationProperties.Name="Arrow style"
+                        Header="Arrow"
+                        SelectionChanged="OnArrowStyleChanged">
+                        <ComboBoxItem Content="Straight" />
+                        <ComboBoxItem Content="Curved" />
+                        <ComboBoxItem Content="Curved (alt)" />
+                    </ComboBox>
+                </StackPanel>
+
+                <!--  Fill (rectangle / ellipse)  -->
+                <StackPanel x:Name="FillSection" Spacing="6">
+                    <CheckBox
+                        x:Name="FillCheck"
+                        AutomationProperties.AutomationId="EditorFillCheck"
+                        AutomationProperties.Name="Fill shape"
+                        Checked="OnFillToggled"
+                        Content="Fill shape"
+                        Unchecked="OnFillToggled" />
+                    <local:SwatchColorPicker
+                        x:Name="FillColorPicker"
+                        AutomationProperties.AutomationId="EditorFillColorButton"
+                        AutomationProperties.Name="Fill color"
+                        AllowTransparent="True"
+                        ColorChanged="OnFillColorChanged"
+                        IsAlphaEnabled="True" />
+                </StackPanel>
+
+                <!--  Text  -->
+                <StackPanel x:Name="TextSection" Spacing="10">
+                    <ComboBox
+                        x:Name="FontFamilyCombo"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.AutomationId="EditorFontFamilyCombo"
+                        AutomationProperties.Name="Font"
+                        Header="Font"
+                        SelectionChanged="OnFontFamilyChanged" />
+                    <Slider
+                        x:Name="FontSizeSlider"
+                        AutomationProperties.AutomationId="EditorFontSizeSlider"
+                        AutomationProperties.Name="Font size"
+                        Header="Font size"
+                        Maximum="200"
+                        Minimum="10"
+                        StepFrequency="1"
+                        ValueChanged="OnFontSizeChanged" />
+                </StackPanel>
+
+                <!--  Number badge  -->
+                <StackPanel x:Name="CounterSection" Spacing="10">
+                    <Slider
+                        x:Name="NumberSizeSlider"
+                        AutomationProperties.AutomationId="EditorNumberSizeSlider"
+                        AutomationProperties.Name="Badge size"
+                        Header="Badge size"
+                        Maximum="4"
+                        Minimum="0.5"
+                        StepFrequency="0.25"
+                        ValueChanged="OnNumberSizeChanged" />
+                    <StackPanel Spacing="6">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="Number color" />
+                        <local:SwatchColorPicker
+                            x:Name="NumberColorPicker"
+                            AutomationProperties.AutomationId="EditorNumberColorButton"
+                            AutomationProperties.Name="Number color"
+                            ColorChanged="OnNumberColorChanged"
+                            IsAlphaEnabled="False" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  Redaction style + strength  -->
+                <StackPanel x:Name="RedactSection" Spacing="8">
+                    <ComboBox
+                        x:Name="RedactStyleCombo"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.AutomationId="EditorRedactStyleCombo"
+                        AutomationProperties.Name="Redaction style"
+                        Header="Style"
+                        SelectionChanged="OnRedactionStyleChanged">
+                        <ComboBoxItem Content="Blur" Tag="Blur" />
+                        <ComboBoxItem Content="Pixelate" Tag="Pixelate" />
+                        <ComboBoxItem Content="Solid" Tag="Solid" />
+                    </ComboBox>
+                    <ComboBox
+                        x:Name="RedactionCombo"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.AutomationId="EditorRedactionCombo"
+                        AutomationProperties.Name="Redaction strength"
+                        Header="Strength"
+                        SelectionChanged="OnRedactionLevelChanged">
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                        <ComboBoxItem Content="Medium" Tag="Medium" />
+                        <ComboBoxItem Content="Heavy" Tag="Heavy" />
+                    </ComboBox>
+                </StackPanel>
+
+                <!--  Background &amp; padding  -->
+                <Expander
+                    x:Name="BackgroundExpander"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.AutomationId="EditorBackgroundExpander">
+                    <Expander.Resources>
+                        <Thickness x:Key="ExpanderContentPadding">12,8,12,12</Thickness>
+                    </Expander.Resources>
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" Glyph="&#xE7F4;" />
+                            <TextBlock VerticalAlignment="Center" Text="Background" />
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel HorizontalAlignment="Stretch" Spacing="12">
+                        <ComboBox
+                            x:Name="BgStyleCombo"
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.AutomationId="EditorBgStyleCombo"
+                            AutomationProperties.Name="Background style"
+                            Header="Style"
+                            SelectionChanged="OnBgStyleChanged">
+                            <ComboBoxItem Content="Transparent" Tag="Transparent" />
+                            <ComboBoxItem Content="Solid color" Tag="Solid" />
+                            <ComboBoxItem Content="Gradient" Tag="Gradient" />
+                        </ComboBox>
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="Solid presets" />
+                        <GridView
+                            x:Name="SolidPresetGrid"
+                            Padding="0"
+                            AutomationProperties.Name="Solid background presets"
+                            SelectionMode="None" />
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="Gradient presets" />
+                        <GridView
+                            x:Name="GradientPresetGrid"
+                            Padding="0"
+                            AutomationProperties.Name="Gradient background presets"
+                            SelectionMode="None" />
+
+                        <StackPanel x:Name="CustomColorPanel" Spacing="8">
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Custom color" />
+                            <ColorPicker
+                                x:Name="BgColorPicker"
+                                MinWidth="0"
+                                ColorChanged="OnBgCustomColorChanged"
+                                ColorSpectrumShape="Box"
+                                IsAlphaEnabled="False"
+                                IsColorPreviewVisible="True"
+                                IsColorSliderVisible="True"
+                                IsHexInputVisible="True"
+                                IsMoreButtonVisible="False" />
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.AutomationId="EditorApplyCustomBgButton"
+                                Click="OnApplyCustomSolidBackground"
+                                Content="Use as solid background" />
+                        </StackPanel>
+
+                        <Slider
+                            x:Name="PaddingSlider"
+                            AutomationProperties.AutomationId="EditorPaddingSlider"
+                            AutomationProperties.Name="Padding"
+                            Header="Padding"
+                            Maximum="160"
+                            Minimum="0"
+                            StepFrequency="2"
+                            ValueChanged="OnPaddingChanged" />
+                        <Slider
+                            x:Name="CornerSlider"
+                            AutomationProperties.AutomationId="EditorCornerSlider"
+                            AutomationProperties.Name="Corner radius"
+                            Header="Image corners"
+                            Maximum="60"
+                            Minimum="0"
+                            StepFrequency="1"
+                            ValueChanged="OnCornerChanged" />
+                        <Slider
+                            x:Name="ShadowSlider"
+                            AutomationProperties.AutomationId="EditorShadowSlider"
+                            AutomationProperties.Name="Shadow"
+                            Header="Shadow"
+                            Maximum="40"
+                            Minimum="0"
+                            StepFrequency="1"
+                            ValueChanged="OnShadowChanged" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</UserControl>
