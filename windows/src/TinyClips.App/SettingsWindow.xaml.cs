@@ -52,7 +52,7 @@ public sealed partial class SettingsWindow : Window
         SettingsNavigation.SelectedItem = GeneralNavigationItem;
         ShowSettingsSection("General");
 
-        AppWindow.Resize(new SizeInt32(1040, 820));
+        AppWindow.Resize(new SizeInt32(1200, 820));
 
         ApplyTheme();
         UpdateMouseClickPreview();
