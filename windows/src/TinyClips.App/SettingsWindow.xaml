@@ -48,7 +48,7 @@
                 <NavigationViewItem
                     AutomationProperties.AutomationId="AnalyticsNavigationItem"
                     Content="Analytics"
-                    Icon="BarChart"
+                    Icon="CalendarWeek"
                     Tag="Analytics" />
                 <NavigationViewItem
                     AutomationProperties.AutomationId="ScreenshotNavigationItem"
@@ -354,27 +354,25 @@
                        <Border Style="{StaticResource SettingCardStyle}">
                            <StackPanel Spacing="16">
                                <Grid ColumnSpacing="16">
-                                   <Grid.ColumnDefinitions>
-                                       <ColumnDefinition Width="*" />
-                                       <ColumnDefinition Width="Auto" />
-                                   </Grid.ColumnDefinitions>
                                    <StackPanel VerticalAlignment="Center">
                                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Daily captures" />
                                        <TextBlock
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            Text="Screenshots, videos, and GIFs taken on this device during the selected range." />
-                                   </StackPanel>
-                                   <ComboBox
-                                       Grid.Column="1"
-                                       Width="150"
-                                       VerticalAlignment="Center"
-                                       AutomationProperties.AutomationId="AnalyticsRangeComboBox"
-                                       AutomationProperties.Name="Analytics range"
-                                       SelectedIndex="{x:Bind ViewModel.AnalyticsRangeIndex, Mode=TwoWay}">
-                                       <ComboBoxItem Content="Last 7 days" />
-                                       <ComboBoxItem Content="Last 30 days" />
-                                   </ComboBox>
+
+                                        <ComboBox
+                                           Grid.Column="1"
+                                           Width="150"
+                                            Margin="0,10,0,0"
+                                           HorizontalAlignment="Right"
+                                           AutomationProperties.AutomationId="AnalyticsRangeComboBox"
+                                           AutomationProperties.Name="Analytics range"
+                                           SelectedIndex="{x:Bind ViewModel.AnalyticsRangeIndex, Mode=TwoWay}">
+                                            <ComboBoxItem Content="Last 7 days" />
+                                            <ComboBoxItem Content="Last 30 days" />
+                                        </ComboBox>
+                                    </StackPanel>
                                </Grid>
 
                                <StackPanel Orientation="Horizontal" Spacing="16">
