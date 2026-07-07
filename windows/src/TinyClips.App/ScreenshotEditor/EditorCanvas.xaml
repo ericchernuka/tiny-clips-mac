@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="TinyClips.App.ScreenshotEditor.EditorCanvas"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid
+        x:Name="ImageHost"
+        Background="{ThemeResource SubtleFillColorTertiaryBrush}"
+        CornerRadius="{ThemeResource OverlayCornerRadius}"
+        SizeChanged="OnImageHostSizeChanged">
+        <Canvas x:Name="CanvasLayer" IsHitTestVisible="False">
+            <Border
+                x:Name="CanvasBackground"
+                Visibility="Collapsed" />
+            <Border x:Name="ImageCard">
+                <Border.Shadow>
+                    <ThemeShadow />
+                </Border.Shadow>
+                <Image
+                    x:Name="PreviewImage"
+                    Stretch="Fill" />
+            </Border>
+        </Canvas>
+        <Canvas
+            x:Name="OverlayCanvas"
+            Background="Transparent"
+            DoubleTapped="OnOverlayDoubleTapped"
+            PointerCanceled="OnOverlayPointerCanceled"
+            PointerCaptureLost="OnOverlayPointerCaptureLost"
+            PointerMoved="OnPointerMoved"
+            PointerPressed="OnPointerPressed"
+            PointerReleased="OnPointerReleased">
+            <Rectangle
+                x:Name="SelectionRect"
+                Canvas.ZIndex="10000"
+                Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                Opacity="0.25"
+                Stroke="{ThemeResource AccentFillColorDefaultBrush}"
+                StrokeDashArray="4,2"
+                StrokeThickness="2"
+                Visibility="Collapsed" />
+            <Rectangle
+                x:Name="SelectionMarquee"
+                Canvas.ZIndex="10000"
+                IsHitTestVisible="False"
+                Stroke="DeepSkyBlue"
+                StrokeDashArray="4,2"
+                StrokeThickness="1.5"
+                Visibility="Collapsed" />
+        </Canvas>
+        <TextBlock
+            x:Name="HintText"
+            Margin="0,0,0,12"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="Pick a tool, then draw on the image. Crop, annotate, then save." />
+    </Grid>
+</UserControl>

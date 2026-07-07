@@ -2,7 +2,8 @@
 <Window
     x:Class="TinyClips.App.RecordingSetupWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:recordingSetup="using:TinyClips.App.RecordingSetup">
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -29,115 +30,9 @@
                 Orientation="Horizontal"
                 Spacing="8"
                 VerticalAlignment="Center">
-                <ToggleButton
-                    x:Name="SystemAudioToggle"
-                    Width="34"
-                    Height="34"
-                    MinWidth="0"
-                    Padding="0"
-                    AutomationProperties.AutomationId="SetupSystemAudioButton"
-                    AutomationProperties.Name="System audio"
-                    Checked="OnSystemAudioToggled"
-                    Unchecked="OnSystemAudioToggled"
-                    ToolTipService.ToolTip="System audio">
-                    <FontIcon x:Name="SystemAudioIcon" FontSize="14" Glyph="&#xE767;" />
-                </ToggleButton>
+                <recordingSetup:AudioDeviceControl x:Name="AudioDevices" />
 
-                <ToggleButton
-                    x:Name="MicrophoneToggle"
-                    Width="34"
-                    Height="34"
-                    MinWidth="0"
-                    Padding="0"
-                    AutomationProperties.AutomationId="SetupMicrophoneButton"
-                    AutomationProperties.Name="Microphone"
-                    Checked="OnMicrophoneToggled"
-                    Unchecked="OnMicrophoneToggled"
-                    ToolTipService.ToolTip="Microphone">
-                    <Grid Width="18" Height="18">
-                        <FontIcon
-                            x:Name="MicrophoneIcon"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            FontSize="14"
-                            Glyph="&#xE720;" />
-                        <Line
-                            x:Name="MicrophoneSlash"
-                            X1="3"
-                            X2="15"
-                            Y1="15"
-                            Y2="3"
-                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                            StrokeEndLineCap="Round"
-                            StrokeThickness="2"
-                            Visibility="Collapsed" />
-                    </Grid>
-                </ToggleButton>
-
-                <DropDownButton
-                    x:Name="MicrophoneDeviceButton"
-                    AutomationProperties.AutomationId="SetupMicrophoneDeviceButton"
-                    AutomationProperties.Name="Microphone device"
-                    ToolTipService.ToolTip="Microphone device">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontFamily="Segoe Fluent Icons" FontSize="13" Glyph="&#xE720;" />
-                        <TextBlock
-                            x:Name="MicrophoneDeviceLabel"
-                            Width="120"
-                            VerticalAlignment="Center"
-                            Text="System default"
-                            TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout x:Name="MicrophoneFlyout" />
-                    </DropDownButton.Flyout>
-                </DropDownButton>
-
-                <ToggleButton
-                    x:Name="WebcamToggle"
-                    Width="34"
-                    Height="34"
-                    MinWidth="0"
-                    Padding="0"
-                    AutomationProperties.AutomationId="SetupWebcamButton"
-                    AutomationProperties.Name="Webcam"
-                    Checked="OnWebcamToggled"
-                    Unchecked="OnWebcamToggled"
-                    ToolTipService.ToolTip="Webcam">
-                    <Grid Width="18" Height="18">
-                        <FontIcon
-                            x:Name="WebcamIcon"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            FontSize="14"
-                            Glyph="&#xE722;" />
-                        <Line
-                            x:Name="WebcamSlash"
-                            X1="3"
-                            X2="15"
-                            Y1="15"
-                            Y2="3"
-                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                            StrokeEndLineCap="Round"
-                            StrokeThickness="2"
-                            Visibility="Collapsed" />
-                    </Grid>
-                </ToggleButton>
-
-                <Button
-                    x:Name="WebcamSettingsButton"
-                    Width="38"
-                    Height="34"
-                    MinWidth="0"
-                    Padding="0"
-                    AutomationProperties.AutomationId="SetupWebcamSettingsButton"
-                    AutomationProperties.Name="Webcam settings"
-                    ToolTipService.ToolTip="Webcam settings">
-                    <FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE713;" />
-                    <Button.Flyout>
-                        <MenuFlyout x:Name="WebcamSettingsFlyout" />
-                    </Button.Flyout>
-                </Button>
+                <recordingSetup:WebcamOptionsControl x:Name="WebcamOptions" />
 
                 <ToggleButton
                     x:Name="MouseClicksToggle"

@@ -1274,6 +1274,28 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Shows a "Couldn't save" toast when a file write (e.g. the screenshot editor's Save /
+    /// Save a copy) fails. Mirrors <see cref="ShowClipboardFailureNotification"/> so save
+    /// failures surface to the user the same way copy failures already do.
+    /// </summary>
+    internal static void ShowSaveFailureNotification(string fileName)
+    {
+        try
+        {
+            var notification = new AppNotificationBuilder()
+                .AddText("Couldn't save file")
+                .AddText(fileName)
+                .BuildNotification();
+
+            AppNotificationManager.Default.Show(notification);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to show save failure notification: {ex}");
+        }
+    }
+
     private void RegisterGlobalHotKeys()
     {
         if (_dispatcher is null)

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="TinyClips.App.RecordingSetup.WebcamOptionsControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--  Webcam on/off toggle plus the webcam settings flyout (camera device, shape, corner,
+          size, rounded-corner value). The flyout's submenus and their leaf items are built exactly
+          once and cached — every option change updates IsChecked in place instead of clearing and
+          rebuilding the flyout.  -->
+    <StackPanel Orientation="Horizontal" Spacing="8">
+        <ToggleButton
+            x:Name="WebcamToggle"
+            Width="34"
+            Height="34"
+            MinWidth="0"
+            Padding="0"
+            AutomationProperties.AutomationId="SetupWebcamButton"
+            AutomationProperties.Name="Webcam"
+            Checked="OnWebcamToggleClicked"
+            Unchecked="OnWebcamToggleClicked"
+            ToolTipService.ToolTip="Webcam">
+            <Grid Width="18" Height="18">
+                <FontIcon
+                    x:Name="WebcamIcon"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Glyph="&#xE722;" />
+                <Line
+                    x:Name="WebcamSlash"
+                    X1="3"
+                    X2="15"
+                    Y1="15"
+                    Y2="3"
+                    Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                    StrokeEndLineCap="Round"
+                    StrokeThickness="2"
+                    Visibility="Collapsed" />
+            </Grid>
+        </ToggleButton>
+
+        <Button
+            x:Name="WebcamSettingsButton"
+            Width="38"
+            Height="34"
+            MinWidth="0"
+            Padding="0"
+            AutomationProperties.AutomationId="SetupWebcamSettingsButton"
+            AutomationProperties.Name="Webcam settings"
+            ToolTipService.ToolTip="Webcam settings">
+            <FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE713;" />
+            <Button.Flyout>
+                <MenuFlyout x:Name="WebcamSettingsFlyout" />
+            </Button.Flyout>
+        </Button>
+    </StackPanel>
+</UserControl>
