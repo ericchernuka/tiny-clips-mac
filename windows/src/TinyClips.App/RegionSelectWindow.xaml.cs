@@ -75,6 +75,7 @@ public sealed partial class RegionSelectWindow : Window
                 stream.Write(_backdropFrame.BgraPixels, 0, _backdropFrame.BgraPixels.Length);
             }
 
+            bitmap.Invalidate();
             Backdrop.Source = bitmap;
         }
         catch (Exception ex)

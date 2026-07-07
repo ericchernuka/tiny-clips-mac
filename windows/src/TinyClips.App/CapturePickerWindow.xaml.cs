@@ -37,6 +37,9 @@ public sealed partial class CapturePickerWindow : Window
     private int _countdownDuration;
     private double _videoTimeLimitMinutes;
     private bool _completed;
+    private int _windowWidth;
+    private int _windowHeight;
+    private double _windowScale = 1.0;
 
     private bool _dragging;
     private POINT _dragCursorStart;
@@ -78,6 +81,7 @@ public sealed partial class CapturePickerWindow : Window
         }
 
         ConfigurePresenter();
+        PositionNearTopOfPrimaryDisplay();
 
         RootGrid.KeyDown += OnKeyDown;
         Activated += OnActivated;
@@ -96,12 +100,16 @@ public sealed partial class CapturePickerWindow : Window
         {
             return;
         }
-
         Activated -= OnActivated;
-        // Size to content, then position near the top-center of the primary work area.
+        ApplyRoundedRegion(_windowWidth, _windowHeight, _windowScale);
+        RootGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void PositionNearTopOfPrimaryDisplay()
+    {
         RootGrid.UpdateLayout();
         RootGrid.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        var scale = GetScale();
         var width = (int)Math.Ceiling(RootGrid.DesiredSize.Width * scale);
         var height = (int)Math.Ceiling(RootGrid.DesiredSize.Height * scale);
         width = Math.Max(width, (int)(360 * scale));
@@ -115,8 +123,9 @@ public sealed partial class CapturePickerWindow : Window
             AppWindow.Move(new PointInt32(x, y));
         }
 
-        ApplyRoundedRegion(width, height, scale);
-        RootGrid.Focus(FocusState.Programmatic);
+        _windowWidth = width;
+        _windowHeight = height;
+        _windowScale = scale;
     }
 
     private void ApplyRoundedRegion(int width, int height, double scale)
@@ -253,6 +262,16 @@ public sealed partial class CapturePickerWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
+
+    private double GetScale()
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var dpi = GetDpiForWindow(hwnd);
+        return dpi <= 0 ? 1.0 : dpi / 96.0;
+    }
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowRgn(nint hWnd, nint hRgn, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] bool bRedraw);

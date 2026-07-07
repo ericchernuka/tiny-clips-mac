@@ -18,6 +18,9 @@ public sealed partial class ScreenPickerWindow : Window
     private readonly TaskCompletionSource<MonitorInfo?> _result = new();
     private bool _completed;
     private bool _layoutApplied;
+    private int _windowWidth;
+    private int _windowHeight;
+    private double _windowScale = 1.0;
 
     private ScreenPickerWindow(IReadOnlyList<MonitorInfo> monitors)
     {
@@ -34,6 +37,7 @@ public sealed partial class ScreenPickerWindow : Window
         }
 
         ScreenList.ItemsSource = items;
+        CenterOnPrimaryDisplay(560, 360);
     }
 
     public static Task<MonitorInfo?> RunAsync(IReadOnlyList<MonitorInfo> monitors)
@@ -61,7 +65,7 @@ public sealed partial class ScreenPickerWindow : Window
         }
 
         _layoutApplied = true;
-        CenterOnPrimaryDisplay(560, 360);
+        ApplyRoundedRegion(_windowWidth, _windowHeight, _windowScale);
     }
 
     private void ConfigurePresenter()
@@ -87,7 +91,9 @@ public sealed partial class ScreenPickerWindow : Window
         }
 
         AppWindow.Resize(new SizeInt32(w, h));
-        ApplyRoundedRegion(w, h, scale);
+        _windowWidth = w;
+        _windowHeight = h;
+        _windowScale = scale;
     }
 
     private void ApplyRoundedRegion(int width, int height, double scale)

@@ -17,6 +17,9 @@ public sealed partial class WindowPickerWindow : Window
     private readonly TaskCompletionSource<nint?> _result = new();
     private bool _completed;
     private bool _layoutApplied;
+    private int _windowWidth;
+    private int _windowHeight;
+    private double _windowScale = 1.0;
 
     private WindowPickerWindow()
     {
@@ -26,6 +29,7 @@ public sealed partial class WindowPickerWindow : Window
 
         var ownHwnd = WindowNative.GetWindowHandle(this);
         WindowList.ItemsSource = WindowEnumerator.GetWindows(ownHwnd);
+        CenterOnPrimaryDisplay(520, 640);
     }
 
     public static Task<nint?> RunAsync()
@@ -53,7 +57,7 @@ public sealed partial class WindowPickerWindow : Window
         }
 
         _layoutApplied = true;
-        CenterOnPrimaryDisplay(520, 640);
+        ApplyRoundedRegion(_windowWidth, _windowHeight, _windowScale);
     }
 
     private void ConfigurePresenter()
@@ -79,7 +83,9 @@ public sealed partial class WindowPickerWindow : Window
         }
 
         AppWindow.Resize(new SizeInt32(w, h));
-        ApplyRoundedRegion(w, h, scale);
+        _windowWidth = w;
+        _windowHeight = h;
+        _windowScale = scale;
     }
 
     private void ApplyRoundedRegion(int width, int height, double scale)
