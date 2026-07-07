@@ -5,6 +5,9 @@ own `CHANGELOG.md` at the repository root.
 
 ## [Unreleased]
 
+### Internal
+- **Settings window is now modular and lazy-loaded** — the ~2,000-line `SettingsWindow.xaml` monolith is split into nine focused `UserControl` sections (General, Analytics, Screenshot, Video, GIF, Mouse Clicks, Branding, Hotkeys, About) under `Settings/Sections`, each constructed only on its first navigation and cached afterwards. `SettingsWindow` keeps the title bar, `NavigationView`, and shared `SettingsViewModel`, but now only realizes the General section at startup instead of all nine. Capture-analytics refresh and microphone/webcam enumeration are deferred until the Analytics/Video sections are first opened instead of running eagerly for every Settings window. Replaced the single one-shot "ready" flag with a re-entrant, reference-counted persistence-suppression scope so compiled `x:Bind` TwoWay controls in a lazily realized section can't write back transient initial values over previously persisted settings. The suppression scope now completes via the section's `Loaded` event with a dispatcher-queue fallback, so persistence can never get stuck suppressed even if a section is swapped out of view before its first layout pass (rapid Settings navigation) or the window closes mid-realization. No behavior, bindings, or visuals changed for users.
+
 ## [v1.5.2-windows] - 2026-07-07
 
 ### Added

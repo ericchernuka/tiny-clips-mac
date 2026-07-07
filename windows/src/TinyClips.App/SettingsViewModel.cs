@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -35,13 +36,29 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _savedMicrophoneId = string.Empty;
     private string _savedWebcamId = string.Empty;
 
-    // Persistence stays suppressed until the Settings window has finished its first
-    // layout/binding pass. WinUI TwoWay x:Bind targets (ComboBox.SelectedIndex,
+    // Persistence stays suppressed while one or more Settings sections are realizing their
+    // visual tree for the first time. WinUI TwoWay x:Bind targets (ComboBox.SelectedIndex,
     // TextBox.Text, ToggleSwitch.IsOn) push their transient initial values back into the
-    // source while the controls are realized — which happens *after* the constructor's
-    // Load() resets _loading. Without this gate those write-backs overwrite the loaded
-    // values (blanking ComboBoxes to -1, emptying text boxes) and persist the garbage.
-    private bool _ready;
+    // source as their controls are realized — which happens *after* this constructor's
+    // Load() call. Without this gate those write-backs overwrite the loaded values (blanking
+    // ComboBoxes to -1, emptying text boxes) and persist the garbage.
+    //
+    // Because sections are now created lazily (one per first navigation, cached afterward),
+    // this can no longer be a single one-shot bool: General realizes when the window opens,
+    // but Analytics/Video/etc. may realize much later, or several sections may be mid-realization
+    // at once if the user navigates quickly before an earlier section's Loaded has fired. This
+    // counter is incremented when a section begins realizing (see <see cref="BeginSectionRealization"/>)
+    // and decremented once that section's first layout pass has completed and its values have been
+    // rehydrated (see <see cref="CompleteSectionRealization"/>); persistence stays suppressed as long
+    // as the count is above zero, regardless of how many sections are overlapping.
+    private int _pendingSectionRealizations;
+
+    // Set once the owning SettingsWindow has closed, so in-flight async continuations (media
+    // device enumeration, permission prompts) stop touching view-model state.
+    private bool _closed;
+
+    private Task? _analyticsInitialization;
+    private Task? _mediaDeviceInitialization;
 
     /// <summary>Raised when the selected theme changes so the window can re-apply it live.</summary>
     public event Action? ThemeChanged;
@@ -64,12 +81,74 @@ public sealed partial class SettingsViewModel : ObservableObject
         _analytics = analytics;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         Load();
-        RefreshAnalytics();
-        _ = LoadMicrophonesAsync();
-        _ = LoadWebcamsAsync();
 
-        // Reconcile the toggle with the OS-owned launch-at-login (StartupTask) state.
+        // Analytics history and microphone/webcam enumeration are deferred until their
+        // sections are first selected (see EnsureAnalyticsInitializedAsync /
+        // EnsureMediaDevicesInitializedAsync), since General is always the first section shown
+        // and neither is needed to render it.
+
+        // Reconcile the toggle with the OS-owned launch-at-login (StartupTask) state. General
+        // is always the first section realized, so this stays eager.
         _ = RefreshLaunchAtLoginAsync();
+    }
+
+    /// <summary>
+    /// Marks the start of a settings section's first visual-tree realization. Callers must pass
+    /// the returned token to <see cref="CompleteSectionRealization"/> once that section's root
+    /// element has raised its first <c>Loaded</c> event. Reference-counted so multiple sections
+    /// can be mid-realization at once (e.g. rapid navigation) without prematurely re-enabling
+    /// persistence.
+    /// </summary>
+    public IDisposable BeginSectionRealization()
+    {
+        _pendingSectionRealizations++;
+        return new SectionRealizationScope(this);
+    }
+
+    /// <summary>
+    /// Completes a section's first realization: re-reads the (still-intact) persisted values
+    /// into the bound properties to overwrite anything the section's initial TwoWay binding
+    /// write-backs may have corrupted, then releases this section's persistence suppression.
+    /// Safe to call even if the window has since closed.
+    /// </summary>
+    public void CompleteSectionRealization(IDisposable realizationScope)
+    {
+        if (!_closed)
+        {
+            Load();
+        }
+
+        realizationScope.Dispose();
+
+        if (!_closed)
+        {
+            ThemeChanged?.Invoke();
+        }
+    }
+
+    private void EndSectionRealization()
+    {
+        if (_pendingSectionRealizations > 0)
+        {
+            _pendingSectionRealizations--;
+        }
+    }
+
+    /// <summary>Stops async continuations (media enumeration, permission prompts) from touching
+    /// this view model once the owning window has closed.</summary>
+    public void NotifyClosed() => _closed = true;
+
+    private sealed class SectionRealizationScope : IDisposable
+    {
+        private SettingsViewModel? _owner;
+
+        public SectionRealizationScope(SettingsViewModel owner) => _owner = owner;
+
+        public void Dispose()
+        {
+            _owner?.EndSectionRealization();
+            _owner = null;
+        }
     }
 
     public string ScreenshotSaveLocationDisplay => $"Screenshot: {ResolveEffectiveSaveLocation(CaptureType.Screenshot)}";
@@ -212,6 +291,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool WebcamDeviceSelectorEnabled => !IsWebcamsLoading;
 
+    /// <summary>Set when microphone or webcam enumeration fails on first Video activation; null when there's no error.</summary>
+    [ObservableProperty]
+    private string? _mediaDevicesLoadError;
+
     [ObservableProperty]
     private WebcamDeviceInfo? _selectedWebcam;
 
@@ -310,6 +393,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     // Analytics
     public System.Collections.ObjectModel.ObservableCollection<CaptureAnalyticsDayViewModel> AnalyticsDays { get; } = new();
 
+    /// <summary>Set when loading capture history fails on first Analytics activation; null when there's no error.</summary>
+    [ObservableProperty]
+    private string? _analyticsLoadError;
+
     [ObservableProperty]
     private int _analyticsRangeIndex;
 
@@ -392,21 +479,49 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Called by the window once its visual tree has loaded and the controls' initial
-    /// TwoWay binding write-backs have settled. Re-reads the (still-intact) persisted
-    /// values into the bound properties so the UI shows real data, then unlocks
-    /// persistence so genuine user edits are saved.
+    /// Loads capture analytics the first time the Analytics section is selected. Idempotent — the
+    /// first call kicks off the (synchronous, but wrapped for future-proofing and error isolation)
+    /// load and caches the task; later calls just await the same completed task instead of
+    /// re-querying the analytics store.
     /// </summary>
-    public void CompleteInitialization()
+    public Task EnsureAnalyticsInitializedAsync() => _analyticsInitialization ??= InitializeAnalyticsAsync();
+
+    private Task InitializeAnalyticsAsync()
     {
-        if (_ready)
+        try
         {
-            return;
+            RefreshAnalytics();
+            AnalyticsLoadError = null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Unable to load capture analytics: {ex}");
+            AnalyticsLoadError = "Couldn't load capture analytics. Reopen Settings to try again.";
         }
 
-        Load();
-        RefreshAnalytics();
-        _ready = true;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Enumerates microphones and webcams the first time the Video section is selected.
+    /// Idempotent — the first call kicks off enumeration and caches the task; later calls just
+    /// await the same in-flight/completed task instead of re-enumerating devices.
+    /// </summary>
+    public Task EnsureMediaDevicesInitializedAsync() => _mediaDeviceInitialization ??= InitializeMediaDevicesAsync();
+
+    private async Task InitializeMediaDevicesAsync()
+    {
+        MediaDevicesLoadError = null;
+
+        var errors = await Task.WhenAll(LoadMicrophonesAsync(), LoadWebcamsAsync());
+        if (!_closed)
+        {
+            MediaDevicesLoadError = string.Join(
+                " ",
+                errors
+                    .Where(error => !string.IsNullOrWhiteSpace(error))
+                    .Distinct());
+        }
     }
 
     private void Load()
@@ -502,18 +617,58 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private async Task LoadMicrophonesAsync()
+    private async Task<string?> LoadMicrophonesAsync()
     {
         IsMicrophonesLoading = true;
-        var microphones = await Task.Run(() => _audioDevices.GetMicrophones());
-        await ApplyMicrophonesAsync(microphones);
+        try
+        {
+            var microphones = await Task.Run(() => _audioDevices.GetMicrophones());
+            if (_closed)
+            {
+                return null;
+            }
+
+            await ApplyMicrophonesAsync(microphones);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Unable to enumerate microphones: {ex}");
+            return _closed
+                ? null
+                : "Couldn't load microphones. Reopen Settings to try again.";
+        }
+        finally
+        {
+            IsMicrophonesLoading = false;
+        }
     }
 
-    private async Task LoadWebcamsAsync()
+    private async Task<string?> LoadWebcamsAsync()
     {
         IsWebcamsLoading = true;
-        var webcams = await _webcamDevices.GetWebcamDevicesAsync();
-        await ApplyWebcamsAsync(webcams);
+        try
+        {
+            var webcams = await _webcamDevices.GetWebcamDevicesAsync();
+            if (_closed)
+            {
+                return null;
+            }
+
+            await ApplyWebcamsAsync(webcams);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Unable to enumerate webcams: {ex}");
+            return _closed
+                ? null
+                : "Couldn't load webcams. Reopen Settings to try again.";
+        }
+        finally
+        {
+            IsWebcamsLoading = false;
+        }
     }
 
     private async Task ApplyMicrophonesAsync(IReadOnlyList<AudioInputDevice> microphones)
@@ -625,7 +780,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnThemeIndexChanged(int value)
     {
-        if (_loading || !_ready)
+        if (_loading || _pendingSectionRealizations > 0)
         {
             return;
         }
@@ -652,7 +807,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnLaunchAtLoginChanged(bool value)
     {
-        if (_loading || !_ready || _suppressLaunchAtLogin)
+        if (_loading || _pendingSectionRealizations > 0 || _suppressLaunchAtLogin)
         {
             return;
         }
@@ -843,7 +998,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void Persist(Action apply)
     {
-        if (_loading || !_ready)
+        if (_loading || _pendingSectionRealizations > 0)
         {
             return;
         }
