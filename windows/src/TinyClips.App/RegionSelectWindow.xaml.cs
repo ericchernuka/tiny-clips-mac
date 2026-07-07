@@ -4,11 +4,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
 using TinyClips.Core.Capture;
+using WinRT.Interop;
 
 namespace TinyClips.App;
 
@@ -18,13 +20,22 @@ namespace TinyClips.App;
 /// </summary>
 public sealed partial class RegionSelectWindow : Window
 {
+    private const int GwlExStyle = -20;
+    private const long WsExLayered = 0x00080000;
+    private const uint LwaAlpha = 0x00000002;
+
     private readonly MonitorInfo _monitor;
     private readonly CapturedFrame? _backdropFrame;
     private readonly Action<RegionSelectResult?> _onComplete;
+    private readonly nint _hwnd;
     private Point _start;
     private bool _dragging;
     private bool _completed;
     private bool _closedByController;
+    private bool _rootLoaded;
+    private bool _backdropReady;
+    private bool _revealQueued;
+    private bool _revealed;
 
     internal RegionSelectWindow(MonitorInfo monitor, CapturedFrame? backdropFrame, Action<RegionSelectResult?> onComplete)
     {
@@ -35,10 +46,19 @@ public sealed partial class RegionSelectWindow : Window
         InitializeComponent();
 
         ConfigurePresenter();
+        _hwnd = WindowNative.GetWindowHandle(this);
+        SetWindowAlpha(_hwnd, 0);
         AppWindow.Move(new PointInt32(monitor.X, monitor.Y));
         AppWindow.Resize(new SizeInt32(monitor.Width, monitor.Height));
 
+        if (_backdropFrame is not null)
+        {
+            Backdrop.ImageOpened += OnBackdropReady;
+            Backdrop.ImageFailed += OnBackdropReady;
+        }
+
         ShowBackdrop();
+        RootGrid.Loaded += OnRootGridLoaded;
         Activated += OnActivated;
         Closed += OnClosed;
     }
@@ -56,6 +76,48 @@ public sealed partial class RegionSelectWindow : Window
         RootGrid.Focus(FocusState.Programmatic);
     }
 
+    private async void OnRootGridLoaded(object sender, RoutedEventArgs e)
+    {
+        RootGrid.Loaded -= OnRootGridLoaded;
+        _rootLoaded = true;
+        TryQueueReveal();
+
+        await Task.Delay(250);
+        _backdropReady = true;
+        TryQueueReveal();
+    }
+
+    private void OnBackdropReady(object sender, RoutedEventArgs e)
+    {
+        Backdrop.ImageOpened -= OnBackdropReady;
+        Backdrop.ImageFailed -= OnBackdropReady;
+        _backdropReady = true;
+        TryQueueReveal();
+    }
+
+    private async void TryQueueReveal()
+    {
+        if (_revealQueued || !_rootLoaded || !_backdropReady)
+        {
+            return;
+        }
+
+        _revealQueued = true;
+        await Task.Delay(50);
+        RevealWindow();
+    }
+
+    private void RevealWindow()
+    {
+        if (_revealed || _completed || _closedByController)
+        {
+            return;
+        }
+
+        _revealed = true;
+        SetWindowAlpha(_hwnd, 255);
+    }
+
     /// <summary>
     /// Paints the pre-captured monitor snapshot behind the dim overlay so the user sees a true
     /// view of the screen, with only the area outside the selection darkened.
@@ -64,6 +126,7 @@ public sealed partial class RegionSelectWindow : Window
     {
         if (_backdropFrame is null)
         {
+            _backdropReady = true;
             return;
         }
 
@@ -247,4 +310,34 @@ public sealed partial class RegionSelectWindow : Window
         _closedByController = true;
         Close();
     }
+
+    private static void SetWindowAlpha(nint hwnd, byte alpha)
+    {
+        var exStyle = (long)GetWindowLongPtr(hwnd);
+        SetWindowLongPtr(hwnd, (nint)(exStyle | WsExLayered));
+        SetLayeredWindowAttributes(hwnd, 0, alpha, LwaAlpha);
+    }
+
+    // 32/64-bit-safe GetWindowLongPtr / SetWindowLongPtr wrappers.
+    private static nint GetWindowLongPtr(nint hwnd) =>
+        nint.Size == 8 ? GetWindowLongPtr64(hwnd, GwlExStyle) : GetWindowLong32(hwnd, GwlExStyle);
+
+    private static nint SetWindowLongPtr(nint hwnd, nint value) =>
+        nint.Size == 8 ? SetWindowLongPtr64(hwnd, GwlExStyle, value) : SetWindowLong32(hwnd, GwlExStyle, (int)value);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern nint GetWindowLongPtr64(nint hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong32(nint hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern nint SetWindowLongPtr64(nint hwnd, int index, nint value);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
+    private static extern int SetWindowLong32(nint hwnd, int index, int value);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(nint hwnd, uint crKey, byte bAlpha, uint dwFlags);
 }
