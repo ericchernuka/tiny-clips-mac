@@ -5,6 +5,8 @@ own `CHANGELOG.md` at the repository root.
 
 ## [Unreleased]
 
+## [v1.5.2-windows] - 2026-07-07
+
 ### Added
 - **Richer in-progress recording controls** - the Windows recording overlay now supports pause, resume, restart, discard, and stop while keeping the panel out of captured output.
 - **Capture analytics in Settings** - Tiny Clips for Windows now tracks screenshots, videos, and GIFs taken per day on the local device, shows the last 7 or 30 days in a stacked chart under Settings → Analytics, and lets you reset that history.
