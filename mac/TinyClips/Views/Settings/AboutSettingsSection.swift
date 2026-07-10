@@ -3,6 +3,7 @@ import SwiftUI
 struct AboutSettingsSection: View {
     @ObservedObject var sparkleController: SparkleController
     let reportIssueURL: URL
+    let onFileBug: () -> Void
     let appVersion: String
     let appBuild: String
 
@@ -54,8 +55,10 @@ struct AboutSettingsSection: View {
         Section {
             Link("GitHub Repository", destination: URL(string: "https://github.com/jamesmontemagno/tiny-clips")!)
                 .accessibilityHint("Opens the TinyClips GitHub repository in your browser.")
-            Link("Report an Issue", destination: reportIssueURL)
-                .accessibilityHint("Opens the issue reporter in your browser.")
+            Button("File a Bug…", action: onFileBug)
+                .accessibilityHint("Opens a quick bug form, then starts a pre-filled issue on GitHub.")
+            Link("Report Detailed Issue", destination: reportIssueURL)
+                .accessibilityHint("Opens the detailed issue reporter in your browser.")
             if let privacyURL = URL(string: "https://tinyclips.app/privacy.html") {
                 Link("Privacy Policy", destination: privacyURL)
                     .accessibilityHint("Opens Privacy Policy in your browser.")

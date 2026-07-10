@@ -50,6 +50,7 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab? = .general
     @State private var splitVisibility: NavigationSplitViewVisibility = .all
     @State private var showDisableDockWarning = false
+    @State private var showQuickBugReportForm = false
     @State private var availableMicrophones: [MicrophoneDeviceOption] = []
     @State private var availableWebcams: [WebcamDeviceOption] = []
 
@@ -102,6 +103,7 @@ struct SettingsView: View {
                     AboutSettingsSection(
                         sparkleController: sparkleController,
                         reportIssueURL: reportIssueURL,
+                        onFileBug: { showQuickBugReportForm = true },
                         appVersion: appVersion,
                         appBuild: appBuild
                     )
@@ -111,6 +113,16 @@ struct SettingsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 720, minHeight: 460)
+        .sheet(isPresented: $showQuickBugReportForm) {
+            QuickBugReportFormView(context: quickBugReportContext) { title, happened in
+                let url = QuickBugReportURLBuilder.makeURL(
+                    title: title,
+                    happened: happened,
+                    context: quickBugReportContext
+                )
+                NSWorkspace.shared.open(url)
+            }
+        }
         .alert("Hide Dock icon?", isPresented: $showDisableDockWarning) {
             Button("Cancel", role: .cancel) {}
                 .help("Keep TinyClips visible in the Dock.")
@@ -131,6 +143,10 @@ struct SettingsView: View {
         .onReceive(settingsWindowManager.$selectedTab.compactMap { $0 }) { requestedTab in
             selectedTab = requestedTab
             settingsWindowManager.selectedTab = nil
+        }
+        .onReceive(settingsWindowManager.$showQuickBugReportForm.filter { $0 }) { _ in
+            showQuickBugReportForm = true
+            settingsWindowManager.showQuickBugReportForm = false
         }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .video {
@@ -260,6 +276,16 @@ struct SettingsView: View {
             URLQueryItem(name: "macos", value: ProcessInfo.processInfo.operatingSystemVersionString)
         ]
         return components.url!
+    }
+
+    private var quickBugReportContext: QuickBugReportContext {
+        QuickBugReportContext(
+            platform: "macOS",
+            version: appVersion,
+            build: appBuild,
+            distribution: distributionChannel,
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString
+        )
     }
 
     private func refreshCaptureDevices() {

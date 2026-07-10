@@ -1,5 +1,6 @@
 import SwiftUI
 import os
+import AppKit
 #if APPSTORE
 import StoreKit
 #endif
@@ -9,6 +10,7 @@ import StoreKit
 class SettingsWindowManager: ObservableObject {
     static let shared = SettingsWindowManager()
     @Published var selectedTab: SettingsTab? = nil
+    @Published var showQuickBugReportForm = false
     
     private init() {}
 }
@@ -99,6 +101,15 @@ struct MenuBarContentView: View {
             captureManager.showGuide()
         } label: {
             Label("Guide…", systemImage: "book")
+        }
+
+        Button {
+            SettingsWindowManager.shared.selectedTab = .about
+            SettingsWindowManager.shared.showQuickBugReportForm = true
+            openWindow(id: "settings-window")
+            bringSettingsWindowToFront()
+        } label: {
+            Label("File a Bug…", systemImage: "ladybug")
         }
 
 #if APPSTORE
@@ -224,6 +235,7 @@ struct MenuBarContentView: View {
         }
         return KeyEquivalent(ch)
     }
+
 }
 
 // MARK: - Menu Bar Label

@@ -1,0 +1,59 @@
+name: Quick bug report
+description: Report a bug quickly from the app
+title: "[Bug]: "
+labels:
+  - bug
+assignees: []
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened?
+      description: Briefly describe the issue.
+      placeholder: The app did...
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: "### App information (auto-filled when opened from TinyClips)"
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: macOS or Windows
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: e.g. 1.5.0
+    validations:
+      required: false
+
+  - type: input
+    id: build
+    attributes:
+      label: Build
+      placeholder: e.g. 123
+    validations:
+      required: false
+
+  - type: input
+    id: distribution
+    attributes:
+      label: Distribution
+      placeholder: Mac App Store, Direct Download, Microsoft Store, or Winget
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: OS version
+      placeholder: e.g. macOS 15.0 or Windows 11 24H2
+    validations:
+      required: false
