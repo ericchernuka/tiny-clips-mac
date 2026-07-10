@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Extended macOS capture analytics with lifetime (all-time) totals per capture type, a per-type series toggle to show/hide screenshots/videos/GIFs on the chart, hover tooltips with exact daily counts, a "busiest day of week" and "most active hour" insights breakdown, and Copy Summary / Share buttons for a quick text summary of your capture activity.
 - Added a **Remove audio** option to the macOS video trimmer so exports can deliberately omit the audio track while preserving audio by default.
 - Added polished countdown fades plus pause, resume, restart, discard, and stop controls to the macOS recording overlay.
+- Added a cross-platform in-app **File a Bug…** flow: macOS menu bar + Settings → About and Windows tray popup + Settings → About now open a quick two-field bug form (title + what happened) and launch a pre-filled GitHub issue using a new lightweight quick bug template.
 
 ### Fixed
 - Fixed the macOS Settings → Analytics view freezing with "Publishing changes from within view updates is not allowed" faults, caused by the analytics history being pruned (and its published state reassigned) while the view was rendering. Pruning now runs only at launch and when a capture is recorded.

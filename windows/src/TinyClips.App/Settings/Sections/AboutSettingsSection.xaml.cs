@@ -1,5 +1,5 @@
 using System;
-using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Controls;
 
 namespace TinyClips.App.Settings.Sections;
@@ -8,6 +8,7 @@ namespace TinyClips.App.Settings.Sections;
 public sealed partial class AboutSettingsSection : UserControl
 {
     private readonly IDisposable _realizationScope;
+    private string _appVersion = "1.0.0";
 
     public SettingsViewModel ViewModel { get; }
 
@@ -33,41 +34,21 @@ public sealed partial class AboutSettingsSection : UserControl
 
     private void UpdateAboutInfo()
     {
-        var version = "1.0.0";
-        try
-        {
-            var v = Windows.ApplicationModel.Package.Current.Id.Version;
-            version = $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or COMException)
-        {
-            // Unpackaged runs can't query the package version; fall back to the assembly version.
-            var asmVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            if (asmVersion is not null)
-            {
-                version = asmVersion.ToString();
-            }
-        }
-
-        AboutVersionText.Text = $"Version {version}";
-        AboutIssueLink.NavigateUri = BuildIssueRequestUri(version);
+        _appVersion = QuickBugReport.GetAppVersion();
+        AboutVersionText.Text = $"Version {_appVersion}";
+        AboutDetailedIssueLink.NavigateUri = QuickBugReport.BuildDetailedIssueRequestUri(_appVersion);
         AboutCopyrightText.Text = $"© {DateTime.Now.Year} Refractored LLC";
     }
 
-    private static Uri BuildIssueRequestUri(string version)
+    private async void OnFileBugClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        const string repositoryIssuesNewUrl = "https://github.com/jamesmontemagno/tiny-clips/issues/new";
-        var runtime = RuntimeInformation.OSDescription;
-        var body =
-            "### Details" + "\n" +
-            $"- App: Tiny Clips for Windows" + "\n" +
-            $"- Version: {version}" + "\n" +
-            $"- OS: {runtime}" + "\n\n" +
-            "### Describe your issue or feature request" + "\n" +
-            "<!-- Tell us what happened or what you'd like to see -->";
-
-        var title = "[Issue/Feature]: ";
-        var query = $"title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
-        return new Uri($"{repositoryIssuesNewUrl}?{query}");
+        await OpenQuickBugReportAsync();
     }
+
+    private Task OpenQuickBugReportAsync()
+        => QuickBugReport.ShowQuickBugDialogAndOpenAsync(
+            XamlRoot,
+            _appVersion,
+            QuickBugReport.GetDistributionChannel()
+        );
 }
