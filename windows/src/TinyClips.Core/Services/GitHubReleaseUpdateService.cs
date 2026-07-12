@@ -112,19 +112,26 @@ public sealed class GitHubReleaseUpdateService : IAppUpdateService
         var values = new int[parts.Length];
         for (var i = 0; i < parts.Length; i++)
         {
-            if (!int.TryParse(parts[i], out values[i]))
+            if (!int.TryParse(parts[i], out values[i]) || values[i] < 0)
             {
                 return false;
             }
         }
 
-        version = values.Length switch
+        try
         {
-            2 => new Version(values[0], values[1]),
-            3 => new Version(values[0], values[1], values[2]),
-            _ => new Version(values[0], values[1], values[2], values[3]),
-        };
-        return true;
+            version = values.Length switch
+            {
+                2 => new Version(values[0], values[1]),
+                3 => new Version(values[0], values[1], values[2]),
+                _ => new Version(values[0], values[1], values[2], values[3]),
+            };
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 
     private AppUpdateCheckResult Save(AppUpdateCheckResult result)

@@ -68,6 +68,31 @@ public sealed class GitHubReleaseUpdateServiceTests
         Assert.Contains("403", result.Message);
     }
 
+    [Fact]
+    public void TryParseVersionTag_ReturnsFalse_ForNegativeSegment()
+    {
+        var parsed = GitHubReleaseUpdateService.TryParseVersionTag("v1.-1.0", out _);
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_IgnoresNegativeVersionTag_AndContinues()
+    {
+        var json = """
+            [
+              { "tag_name": "v1.-1.0", "html_url": "https://example.invalid/invalid", "draft": false, "prerelease": false },
+              { "tag_name": "v1.6.0", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0", "draft": false, "prerelease": false }
+            ]
+            """;
+        var service = CreateService(json);
+
+        var result = await service.CheckForUpdatesAsync(new Version(1, 5, 2));
+
+        Assert.Equal(AppUpdateStatus.UpdateAvailable, result.Status);
+        Assert.Equal(new Version(1, 6, 0), result.LatestVersion);
+    }
+
     private static GitHubReleaseUpdateService CreateService(string responseBody, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(statusCode)

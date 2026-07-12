@@ -97,6 +97,11 @@ public sealed partial class AboutSettingsSection : UserControl
             var result = await _updateService.CheckForUpdatesAsync(AppVersionInfo.GetCurrentVersion());
             ApplyUpdateCheckResult(result);
         }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Check for updates failed unexpectedly: {ex}");
+            ApplyUpdateCheckResult(AppUpdateCheckResult.Failed(AppVersionInfo.GetCurrentVersion(), "Unexpected error while checking for updates."));
+        }
         finally
         {
             CheckForUpdatesButton.IsEnabled = true;

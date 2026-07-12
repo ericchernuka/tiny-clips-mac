@@ -79,7 +79,9 @@ public partial class App : Application
         RegisterGlobalHotKeys();
         ShowOnboardingIfNeeded();
         HandleFileActivation();
+#if !TINYCLIPS_STORE_BUILD
         _ = RunStartupUpdateCheckAsync();
+#endif
     }
 
     /// <summary>
@@ -235,7 +237,9 @@ public partial class App : Application
         };
         footer.Children.Add(CreateFooterButton("\uE713", "Settings", new RelayCommand(OpenSettingsWindow), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE897", "Guide", new RelayCommand(OpenGuideWindow), Dismiss));
+#if !TINYCLIPS_STORE_BUILD
         footer.Children.Add(CreateFooterButton(GlyphCheckForUpdates, "Check for updates", new AsyncRelayCommand(CheckForUpdatesFromTrayAsync), Dismiss));
+#endif
         footer.Children.Add(CreateFooterButton("\uEA39", "File a Bug", new AsyncRelayCommand(() => OpenQuickBugReportFromTrayAsync(root.XamlRoot)), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE7E8", "Exit", new RelayCommand(() => _ = ExitApplicationAsync()), Dismiss));
         root.Children.Add(footer);
@@ -757,12 +761,19 @@ public partial class App : Application
 
     private async Task<AppUpdateCheckResult> CheckForUpdatesAsync(bool isManualCheck)
     {
-        var updateService = Services.GetRequiredService<IAppUpdateService>();
         var currentVersion = AppVersionInfo.GetCurrentVersion();
-        var result = await updateService.CheckForUpdatesAsync(currentVersion);
-
-        Debug.WriteLine($"Update check ({(isManualCheck ? "manual" : "startup")}): {result.Status}, current={result.CurrentVersion}, latest={result.LatestVersion}");
-        return result;
+        try
+        {
+            var updateService = Services.GetRequiredService<IAppUpdateService>();
+            var result = await updateService.CheckForUpdatesAsync(currentVersion);
+            Debug.WriteLine($"Update check ({(isManualCheck ? "manual" : "startup")}): {result.Status}, current={result.CurrentVersion}, latest={result.LatestVersion}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Update check ({(isManualCheck ? "manual" : "startup")}) failed unexpectedly: {ex}");
+            return AppUpdateCheckResult.Failed(currentVersion, "Unexpected error while checking for updates.");
+        }
     }
 
     private void OnRecordingCompleted(object? sender, string? path)
