@@ -20,7 +20,7 @@ public sealed class GitHubReleaseUpdateService : IAppUpdateService
     {
         _httpClient = httpClient;
         _releasesApiUrl = string.IsNullOrWhiteSpace(releasesApiUrl)
-            ? "https://api.github.com/repos/jamesmontemagno/tiny-clips/releases?per_page=10"
+            ? "https://api.github.com/repos/jamesmontemagno/tiny-clips/releases?per_page=100"
             : releasesApiUrl;
 
         if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
@@ -49,33 +49,41 @@ public sealed class GitHubReleaseUpdateService : IAppUpdateService
                 return Save(AppUpdateCheckResult.Failed(currentVersion, "No releases were returned."));
             }
 
+            GitHubRelease? latestRelease = null;
+            Version? latestVersion = null;
             foreach (var release in releases)
             {
-                if (release.Draft || release.PreRelease)
+                if (release.Draft || release.PreRelease || !IsWindowsReleaseTag(release.TagName))
                 {
                     continue;
                 }
 
-                if (!TryParseVersionTag(release.TagName, out var latestVersion))
+                if (!TryParseVersionTag(release.TagName, out var releaseVersion))
                 {
                     continue;
                 }
 
-                Uri? releaseUri = null;
-                if (Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out var parsedReleaseUri))
+                if (latestVersion is null || releaseVersion > latestVersion)
                 {
-                    releaseUri = parsedReleaseUri;
+                    latestRelease = release;
+                    latestVersion = releaseVersion;
                 }
-
-                if (latestVersion > currentVersion)
-                {
-                    return Save(AppUpdateCheckResult.UpdateAvailable(currentVersion, latestVersion, releaseUri));
-                }
-
-                return Save(AppUpdateCheckResult.UpToDate(currentVersion, latestVersion, releaseUri));
             }
 
-            return Save(AppUpdateCheckResult.Failed(currentVersion, "No stable release with a parseable version tag was found."));
+            if (latestRelease is null || latestVersion is null)
+            {
+                return Save(AppUpdateCheckResult.Failed(currentVersion, "No stable Windows release with a parseable version tag was found."));
+            }
+
+            Uri? releaseUri = null;
+            if (Uri.TryCreate(latestRelease.HtmlUrl, UriKind.Absolute, out var parsedReleaseUri))
+            {
+                releaseUri = parsedReleaseUri;
+            }
+
+            return latestVersion > currentVersion
+                ? Save(AppUpdateCheckResult.UpdateAvailable(currentVersion, latestVersion, releaseUri))
+                : Save(AppUpdateCheckResult.UpToDate(currentVersion, latestVersion, releaseUri));
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
@@ -133,6 +141,9 @@ public sealed class GitHubReleaseUpdateService : IAppUpdateService
             return false;
         }
     }
+
+    private static bool IsWindowsReleaseTag(string? tag) =>
+        tag?.EndsWith("-windows", StringComparison.OrdinalIgnoreCase) == true;
 
     private AppUpdateCheckResult Save(AppUpdateCheckResult result)
     {

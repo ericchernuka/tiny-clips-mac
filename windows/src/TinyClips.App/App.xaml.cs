@@ -740,7 +740,16 @@ public partial class App : Application
         }
     }
 
-    private Task RunStartupUpdateCheckAsync() => CheckForUpdatesAsync(isManualCheck: false);
+    private async Task RunStartupUpdateCheckAsync()
+    {
+        var result = await CheckForUpdatesAsync(isManualCheck: false);
+        if (result.Status == AppUpdateStatus.UpdateAvailable)
+        {
+            ShowUpdateCheckNotification(
+                "Update available",
+                $"Tiny Clips {result.LatestVersion} is available. Open Settings > About to update.");
+        }
+    }
 
     private async Task CheckForUpdatesFromTrayAsync()
     {

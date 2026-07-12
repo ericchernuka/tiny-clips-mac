@@ -12,7 +12,7 @@ public sealed class GitHubReleaseUpdateServiceTests
     {
         var json = """
             [
-              { "tag_name": "v1.6.0", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0", "draft": false, "prerelease": false }
+              { "tag_name": "v1.6.0-windows", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0-windows", "draft": false, "prerelease": false }
             ]
             """;
         var service = CreateService(json);
@@ -29,7 +29,7 @@ public sealed class GitHubReleaseUpdateServiceTests
     {
         var json = """
             [
-              { "tag_name": "1.5.2", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.2", "draft": false, "prerelease": false }
+              { "tag_name": "1.5.2-windows", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.5.2-windows", "draft": false, "prerelease": false }
             ]
             """;
         var service = CreateService(json);
@@ -45,8 +45,8 @@ public sealed class GitHubReleaseUpdateServiceTests
     {
         var json = """
             [
-              { "tag_name": "v2.0.0-beta.1", "html_url": "https://example.invalid/beta", "draft": false, "prerelease": true },
-              { "tag_name": "v1.6.0", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0", "draft": false, "prerelease": false }
+              { "tag_name": "v2.0.0-beta.1-windows", "html_url": "https://example.invalid/beta", "draft": false, "prerelease": true },
+              { "tag_name": "v1.6.0-windows", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0-windows", "draft": false, "prerelease": false }
             ]
             """;
         var service = CreateService(json);
@@ -81,8 +81,8 @@ public sealed class GitHubReleaseUpdateServiceTests
     {
         var json = """
             [
-              { "tag_name": "v1.-1.0", "html_url": "https://example.invalid/invalid", "draft": false, "prerelease": false },
-              { "tag_name": "v1.6.0", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0", "draft": false, "prerelease": false }
+              { "tag_name": "v1.-1.0-windows", "html_url": "https://example.invalid/invalid", "draft": false, "prerelease": false },
+              { "tag_name": "v1.6.0-windows", "html_url": "https://github.com/jamesmontemagno/tiny-clips/releases/tag/v1.6.0-windows", "draft": false, "prerelease": false }
             ]
             """;
         var service = CreateService(json);
@@ -91,6 +91,25 @@ public sealed class GitHubReleaseUpdateServiceTests
 
         Assert.Equal(AppUpdateStatus.UpdateAvailable, result.Status);
         Assert.Equal(new Version(1, 6, 0), result.LatestVersion);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_IgnoresMacReleases_AndSelectsHighestWindowsVersion()
+    {
+        var json = """
+            [
+              { "tag_name": "v9.0.0-mac", "html_url": "https://example.invalid/mac", "draft": false, "prerelease": false },
+              { "tag_name": "v1.5.3-windows", "html_url": "https://example.invalid/windows-older", "draft": false, "prerelease": false },
+              { "tag_name": "v1.6.0-windows", "html_url": "https://example.invalid/windows-latest", "draft": false, "prerelease": false }
+            ]
+            """;
+        var service = CreateService(json);
+
+        var result = await service.CheckForUpdatesAsync(new Version(1, 5, 2));
+
+        Assert.Equal(AppUpdateStatus.UpdateAvailable, result.Status);
+        Assert.Equal(new Version(1, 6, 0), result.LatestVersion);
+        Assert.Equal("https://example.invalid/windows-latest", result.ReleaseUri?.ToString().TrimEnd('/'));
     }
 
     private static GitHubReleaseUpdateService CreateService(string responseBody, HttpStatusCode statusCode = HttpStatusCode.OK)
