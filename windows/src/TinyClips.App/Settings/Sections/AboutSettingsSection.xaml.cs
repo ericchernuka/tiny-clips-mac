@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -8,7 +8,7 @@ using TinyClips.Core.Services;
 
 namespace TinyClips.App.Settings.Sections;
 
-/// <summary>App version, build-flavor update messaging, and GitHub links.</summary>
+/// <summary>App version, update messaging, and GitHub links.</summary>
 public sealed partial class AboutSettingsSection : UserControl
 {
     private const string WingetUpgradeCommand = "winget upgrade Refractored.TinyClips";
@@ -16,6 +16,7 @@ public sealed partial class AboutSettingsSection : UserControl
     private readonly IDisposable _realizationScope;
     private readonly IAppUpdateService _updateService;
     private Uri? _latestReleaseUri;
+    private string _appVersion = "1.0.0";
 
     public SettingsViewModel ViewModel { get; }
 
@@ -37,16 +38,15 @@ public sealed partial class AboutSettingsSection : UserControl
 
     private void ApplyBuildFlavorVisibility()
     {
-        DirectBuildUpdatesCard.Visibility = IsDirectBuild ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-        StoreBuildUpdatesCard.Visibility = IsStoreBuild ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        DirectBuildUpdatesCard.Visibility = IsDirectBuild ? Visibility.Visible : Visibility.Collapsed;
+        StoreBuildUpdatesCard.Visibility = IsStoreBuild ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateAboutInfo()
     {
-        var version = AppVersionInfo.GetCurrentVersionText();
-
-        AboutVersionText.Text = $"Version {version}";
-        AboutIssueLink.NavigateUri = BuildIssueRequestUri(version);
+        _appVersion = QuickBugReport.GetAppVersion();
+        AboutVersionText.Text = $"Version {_appVersion}";
+        AboutDetailedIssueLink.NavigateUri = QuickBugReport.BuildDetailedIssueRequestUri(_appVersion);
         AboutCopyrightText.Text = $"© {DateTime.Now.Year} Refractored LLC";
     }
 
@@ -134,20 +134,14 @@ public sealed partial class AboutSettingsSection : UserControl
         }
     }
 
-    private static Uri BuildIssueRequestUri(string version)
+    private async void OnFileBugClick(object sender, RoutedEventArgs e)
     {
-        const string repositoryIssuesNewUrl = "https://github.com/jamesmontemagno/tiny-clips/issues/new";
-        var runtime = RuntimeInformation.OSDescription;
-        var body =
-            "### Details" + "\n" +
-            $"- App: Tiny Clips for Windows" + "\n" +
-            $"- Version: {version}" + "\n" +
-            $"- OS: {runtime}" + "\n\n" +
-            "### Describe your issue or feature request" + "\n" +
-            "<!-- Tell us what happened or what you'd like to see -->";
-
-        var title = "[Issue/Feature]: ";
-        var query = $"title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
-        return new Uri($"{repositoryIssuesNewUrl}?{query}");
+        await OpenQuickBugReportAsync();
     }
+
+    private Task OpenQuickBugReportAsync() =>
+        QuickBugReport.ShowQuickBugDialogAndOpenAsync(
+            XamlRoot,
+            _appVersion,
+            QuickBugReport.GetDistributionChannel());
 }

@@ -98,11 +98,17 @@
                         AutomationProperties.Name="Open the Tiny Clips GitHub repository"
                         Content="GitHub repository"
                         NavigateUri="https://github.com/jamesmontemagno/tiny-clips" />
+                    <Button
+                        x:Name="AboutFileBugButton"
+                        AutomationProperties.AutomationId="AboutFileBugButton"
+                        AutomationProperties.Name="Open quick bug report form"
+                        Click="OnFileBugClick"
+                        Content="File a bug…" />
                     <HyperlinkButton
-                        x:Name="AboutIssueLink"
-                        AutomationProperties.AutomationId="AboutIssueLink"
-                        AutomationProperties.Name="Open an issue or feature request on GitHub"
-                        Content="Open an issue or feature request" />
+                        x:Name="AboutDetailedIssueLink"
+                        AutomationProperties.AutomationId="AboutDetailedIssueLink"
+                        AutomationProperties.Name="Open detailed issue template on GitHub"
+                        Content="Open detailed issue template" />
                 </StackPanel>
             </Grid>
         </Border>

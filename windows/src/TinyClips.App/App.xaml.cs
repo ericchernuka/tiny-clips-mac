@@ -236,6 +236,7 @@ public partial class App : Application
         footer.Children.Add(CreateFooterButton("\uE713", "Settings", new RelayCommand(OpenSettingsWindow), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE897", "Guide", new RelayCommand(OpenGuideWindow), Dismiss));
         footer.Children.Add(CreateFooterButton(GlyphCheckForUpdates, "Check for updates", new AsyncRelayCommand(CheckForUpdatesFromTrayAsync), Dismiss));
+        footer.Children.Add(CreateFooterButton("\uEA39", "File a Bug", new AsyncRelayCommand(() => OpenQuickBugReportFromTrayAsync(root.XamlRoot)), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE7E8", "Exit", new RelayCommand(() => _ = ExitApplicationAsync()), Dismiss));
         root.Children.Add(footer);
 
@@ -1427,6 +1428,13 @@ public partial class App : Application
 
         ActivateWindowToForeground(_guideWindow);
     }
+
+    private Task OpenQuickBugReportFromTrayAsync(Microsoft.UI.Xaml.XamlRoot? xamlRoot)
+        => QuickBugReport.ShowQuickBugDialogAndOpenAsync(
+            xamlRoot,
+            QuickBugReport.GetAppVersion(),
+            QuickBugReport.GetDistributionChannel()
+        );
 
     private void OpenScreenshotEditor(string path)
     {
