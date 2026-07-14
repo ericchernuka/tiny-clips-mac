@@ -29,6 +29,7 @@ public partial class App : Application
     private const string GlyphVideo = "\uE714";
     private const string GlyphGif = "\uE8B9";
     private const string GlyphStop = "\uE71A";
+    private const string GlyphCheckForUpdates = "\uE895";
     private const uint MonitorDefaultToNearest = 2;
 
     private TaskbarIcon? _taskbarIcon;
@@ -78,6 +79,9 @@ public partial class App : Application
         RegisterGlobalHotKeys();
         ShowOnboardingIfNeeded();
         HandleFileActivation();
+#if !TINYCLIPS_STORE_BUILD
+        _ = RunStartupUpdateCheckAsync();
+#endif
     }
 
     /// <summary>
@@ -233,6 +237,9 @@ public partial class App : Application
         };
         footer.Children.Add(CreateFooterButton("\uE713", "Settings", new RelayCommand(OpenSettingsWindow), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE897", "Guide", new RelayCommand(OpenGuideWindow), Dismiss));
+#if !TINYCLIPS_STORE_BUILD
+        footer.Children.Add(CreateFooterButton(GlyphCheckForUpdates, "Check for updates", new AsyncRelayCommand(CheckForUpdatesFromTrayAsync), Dismiss));
+#endif
         footer.Children.Add(CreateFooterButton("\uEA39", "File a Bug", new AsyncRelayCommand(() => OpenQuickBugReportFromTrayAsync(root.XamlRoot)), Dismiss));
         footer.Children.Add(CreateFooterButton("\uE7E8", "Exit", new RelayCommand(() => _ = ExitApplicationAsync()), Dismiss));
         root.Children.Add(footer);
@@ -730,6 +737,51 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to show webcam failure notification: {ex}");
+        }
+    }
+
+    private async Task RunStartupUpdateCheckAsync()
+    {
+        var result = await CheckForUpdatesAsync(isManualCheck: false);
+        if (result.Status == AppUpdateStatus.UpdateAvailable)
+        {
+            ShowUpdateCheckNotification(
+                "Update available",
+                $"Tiny Clips {result.LatestVersion} is available. Open Settings > About to update.");
+        }
+    }
+
+    private async Task CheckForUpdatesFromTrayAsync()
+    {
+        var result = await CheckForUpdatesAsync(isManualCheck: true);
+        switch (result.Status)
+        {
+            case AppUpdateStatus.UpToDate:
+                ShowUpdateCheckNotification("You're up to date", $"Tiny Clips {result.CurrentVersion} is current.");
+                break;
+            case AppUpdateStatus.UpdateAvailable:
+                ShowUpdateCheckNotification("Update available", $"Tiny Clips {result.LatestVersion} is available. Open Settings > About to update.");
+                break;
+            default:
+                ShowUpdateCheckNotification("Couldn't check for updates", result.Message ?? "Please try again later.");
+                break;
+        }
+    }
+
+    private async Task<AppUpdateCheckResult> CheckForUpdatesAsync(bool isManualCheck)
+    {
+        var currentVersion = AppVersionInfo.GetCurrentVersion();
+        try
+        {
+            var updateService = Services.GetRequiredService<IAppUpdateService>();
+            var result = await updateService.CheckForUpdatesAsync(currentVersion);
+            Debug.WriteLine($"Update check ({(isManualCheck ? "manual" : "startup")}): {result.Status}, current={result.CurrentVersion}, latest={result.LatestVersion}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Update check ({(isManualCheck ? "manual" : "startup")}) failed unexpectedly: {ex}");
+            return AppUpdateCheckResult.Failed(currentVersion, "Unexpected error while checking for updates.");
         }
     }
 
@@ -1272,6 +1324,23 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to show clipboard failure notification: {ex}");
+        }
+    }
+
+    private static void ShowUpdateCheckNotification(string title, string details)
+    {
+        try
+        {
+            var notification = new AppNotificationBuilder()
+                .AddText(title)
+                .AddText(details)
+                .BuildNotification();
+
+            AppNotificationManager.Default.Show(notification);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to show update notification: {ex}");
         }
     }
 

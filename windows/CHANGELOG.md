@@ -6,6 +6,7 @@ own `CHANGELOG.md` at the repository root.
 ## [Unreleased]
 
 ### Added
+- **In-app update checks with guided upgrade actions (Windows Direct build)** — Tiny Clips can now check GitHub Releases for newer stable versions once per launch and via a new tray **Check for updates** action. Settings → About now shows update status and, when a newer version exists, provides guided actions to copy `winget upgrade Refractored.TinyClips` and open the latest GitHub Release page.
 - Added in-app **File a Bug** entry points in both the tray popup and Settings → About. Both now open a lightweight two-field bug form (title + what happened) and then launch a pre-filled GitHub issue using the new quick bug template.
 
 ### Internal
