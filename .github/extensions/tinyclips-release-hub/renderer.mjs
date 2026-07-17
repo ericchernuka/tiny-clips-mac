@@ -343,6 +343,9 @@ export function renderHtml({ instanceId, token }) {
       if (action === "prepare_release") {
         return ["Preparing " + tag, "Updating the changelog, committing it, and creating the annotated tag."];
       }
+      if (action === "undo_prepare") {
+        return ["Undoing " + tag, "Deleting the local tag and restoring this session to origin/main."];
+      }
       if (action === "push_release") {
         return ["Publishing " + tag, "Fast-forwarding main and pushing the release tag."];
       }
@@ -543,7 +546,7 @@ export function renderHtml({ instanceId, token }) {
             ? '<span class="badge good">Ready to prepare</span>'
             : '<span class="badge warn">Commit changes first</span>'));
       const prepareDetail = preparedLocally
-        ? "The changelog commit and annotated tag are ready locally."
+        ? "Prepared locally. Undo removes only this unpushed tag and its release commit."
         : (!snapshot.git.atMainTip
           ? "Start from the latest origin/main with no additional commits."
           : "Moves Unreleased notes into a dated section, commits, and creates an annotated tag.");
@@ -572,7 +575,15 @@ export function renderHtml({ instanceId, token }) {
           '" target="_blank" rel="noreferrer">Open release</a>' : '') +
         '</div>' +
         '<div class="steps">' +
-        step(1, "Prepare release", prepareDetail, "prepare_release", tagPushed ? "Released" : (preparedLocally ? "Prepared" : "Prepare"), preparedLocally || tagPushed || !snapshot.git.canPrepareRelease, "primary") +
+        step(
+          1,
+          "Prepare release",
+          prepareDetail,
+          preparedLocally ? "undo_prepare" : "prepare_release",
+          tagPushed ? "Released" : (preparedLocally ? "Undo" : "Prepare"),
+          tagPushed || (!preparedLocally && !snapshot.git.canPrepareRelease),
+          preparedLocally ? "danger" : "primary"
+        ) +
         step(2, "Push release tag", pushDetail, "push_release", tagPushed ? "Pushed" : "Push", !snapshot.git.canPushRelease || !preparedLocally || tagPushed) +
         step(3, "Run release workflow", workflowDetail, "run_release_workflow", "Re-run workflow", !tagPushed) +
         wingetStep + '</div>' +
@@ -652,6 +663,9 @@ export function renderHtml({ instanceId, token }) {
       if (result.action === "prepare_release") {
         return "Prepared " + result.tag + " locally. Continue with Push release tag.";
       }
+      if (result.action === "undo_prepare") {
+        return "Undid local preparation for " + result.tag + ". The release is ready to prepare again.";
+      }
       if (result.action === "push_release") {
         return "Pushed " + result.tag + ". The release workflow should start automatically.";
       }
@@ -698,6 +712,9 @@ export function renderHtml({ instanceId, token }) {
       if (action === "prepare_release") {
         openConfirmation(action, { platform, version: tag }, "PREPARE " + tag,
           "This creates a changelog commit and annotated tag locally.");
+      } else if (action === "undo_prepare") {
+        openConfirmation(action, { platform, tag }, "UNDO " + tag,
+          "This deletes the unpushed local tag and permanently removes its single release commit from this session.");
       } else if (action === "push_release") {
         openConfirmation(action, { tag }, "PUSH " + tag,
           "This fast-forwards main with the prepared release commit, then pushes the tag to start the release workflow.");
@@ -766,7 +783,11 @@ export function renderHtml({ instanceId, token }) {
           );
           trackWorkflow(result.tracking.platform, result.tracking.kind, result.tag, startedAt);
         } else {
-          setOperationProgress("Release prepared", operationSuccessMessage(result), "success");
+          setOperationProgress(
+            result.action === "undo_prepare" ? "Preparation undone" : "Release prepared",
+            operationSuccessMessage(result),
+            "success"
+          );
           hideOperationProgress(6000);
         }
         showToast(operationSuccessMessage(result));
