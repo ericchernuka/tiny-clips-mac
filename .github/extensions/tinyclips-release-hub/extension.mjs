@@ -166,6 +166,21 @@ await joinSession({
                     handler: async (ctx) => performReleaseAction("prepare_release", ctx.input),
                 },
                 {
+                    name: "undo_prepare",
+                    description: "Delete an unpushed local release tag and restore its single release commit after exact typed confirmation.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            platform: platformSchema,
+                            tag: { type: "string", minLength: 1 },
+                            confirmation: { type: "string", minLength: 1 },
+                        },
+                        required: ["platform", "tag", "confirmation"],
+                        additionalProperties: false,
+                    },
+                    handler: async (ctx) => performReleaseAction("undo_prepare", ctx.input),
+                },
+                {
                     name: "push_release",
                     description: "Fast-forward main with the prepared release commit and push its tag after exact typed confirmation.",
                     inputSchema: {

@@ -421,6 +421,48 @@ export async function performReleaseAction(action, input) {
         return { action, tag: input.version, output };
     }
 
+    if (action === "undo_prepare") {
+        assertTag(input.platform, input.tag);
+        assertConfirmation(input.confirmation, `UNDO ${input.tag}`);
+        await run("git", ["fetch", "--quiet", "origin", "main"]);
+        const config = platformConfig(input.platform);
+        const [head, originMain, status, aheadOfMain, behindMain, tagCommit, tagType, subject, changedFiles, remoteTag] =
+            await Promise.all([
+                run("git", ["rev-parse", "HEAD"]),
+                run("git", ["rev-parse", "origin/main"]),
+                run("git", ["status", "--porcelain"]),
+                run("git", ["rev-list", "--count", "origin/main..HEAD"]),
+                run("git", ["rev-list", "--count", "HEAD..origin/main"]),
+                run("git", ["rev-list", "-n", "1", input.tag]),
+                run("git", ["cat-file", "-t", `refs/tags/${input.tag}`]),
+                run("git", ["log", "-1", "--format=%s"]),
+                run("git", ["diff", "--name-only", "origin/main..HEAD"]),
+                run("git", ["ls-remote", "--tags", "origin", `refs/tags/${input.tag}`]),
+            ]);
+        const files = changedFiles.split(/\r?\n/).filter(Boolean);
+        if (status) {
+            throw new Error("Undo preparation requires a clean working tree.");
+        }
+        if (remoteTag) {
+            throw new Error(`Cannot undo ${input.tag} because the tag already exists on origin.`);
+        }
+        if (Number(behindMain) !== 0 || Number(aheadOfMain) !== 1) {
+            throw new Error("Undo preparation requires exactly one local release commit ahead of origin/main.");
+        }
+        if (tagCommit !== head || tagType !== "tag") {
+            throw new Error(`Tag ${input.tag} is not the annotated tag for the current release commit.`);
+        }
+        if (subject !== `Mark ${input.tag} release`) {
+            throw new Error(`Current commit is not the expected ${input.tag} release commit.`);
+        }
+        if (files.length !== 1 || files[0].replaceAll("\\", "/") !== config.changelog) {
+            throw new Error(`Release commit must only change ${config.changelog}.`);
+        }
+        await run("git", ["tag", "-d", input.tag]);
+        const output = await run("git", ["reset", "--hard", originMain]);
+        return { action, tag: input.tag, output };
+    }
+
     if (action === "push_release") {
         const platform = input.tag.endsWith("-mac") ? "mac" : "windows";
         assertTag(platform, input.tag);
