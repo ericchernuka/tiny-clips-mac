@@ -135,6 +135,20 @@ async function getTags(platform) {
     return output.split(/\r?\n/).filter((tag) => TAG_PATTERNS[platform].test(tag)).sort(compareTags);
 }
 
+async function getRemoteTags(platform) {
+    const result = await tryRun("git", [
+        "ls-remote", "--tags", "origin", `refs/tags/v*-${platform}`,
+    ]);
+    if (!result.ok) {
+        return { available: false, tags: [], error: result.error };
+    }
+    const tags = result.output
+        .split(/\r?\n/)
+        .map((line) => line.match(/refs\/tags\/(.+?)(?:\^\{\})?$/)?.[1])
+        .filter((tag) => tag && TAG_PATTERNS[platform].test(tag));
+    return { available: true, tags: [...new Set(tags)].sort(compareTags) };
+}
+
 async function getWorkflow(workflow) {
     const result = await tryRun("gh", [
         "run", "list", "--workflow", workflow, "--limit", "8",
@@ -255,12 +269,14 @@ export async function generateReleaseNotes(platform, version) {
 
 export async function getReleaseSnapshot() {
     const root = await getRepoRoot();
-    const [branch, status, macTags, windowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
+    const [branch, status, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
         await Promise.all([
             run("git", ["branch", "--show-current"]),
             run("git", ["status", "--porcelain"]),
             getTags("mac"),
             getTags("windows"),
+            getRemoteTags("mac"),
+            getRemoteTags("windows"),
             readMacVersion(root),
             getReleases(),
             getWorkflow("release.yml"),
@@ -269,13 +285,22 @@ export async function getReleaseSnapshot() {
             getWingetPublishedVersion(),
         ]);
 
-    const releaseByTag = new Map(releases.releases.map((release) => [release.tagName, release]));
-    const buildPlatform = async (platform, tags, workflow) => {
+    const buildPlatform = async (platform, tags, remoteTagResult, workflow) => {
         const config = platformConfig(platform);
         const markdown = await readFile(`${root}/${config.changelog}`, "utf8");
         const latestTag = tags[0] ?? null;
-        const suggestedTag = nextPatchTag(platform, latestTag, platform === "mac" ? macVersion : null);
-        const releasePackageVersion = platform === "windows" ? windowsTagToPackageVersion(latestTag) : null;
+        const remoteTagSet = new Set(remoteTagResult.tags);
+        const latestRemoteTag = remoteTagResult.tags[0] ?? null;
+        const pendingTag = remoteTagResult.available
+            ? tags.find((tag) => !remoteTagSet.has(tag)) ?? null
+            : null;
+        const suggestedTag = pendingTag ?? nextPatchTag(
+            platform,
+            latestRemoteTag ?? latestTag,
+            platform === "mac" ? macVersion : null,
+        );
+        const latestRelease = releases.releases.find((release) => TAG_PATTERNS[platform].test(release.tagName)) ?? null;
+        const releasePackageVersion = platform === "windows" ? windowsTagToPackageVersion(latestRelease?.tagName) : null;
         const wingetStatus = platform === "windows" && wingetPublished.available && wingetPublished.version && releasePackageVersion
             ? (comparePackageVersions(wingetPublished.version, releasePackageVersion) === 0 ? "current" : "outdated")
             : "unavailable";
@@ -283,7 +308,10 @@ export async function getReleaseSnapshot() {
             id: platform,
             label: platform === "mac" ? "macOS" : "Windows",
             latestTag,
-            latestRelease: latestTag ? releaseByTag.get(latestTag) ?? null : null,
+            latestRemoteTag,
+            remoteTags: remoteTagResult.tags.slice(0, 20),
+            pendingTag,
+            latestRelease,
             suggestedTag,
             appVersion: platform === "mac" ? macVersion : null,
             changelog: config.changelog,
@@ -304,13 +332,14 @@ export async function getReleaseSnapshot() {
             branch,
             clean: status.length === 0,
             changeCount: status ? status.split(/\r?\n/).length : 0,
+            canPrepareRelease: branch === "main" && status.length === 0,
             canPushRelease: branch === "main",
         },
         githubAvailable: releases.available,
         githubError: releases.error ?? null,
         platforms: {
-            mac: await buildPlatform("mac", macTags, macWorkflow),
-            windows: await buildPlatform("windows", windowsTags, windowsWorkflow),
+            mac: await buildPlatform("mac", macTags, remoteMacTags, macWorkflow),
+            windows: await buildPlatform("windows", windowsTags, remoteWindowsTags, windowsWorkflow),
         },
     };
 }
@@ -331,6 +360,10 @@ export async function performReleaseAction(action, input) {
     if (action === "prepare_release") {
         assertTag(input.platform, input.version);
         assertConfirmation(input.confirmation, `PREPARE ${input.version}`);
+        const branch = await run("git", ["branch", "--show-current"]);
+        if (branch !== "main") {
+            throw new Error(`Release preparation is only allowed from main; current branch is ${branch}.`);
+        }
         const root = await getRepoRoot();
         if (process.platform === "win32") {
             const output = await run("powershell", [

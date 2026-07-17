@@ -191,6 +191,7 @@ export function renderHtml({ instanceId, token }) {
     let generatedNotes = {};
     let notesViews = { mac: "preview", windows: "preview" };
     let historyViews = { mac: false, windows: false };
+    let releaseTags = { mac: null, windows: null };
     let pendingAction;
 
     const app = document.getElementById("app");
@@ -365,10 +366,34 @@ export function renderHtml({ instanceId, token }) {
 
     function renderDashboard() {
       const data = snapshot.platforms[platform];
-      const version = data.suggestedTag;
+      const version = releaseTags[platform] || data.pendingTag || data.suggestedTag;
+      releaseTags[platform] = version;
       const notes = currentNotes();
       const notesView = notesViews[platform];
-      const releasePublished = Boolean(data.latestRelease);
+      const preparedLocally = data.pendingTag === version;
+      const tagPushed = data.remoteTags?.includes(version);
+      const releasePublished = data.latestRelease?.tagName === version;
+      const onMain = snapshot.git.branch === "main";
+      const readinessBadge = preparedLocally
+        ? '<span class="badge good">Prepared locally</span>'
+        : (!onMain
+          ? '<span class="badge warn">Main branch required</span>'
+          : (snapshot.git.clean
+            ? '<span class="badge good">Ready to prepare</span>'
+            : '<span class="badge warn">Commit changes first</span>'));
+      const prepareDetail = preparedLocally
+        ? "The changelog commit and annotated tag are ready locally."
+        : (!onMain
+          ? "Merge this dashboard work, then prepare the release from main."
+          : "Moves Unreleased notes into a dated section, commits, and creates an annotated tag.");
+      const pushDetail = !onMain
+        ? "Release tags cannot be pushed from a feature branch."
+        : (tagPushed ? "This tag is already on origin." : (preparedLocally
+          ? "Pushes main and the prepared tag; the tag push starts the release workflow."
+          : "Prepare the release tag first."));
+      const workflowDetail = tagPushed
+        ? "The tag push starts this automatically; use this only to recover or re-run it."
+        : "Push the prepared tag before manually dispatching this workflow.";
       const wingetStep = platform === "windows"
         ? step(4, "Submit to winget", "Runs only after the GitHub release is published.", "submit_winget", "Submit", !releasePublished)
         : step(4, "Publish update metadata", "Sparkle appcast and Homebrew cask update in the macOS workflow.", "view_workflow", "In workflow", true);
@@ -377,14 +402,13 @@ export function renderHtml({ instanceId, token }) {
         '<article class="panel"><div class="panel-head"><div><h2>' + escapeHtml(data.label) +
         ' release path</h2><div class="muted">' + escapeHtml(data.unreleasedCount) +
         ' unreleased changelog items</div></div>' +
-        (snapshot.git.clean ? '<span class="badge good">Ready to prepare</span>' :
-          '<span class="badge warn">Commit changes first</span>') + '</div>' +
+        readinessBadge + '</div>' +
         '<label for="version">Release tag</label><div class="version-row"><input id="version" value="' +
         escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button></div>' +
         '<div class="steps">' +
-        step(1, "Prepare release", "Moves Unreleased notes into a dated section, commits, and creates an annotated tag.", "prepare_release", "Prepare", !snapshot.git.clean, "primary") +
-        step(2, "Push release tag", "Pushes main, then the tag. Tag push starts the platform release workflow.", "push_release", "Push", !snapshot.git.canPushRelease) +
-        step(3, "Run release workflow", "Manual dispatch path for rebuilding or recovering a release.", "run_release_workflow", "Run workflow") +
+        step(1, "Prepare release", prepareDetail, "prepare_release", preparedLocally ? "Prepared" : "Prepare", preparedLocally || !snapshot.git.canPrepareRelease, "primary") +
+        step(2, "Push release tag", pushDetail, "push_release", tagPushed ? "Pushed" : "Push", !snapshot.git.canPushRelease || !preparedLocally || tagPushed) +
+        step(3, "Run release workflow", workflowDetail, "run_release_workflow", "Re-run workflow", !tagPushed) +
         wingetStep + '</div>' +
         '<div class="workflow"><div class="workflow-head"><h2>Automation status</h2>' +
         '<button class="action" data-action="toggle_history" type="button" aria-expanded="' +
@@ -413,6 +437,9 @@ export function renderHtml({ instanceId, token }) {
 
       dashboard.querySelectorAll("[data-action]").forEach((button) => {
         button.addEventListener("click", () => handleButton(button.dataset.action));
+      });
+      document.getElementById("version")?.addEventListener("input", (event) => {
+        releaseTags[platform] = event.target.value;
       });
     }
 
@@ -443,7 +470,24 @@ export function renderHtml({ instanceId, token }) {
     }
 
     function currentVersion() {
-      return document.getElementById("version")?.value.trim() || snapshot.platforms[platform].suggestedTag;
+      return document.getElementById("version")?.value.trim() || releaseTags[platform] ||
+        snapshot.platforms[platform].suggestedTag;
+    }
+
+    function operationSuccessMessage(result) {
+      if (result.action === "prepare_release") {
+        return "Prepared " + result.tag + " locally. Continue with Push release tag.";
+      }
+      if (result.action === "push_release") {
+        return "Pushed " + result.tag + ". The release workflow should start automatically.";
+      }
+      if (result.action === "run_release_workflow") {
+        return "Dispatched the release workflow for " + result.tag + ".";
+      }
+      if (result.action === "submit_winget") {
+        return "Dispatched winget submission for " + result.tag + ".";
+      }
+      return "Release operation completed.";
     }
 
     async function handleButton(action) {
@@ -517,8 +561,11 @@ export function renderHtml({ instanceId, token }) {
       dialog.close();
       try {
         const result = await api(active.action, { ...active.body, confirmation: active.phrase });
+        if (result.tag) {
+          releaseTags[platform] = result.tag;
+        }
         renderSummary(); renderDashboard();
-        showToast(result.output || "Release operation completed.");
+        showToast(operationSuccessMessage(result));
       } catch (error) { showToast(error.message, true); }
     });
 
