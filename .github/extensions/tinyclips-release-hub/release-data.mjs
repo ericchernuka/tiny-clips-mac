@@ -124,6 +124,11 @@ function countNotes(markdown) {
     return markdown.split(/\r?\n/).filter((line) => line.trim().startsWith("- ")).length;
 }
 
+function repositoryWebUrl(remoteUrl) {
+    const githubPath = remoteUrl.match(/github\.com(?::|\/)([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
+    return githubPath ? `https://github.com/${githubPath.replace(/\.git$/, "")}` : null;
+}
+
 async function readMacVersion(root) {
     const plist = await readFile(`${root}/mac/TinyClips/Info.plist`, "utf8");
     const match = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
@@ -152,13 +157,32 @@ async function getRemoteTags(platform) {
 async function getWorkflow(workflow) {
     const result = await tryRun("gh", [
         "run", "list", "--workflow", workflow, "--limit", "8",
-        "--json", "status,conclusion,displayTitle,createdAt,url",
+        "--json", "status,conclusion,displayTitle,createdAt,url,event,headBranch",
     ]);
     if (!result.ok) {
         return { available: false, error: result.error };
     }
     const runs = JSON.parse(result.output || "[]");
     return { available: true, run: runs[0] ?? null, runs };
+}
+
+export async function getWorkflowRunStatus(platform, kind, since, tag) {
+    const workflow = kind === "winget"
+        ? "winget-submit.yml"
+        : platformConfig(platform).workflow;
+    const result = await getWorkflow(workflow);
+    if (!result.available) {
+        throw new Error(result.error || `Could not query ${workflow}.`);
+    }
+
+    const threshold = Number.isFinite(Date.parse(since))
+        ? Date.parse(since) - 60_000
+        : Date.now() - 60_000;
+    const recentRuns = result.runs.filter((run) => Date.parse(run.createdAt) >= threshold);
+    const run = (tag ? recentRuns.find((candidate) => candidate.headBranch === tag) : null)
+        ?? recentRuns[0]
+        ?? null;
+    return { workflow, run };
 }
 
 async function getReleases() {
@@ -269,12 +293,13 @@ export async function generateReleaseNotes(platform, version) {
 
 export async function getReleaseSnapshot() {
     const root = await getRepoRoot();
-    const [branch, status, head, originMain, aheadOfMain, behindMain, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
+    const [branch, status, head, originMain, originUrl, aheadOfMain, behindMain, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
         await Promise.all([
             run("git", ["branch", "--show-current"]),
             run("git", ["status", "--porcelain"]),
             run("git", ["rev-parse", "HEAD"]),
             run("git", ["rev-parse", "origin/main"]),
+            run("git", ["remote", "get-url", "origin"]),
             run("git", ["rev-list", "--count", "origin/main..HEAD"]),
             run("git", ["rev-list", "--count", "HEAD..origin/main"]),
             getTags("mac"),
@@ -332,6 +357,7 @@ export async function getReleaseSnapshot() {
     return {
         generatedAt: new Date().toISOString(),
         repository: root,
+        repositoryUrl: repositoryWebUrl(originUrl),
         git: {
             branch,
             clean: status.length === 0,
@@ -423,7 +449,12 @@ export async function performReleaseAction(action, input) {
             throw new Error("Current release commit does not match origin/main.");
         }
         const output = await run("git", ["push", "origin", input.tag]);
-        return { action, tag: input.tag, output: output || `Pushed ${input.tag}.` };
+        return {
+            action,
+            tag: input.tag,
+            output: output || `Pushed ${input.tag}.`,
+            tracking: { platform, kind: "release" },
+        };
     }
 
     if (action === "run_release_workflow") {
@@ -433,7 +464,12 @@ export async function performReleaseAction(action, input) {
         const output = await run("gh", [
             "workflow", "run", config.workflow, "-f", `${config.workflowInput}=${input.tag}`,
         ]);
-        return { action, tag: input.tag, output: output || `Dispatched ${config.workflow}.` };
+        return {
+            action,
+            tag: input.tag,
+            output: output || `Dispatched ${config.workflow}.`,
+            tracking: { platform: input.platform, kind: "release" },
+        };
     }
 
     if (action === "submit_winget") {
@@ -446,7 +482,12 @@ export async function performReleaseAction(action, input) {
         const output = await run("gh", [
             "workflow", "run", "winget-submit.yml", "-f", `tag=${input.tag}`,
         ]);
-        return { action, tag: input.tag, output: output || "Dispatched winget submission." };
+        return {
+            action,
+            tag: input.tag,
+            output: output || "Dispatched winget submission.",
+            tracking: { platform: "windows", kind: "winget" },
+        };
     }
 
     throw new Error(`Unknown release action: ${action}`);

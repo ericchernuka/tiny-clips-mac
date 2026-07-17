@@ -4,6 +4,7 @@ import { createCanvas, CanvasError, joinSession } from "@github/copilot-sdk/exte
 import {
     generateReleaseNotes,
     getReleaseSnapshot,
+    getWorkflowRunStatus,
     performReleaseAction,
 } from "./release-data.mjs";
 import { renderHtml } from "./renderer.mjs";
@@ -64,6 +65,11 @@ async function startServer(instanceId) {
                 }
 
                 const body = await readJsonBody(req);
+                if (body.action === "workflow_status") {
+                    const result = await getWorkflowRunStatus(body.platform, body.kind, body.since, body.tag);
+                    sendJson(res, 200, { result });
+                    return;
+                }
                 const result = body.action === "generate_notes"
                     ? await generateReleaseNotes(body.platform, body.version)
                     : await performReleaseAction(body.action, body);
@@ -122,6 +128,27 @@ await joinSession({
                         additionalProperties: false,
                     },
                     handler: async (ctx) => generateReleaseNotes(ctx.input.platform, ctx.input.version),
+                },
+                {
+                    name: "get_workflow_status",
+                    description: "Query the recent GitHub Actions run triggered for a release or winget submission.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            platform: platformSchema,
+                            kind: { type: "string", enum: ["release", "winget"] },
+                            since: { type: "string", minLength: 1 },
+                            tag: { type: "string" },
+                        },
+                        required: ["platform", "kind", "since"],
+                        additionalProperties: false,
+                    },
+                    handler: async (ctx) => getWorkflowRunStatus(
+                        ctx.input.platform,
+                        ctx.input.kind,
+                        ctx.input.since,
+                        ctx.input.tag,
+                    ),
                 },
                 {
                     name: "prepare_release",

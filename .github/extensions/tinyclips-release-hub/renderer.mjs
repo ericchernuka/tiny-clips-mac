@@ -57,6 +57,8 @@ export function renderHtml({ instanceId, token }) {
       background: var(--hub-surface);
     }
     .metric { padding: 14px; min-height: 82px; }
+    .metric-link { color: inherit; text-decoration: none; }
+    .metric-link:hover { border-color: var(--true-color-blue, #0969da); background: var(--hub-control); }
     .metric-label { color: var(--text-color-muted, #8b949e); font-size: 12px; }
     .metric-value { font-size: 18px; font-weight: 650; margin-top: 5px; overflow-wrap: anywhere; }
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-color-default, #30363d); margin-bottom: 18px; }
@@ -80,7 +82,8 @@ export function renderHtml({ instanceId, token }) {
     .step-detail { color: var(--text-color-muted, #8b949e); font-size: 12px; margin-top: 1px; }
     .action {
       border: 1px solid var(--border-color-default, #30363d); border-radius: 7px;
-      background: var(--hub-control); color: inherit; padding: 6px 10px; white-space: nowrap;
+      display: inline-flex; align-items: center; background: var(--hub-control); color: inherit;
+      padding: 6px 10px; text-decoration: none; white-space: nowrap;
     }
     .action.primary { background: var(--true-color-blue, #0969da); border-color: transparent; color: var(--color-white, #fff); }
     .action.danger { color: var(--true-color-red, #ff7b72); }
@@ -123,6 +126,8 @@ export function renderHtml({ instanceId, token }) {
     .workflow-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; }
     .workflow-link { margin-inline: -7px; padding: 6px 7px; border-radius: 7px; color: inherit; text-decoration: none; }
     .workflow-link:hover { background: var(--hub-control); }
+    .destination-link { color: var(--true-color-blue, #0969da); font-weight: 650; text-decoration: none; }
+    .destination-link:hover { text-decoration: underline; }
     .history-panel { display: grid; gap: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color-default, #30363d); }
     .history-label { margin-bottom: 6px; color: var(--text-color-muted, #8b949e); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
     .history-list { display: grid; gap: 6px; }
@@ -145,6 +150,27 @@ export function renderHtml({ instanceId, token }) {
       padding: 11px 14px; border: 1px solid var(--border-color-default, #30363d); border-radius: 9px;
       background: var(--hub-surface); box-shadow: 0 8px 30px var(--hub-shadow); display: none; white-space: pre-wrap;
     }
+    .operation-progress {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center;
+      margin-bottom: 18px; padding: 12px 14px; border: 1px solid var(--true-color-blue, #0969da);
+      border-radius: 10px; background: var(--hub-surface);
+    }
+    .operation-progress[hidden] { display: none; }
+    .operation-progress[data-state="success"] { border-color: var(--true-color-green, #1a7f37); }
+    .operation-progress[data-state="error"] { border-color: var(--true-color-red, #cf222e); }
+    .operation-spinner {
+      width: 18px; height: 18px; border: 2px solid var(--border-color-default, #30363d);
+      border-top-color: var(--true-color-blue, #0969da); border-radius: 50%;
+      animation: operation-spin .8s linear infinite;
+    }
+    .operation-progress[data-state="success"] .operation-spinner,
+    .operation-progress[data-state="error"] .operation-spinner { animation: none; border-width: 5px; }
+    .operation-progress[data-state="success"] .operation-spinner { border-color: var(--true-color-green, #1a7f37); }
+    .operation-progress[data-state="error"] .operation-spinner { border-color: var(--true-color-red, #cf222e); }
+    .operation-title { font-weight: 650; }
+    .operation-detail { margin-top: 2px; color: var(--text-color-muted, #8b949e); font-size: 12px; }
+    .operation-link { color: var(--true-color-blue, #0969da); font-weight: 650; text-decoration: none; white-space: nowrap; }
+    @keyframes operation-spin { to { transform: rotate(360deg); } }
     .loading { opacity: .65; pointer-events: none; }
     @media (max-width: 800px) {
       .summary { grid-template-columns: repeat(2, 1fr); }
@@ -165,6 +191,14 @@ export function renderHtml({ instanceId, token }) {
       </div>
       <button class="refresh" id="refresh" type="button">Refresh</button>
     </header>
+    <section class="operation-progress" id="operation-progress" role="status" aria-live="polite" data-state="running" hidden>
+      <span class="operation-spinner" aria-hidden="true"></span>
+      <div>
+        <div class="operation-title" id="operation-title"></div>
+        <div class="operation-detail" id="operation-detail"></div>
+      </div>
+      <a class="operation-link" id="operation-link" target="_blank" rel="noreferrer" hidden>Open run</a>
+    </section>
     <section class="summary" id="summary" aria-label="Repository release summary"></section>
     <div class="tabs" role="tablist" aria-label="Release platform">
       <button class="tab" id="tab-mac" role="tab" aria-controls="dashboard" aria-selected="true" data-platform="mac">macOS</button>
@@ -193,11 +227,18 @@ export function renderHtml({ instanceId, token }) {
     let historyViews = { mac: false, windows: false };
     let releaseTags = { mac: null, windows: null };
     let pendingAction;
+    let workflowPollToken = 0;
+    let workflowTracking = false;
+    let progressHideTimer;
 
     const app = document.getElementById("app");
     const dashboard = document.getElementById("dashboard");
     const dialog = document.getElementById("confirm-dialog");
     const confirmInput = document.getElementById("confirm-input");
+    const operationProgress = document.getElementById("operation-progress");
+    const operationTitle = document.getElementById("operation-title");
+    const operationDetail = document.getElementById("operation-detail");
+    const operationLink = document.getElementById("operation-link");
 
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -281,6 +322,105 @@ export function renderHtml({ instanceId, token }) {
       showToast.timer = window.setTimeout(() => { toast.style.display = "none"; }, 7000);
     }
 
+    function setOperationProgress(title, detail, state = "running", url = null) {
+      window.clearTimeout(progressHideTimer);
+      operationProgress.hidden = false;
+      operationProgress.dataset.state = state;
+      operationTitle.textContent = title;
+      operationDetail.textContent = detail;
+      operationLink.hidden = !url;
+      if (url) operationLink.href = url;
+    }
+
+    function hideOperationProgress(delay = 0) {
+      window.clearTimeout(progressHideTimer);
+      progressHideTimer = window.setTimeout(() => {
+        if (!workflowTracking) operationProgress.hidden = true;
+      }, delay);
+    }
+
+    function actionProgress(action, tag) {
+      if (action === "prepare_release") {
+        return ["Preparing " + tag, "Updating the changelog, committing it, and creating the annotated tag."];
+      }
+      if (action === "push_release") {
+        return ["Publishing " + tag, "Fast-forwarding main and pushing the release tag."];
+      }
+      if (action === "run_release_workflow") {
+        return ["Dispatching release workflow", "Requesting a GitHub Actions run for " + tag + "."];
+      }
+      return ["Dispatching winget submission", "Requesting the winget workflow for " + tag + "."];
+    }
+
+    const sleep = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+    async function trackWorkflow(targetPlatform, kind, tag, since) {
+      const token = ++workflowPollToken;
+      workflowTracking = true;
+      const workflowLabel = kind === "winget"
+        ? "winget submission"
+        : (targetPlatform === "mac" ? "macOS release" : "Windows release");
+      let failures = 0;
+      setOperationProgress("Waiting for " + workflowLabel, "GitHub Actions has not queued the run yet.");
+
+      while (token === workflowPollToken) {
+        try {
+          const result = await api("workflow_status", {
+            platform: targetPlatform, kind, tag, since
+          }, false);
+          failures = 0;
+          const run = result.run;
+          if (!run) {
+            setOperationProgress("Waiting for " + workflowLabel, "GitHub Actions has not queued the run yet.");
+          } else if (run.status !== "completed") {
+            const status = run.status === "in_progress" ? "In progress" : "Queued";
+            setOperationProgress(
+              workflowLabel.charAt(0).toUpperCase() + workflowLabel.slice(1) + " " + status.toLowerCase(),
+              run.displayTitle || status,
+              "running",
+              run.url
+            );
+          } else {
+            workflowTracking = false;
+            const succeeded = run.conclusion === "success";
+            setOperationProgress(
+              succeeded ? workflowLabel.charAt(0).toUpperCase() + workflowLabel.slice(1) + " succeeded"
+                : workflowLabel.charAt(0).toUpperCase() + workflowLabel.slice(1) + " failed",
+              run.displayTitle || ("Conclusion: " + run.conclusion),
+              succeeded ? "success" : "error",
+              run.url
+            );
+            await refresh(false);
+            if (succeeded) hideOperationProgress(15000);
+            return;
+          }
+        } catch (error) {
+          failures += 1;
+          setOperationProgress(
+            "Checking " + workflowLabel,
+            failures < 3 ? "Status query failed; retrying." : error.message,
+            failures < 3 ? "running" : "error"
+          );
+        }
+        await sleep(5000);
+      }
+    }
+
+    function resumeActiveWorkflow() {
+      if (workflowTracking) return true;
+      const candidates = [
+        { platform: "mac", kind: "release", run: snapshot.platforms.mac.workflow?.run },
+        { platform: "windows", kind: "release", run: snapshot.platforms.windows.workflow?.run },
+        { platform: "windows", kind: "winget", run: snapshot.platforms.windows.wingetWorkflow?.run },
+      ].filter((candidate) => candidate.run && candidate.run.status !== "completed")
+        .sort((left, right) => Date.parse(right.run.createdAt) - Date.parse(left.run.createdAt));
+      const active = candidates[0];
+      if (!active) return false;
+      const tag = active.run.headBranch?.startsWith("v") ? active.run.headBranch : null;
+      trackWorkflow(active.platform, active.kind, tag, active.run.createdAt);
+      return true;
+    }
+
     function workflowLabel(workflow) {
       if (!workflow?.available) return "Unavailable";
       if (!workflow.run) return "No runs";
@@ -343,17 +483,39 @@ export function renderHtml({ instanceId, token }) {
       return '<span class="badge ' + kind + '">' + escapeHtml(label) + '</span>';
     }
 
+    function repositoryUrl(path) {
+      return snapshot.repositoryUrl ? snapshot.repositoryUrl + path : null;
+    }
+
+    function linkedValue(value, url, className = "destination-link") {
+      return url
+        ? '<a class="' + className + '" href="' + escapeHtml(url) +
+          '" target="_blank" rel="noreferrer">' + escapeHtml(value) + '</a>'
+        : escapeHtml(value);
+    }
+
     function renderSummary() {
       const mac = snapshot.platforms.mac;
       const windows = snapshot.platforms.windows;
       document.getElementById("summary").innerHTML = [
-        ["Branch", snapshot.git.branch],
-        ["Working tree", snapshot.git.clean ? "Clean" : snapshot.git.changeCount + " changes"],
-        ["Latest macOS", mac.latestTag || "No tag"],
-        ["Latest Windows", windows.latestTag || "No tag"],
-      ].map(([label, value]) =>
-        '<div class="metric"><div class="metric-label">' + escapeHtml(label) +
-        '</div><div class="metric-value">' + escapeHtml(value) + '</div></div>'
+        { label: "Branch", value: snapshot.git.branch },
+        { label: "Working tree", value: snapshot.git.clean ? "Clean" : snapshot.git.changeCount + " changes" },
+        {
+          label: "Latest macOS release",
+          value: mac.latestRelease?.tagName || "No release",
+          url: mac.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(mac.latestRelease.tagName)) : null
+        },
+        {
+          label: "Latest Windows release",
+          value: windows.latestRelease?.tagName || "No release",
+          url: windows.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(windows.latestRelease.tagName)) : null
+        },
+      ].map((item) =>
+        (item.url ? '<a class="metric metric-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noreferrer">'
+          : '<div class="metric">') +
+        '<div class="metric-label">' + escapeHtml(item.label) +
+        '</div><div class="metric-value">' + escapeHtml(item.value) + '</div>' +
+        (item.url ? '</a>' : '</div>')
       ).join("");
     }
 
@@ -403,7 +565,12 @@ export function renderHtml({ instanceId, token }) {
         ' unreleased changelog items</div></div>' +
         readinessBadge + '</div>' +
         '<label for="version">Release tag</label><div class="version-row"><input id="version" value="' +
-        escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button></div>' +
+        escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button>' +
+        (tagPushed ? '<a class="action" href="' + escapeHtml(repositoryUrl("/tree/" + encodeURIComponent(version))) +
+          '" target="_blank" rel="noreferrer">Open tag</a>' : '') +
+        (releasePublished ? '<a class="action" href="' + escapeHtml(repositoryUrl("/releases/tag/" + encodeURIComponent(version))) +
+          '" target="_blank" rel="noreferrer">Open release</a>' : '') +
+        '</div>' +
         '<div class="steps">' +
         step(1, "Prepare release", prepareDetail, "prepare_release", tagPushed ? "Released" : (preparedLocally ? "Prepared" : "Prepare"), preparedLocally || tagPushed || !snapshot.git.canPrepareRelease, "primary") +
         step(2, "Push release tag", pushDetail, "push_release", tagPushed ? "Pushed" : "Push", !snapshot.git.canPushRelease || !preparedLocally || tagPushed) +
@@ -414,11 +581,19 @@ export function renderHtml({ instanceId, token }) {
         historyViews[platform] + '">' + (historyViews[platform] ? "Hide history" : "Show history") + '</button></div>' +
         workflowRow(data.label + " release", data.workflow) +
         (platform === "windows" ? workflowRow("winget submission", data.wingetWorkflow) : '') +
+        '<div class="workflow-row"><span>Latest remote tag</span><strong>' +
+        linkedValue(
+          data.latestRemoteTag || "Not found",
+          data.latestRemoteTag ? repositoryUrl("/tree/" + encodeURIComponent(data.latestRemoteTag)) : null
+        ) + '</strong></div>' +
         '<div class="workflow-row"><span>Latest GitHub release</span><strong>' +
-        escapeHtml(data.latestRelease?.tagName || "Not found") + '</strong></div>' +
+        linkedValue(
+          data.latestRelease?.tagName || "Not found",
+          data.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(data.latestRelease.tagName)) : null
+        ) + '</strong></div>' +
         (platform === "windows"
           ? '<div class="workflow-row"><span>Published on winget</span><span><strong>' +
-            escapeHtml(data.wingetPublished?.version || "Not found") + '</strong> ' +
+            linkedValue(data.wingetPublished?.version || "Not found", data.wingetPublished?.url) + '</strong> ' +
             wingetVersionStatus(data.wingetPublished) + '</span></div>'
           : '') +
         renderWorkflowHistory(data) +
@@ -442,8 +617,8 @@ export function renderHtml({ instanceId, token }) {
       });
     }
 
-    async function api(action, body = {}) {
-      app.classList.add("loading");
+    async function api(action, body = {}, blocking = true) {
+      if (blocking) app.classList.add("loading");
       try {
         const response = await fetch("/api/action", {
           method: "POST",
@@ -455,7 +630,7 @@ export function renderHtml({ instanceId, token }) {
         if (payload.snapshot) snapshot = payload.snapshot;
         return payload.result;
       } finally {
-        app.classList.remove("loading");
+        if (blocking) app.classList.remove("loading");
       }
     }
 
@@ -493,10 +668,16 @@ export function renderHtml({ instanceId, token }) {
       const tag = currentVersion();
       if (action === "generate_notes") {
         try {
+          setOperationProgress("Generating release notes", "Reading and formatting the platform changelog.");
           generatedNotes[platform] = await api("generate_notes", { platform, version: tag });
           renderSummary(); renderDashboard();
+          setOperationProgress("Release notes ready", "Generated from " + generatedNotes[platform].source + ".", "success");
+          hideOperationProgress(3000);
           showToast("Release notes generated from " + generatedNotes[platform].source + ".");
-        } catch (error) { showToast(error.message, true); }
+        } catch (error) {
+          setOperationProgress("Release notes failed", error.message, "error");
+          showToast(error.message, true);
+        }
         return;
       }
       if (action === "copy_notes") {
@@ -529,7 +710,10 @@ export function renderHtml({ instanceId, token }) {
       }
     }
 
-    async function refresh() {
+    async function refresh(showProgress = true) {
+      if (showProgress && !workflowTracking) {
+        setOperationProgress("Refreshing release status", "Querying tags, releases, workflows, and winget.");
+      }
       app.classList.add("loading");
       try {
         const response = await fetch("/api/status");
@@ -537,7 +721,15 @@ export function renderHtml({ instanceId, token }) {
         if (!response.ok || payload.error) throw new Error(payload.error || "Refresh failed.");
         snapshot = payload;
         renderSummary(); renderDashboard();
-      } catch (error) { showToast(error.message, true); }
+        const resumed = resumeActiveWorkflow();
+        if (showProgress && !resumed) {
+          setOperationProgress("Release status refreshed", "Repository and distribution status are up to date.", "success");
+          hideOperationProgress(2500);
+        }
+      } catch (error) {
+        setOperationProgress("Status refresh failed", error.message, "error");
+        showToast(error.message, true);
+      }
       finally { app.classList.remove("loading"); }
     }
 
@@ -558,14 +750,30 @@ export function renderHtml({ instanceId, token }) {
       }
       const active = pendingAction;
       dialog.close();
+      const startedAt = new Date().toISOString();
+      const progress = actionProgress(active.action, active.body.tag || active.body.version);
+      setOperationProgress(progress[0], progress[1]);
       try {
         const result = await api(active.action, { ...active.body, confirmation: active.phrase });
         if (result.tag) {
           releaseTags[platform] = result.tag;
         }
         renderSummary(); renderDashboard();
+        if (result.tracking) {
+          setOperationProgress(
+            "Waiting for GitHub Actions",
+            "The operation completed locally; waiting for the workflow run to appear."
+          );
+          trackWorkflow(result.tracking.platform, result.tracking.kind, result.tag, startedAt);
+        } else {
+          setOperationProgress("Release prepared", operationSuccessMessage(result), "success");
+          hideOperationProgress(6000);
+        }
         showToast(operationSuccessMessage(result));
-      } catch (error) { showToast(error.message, true); }
+      } catch (error) {
+        setOperationProgress("Release operation failed", error.message, "error");
+        showToast(error.message, true);
+      }
     });
 
     refresh();
