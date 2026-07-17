@@ -124,6 +124,11 @@ function countNotes(markdown) {
     return markdown.split(/\r?\n/).filter((line) => line.trim().startsWith("- ")).length;
 }
 
+function repositoryWebUrl(remoteUrl) {
+    const githubPath = remoteUrl.match(/github\.com(?::|\/)([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
+    return githubPath ? `https://github.com/${githubPath.replace(/\.git$/, "")}` : null;
+}
+
 async function readMacVersion(root) {
     const plist = await readFile(`${root}/mac/TinyClips/Info.plist`, "utf8");
     const match = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
@@ -288,12 +293,13 @@ export async function generateReleaseNotes(platform, version) {
 
 export async function getReleaseSnapshot() {
     const root = await getRepoRoot();
-    const [branch, status, head, originMain, aheadOfMain, behindMain, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
+    const [branch, status, head, originMain, originUrl, aheadOfMain, behindMain, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
         await Promise.all([
             run("git", ["branch", "--show-current"]),
             run("git", ["status", "--porcelain"]),
             run("git", ["rev-parse", "HEAD"]),
             run("git", ["rev-parse", "origin/main"]),
+            run("git", ["remote", "get-url", "origin"]),
             run("git", ["rev-list", "--count", "origin/main..HEAD"]),
             run("git", ["rev-list", "--count", "HEAD..origin/main"]),
             getTags("mac"),
@@ -351,6 +357,7 @@ export async function getReleaseSnapshot() {
     return {
         generatedAt: new Date().toISOString(),
         repository: root,
+        repositoryUrl: repositoryWebUrl(originUrl),
         git: {
             branch,
             clean: status.length === 0,

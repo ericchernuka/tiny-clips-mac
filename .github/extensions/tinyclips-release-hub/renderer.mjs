@@ -57,6 +57,8 @@ export function renderHtml({ instanceId, token }) {
       background: var(--hub-surface);
     }
     .metric { padding: 14px; min-height: 82px; }
+    .metric-link { color: inherit; text-decoration: none; }
+    .metric-link:hover { border-color: var(--true-color-blue, #0969da); background: var(--hub-control); }
     .metric-label { color: var(--text-color-muted, #8b949e); font-size: 12px; }
     .metric-value { font-size: 18px; font-weight: 650; margin-top: 5px; overflow-wrap: anywhere; }
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-color-default, #30363d); margin-bottom: 18px; }
@@ -80,7 +82,8 @@ export function renderHtml({ instanceId, token }) {
     .step-detail { color: var(--text-color-muted, #8b949e); font-size: 12px; margin-top: 1px; }
     .action {
       border: 1px solid var(--border-color-default, #30363d); border-radius: 7px;
-      background: var(--hub-control); color: inherit; padding: 6px 10px; white-space: nowrap;
+      display: inline-flex; align-items: center; background: var(--hub-control); color: inherit;
+      padding: 6px 10px; text-decoration: none; white-space: nowrap;
     }
     .action.primary { background: var(--true-color-blue, #0969da); border-color: transparent; color: var(--color-white, #fff); }
     .action.danger { color: var(--true-color-red, #ff7b72); }
@@ -123,6 +126,8 @@ export function renderHtml({ instanceId, token }) {
     .workflow-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; }
     .workflow-link { margin-inline: -7px; padding: 6px 7px; border-radius: 7px; color: inherit; text-decoration: none; }
     .workflow-link:hover { background: var(--hub-control); }
+    .destination-link { color: var(--true-color-blue, #0969da); font-weight: 650; text-decoration: none; }
+    .destination-link:hover { text-decoration: underline; }
     .history-panel { display: grid; gap: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color-default, #30363d); }
     .history-label { margin-bottom: 6px; color: var(--text-color-muted, #8b949e); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
     .history-list { display: grid; gap: 6px; }
@@ -478,17 +483,39 @@ export function renderHtml({ instanceId, token }) {
       return '<span class="badge ' + kind + '">' + escapeHtml(label) + '</span>';
     }
 
+    function repositoryUrl(path) {
+      return snapshot.repositoryUrl ? snapshot.repositoryUrl + path : null;
+    }
+
+    function linkedValue(value, url, className = "destination-link") {
+      return url
+        ? '<a class="' + className + '" href="' + escapeHtml(url) +
+          '" target="_blank" rel="noreferrer">' + escapeHtml(value) + '</a>'
+        : escapeHtml(value);
+    }
+
     function renderSummary() {
       const mac = snapshot.platforms.mac;
       const windows = snapshot.platforms.windows;
       document.getElementById("summary").innerHTML = [
-        ["Branch", snapshot.git.branch],
-        ["Working tree", snapshot.git.clean ? "Clean" : snapshot.git.changeCount + " changes"],
-        ["Latest macOS", mac.latestTag || "No tag"],
-        ["Latest Windows", windows.latestTag || "No tag"],
-      ].map(([label, value]) =>
-        '<div class="metric"><div class="metric-label">' + escapeHtml(label) +
-        '</div><div class="metric-value">' + escapeHtml(value) + '</div></div>'
+        { label: "Branch", value: snapshot.git.branch },
+        { label: "Working tree", value: snapshot.git.clean ? "Clean" : snapshot.git.changeCount + " changes" },
+        {
+          label: "Latest macOS release",
+          value: mac.latestRelease?.tagName || "No release",
+          url: mac.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(mac.latestRelease.tagName)) : null
+        },
+        {
+          label: "Latest Windows release",
+          value: windows.latestRelease?.tagName || "No release",
+          url: windows.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(windows.latestRelease.tagName)) : null
+        },
+      ].map((item) =>
+        (item.url ? '<a class="metric metric-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noreferrer">'
+          : '<div class="metric">') +
+        '<div class="metric-label">' + escapeHtml(item.label) +
+        '</div><div class="metric-value">' + escapeHtml(item.value) + '</div>' +
+        (item.url ? '</a>' : '</div>')
       ).join("");
     }
 
@@ -538,7 +565,12 @@ export function renderHtml({ instanceId, token }) {
         ' unreleased changelog items</div></div>' +
         readinessBadge + '</div>' +
         '<label for="version">Release tag</label><div class="version-row"><input id="version" value="' +
-        escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button></div>' +
+        escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button>' +
+        (tagPushed ? '<a class="action" href="' + escapeHtml(repositoryUrl("/tree/" + encodeURIComponent(version))) +
+          '" target="_blank" rel="noreferrer">Open tag</a>' : '') +
+        (releasePublished ? '<a class="action" href="' + escapeHtml(repositoryUrl("/releases/tag/" + encodeURIComponent(version))) +
+          '" target="_blank" rel="noreferrer">Open release</a>' : '') +
+        '</div>' +
         '<div class="steps">' +
         step(1, "Prepare release", prepareDetail, "prepare_release", tagPushed ? "Released" : (preparedLocally ? "Prepared" : "Prepare"), preparedLocally || tagPushed || !snapshot.git.canPrepareRelease, "primary") +
         step(2, "Push release tag", pushDetail, "push_release", tagPushed ? "Pushed" : "Push", !snapshot.git.canPushRelease || !preparedLocally || tagPushed) +
@@ -549,11 +581,19 @@ export function renderHtml({ instanceId, token }) {
         historyViews[platform] + '">' + (historyViews[platform] ? "Hide history" : "Show history") + '</button></div>' +
         workflowRow(data.label + " release", data.workflow) +
         (platform === "windows" ? workflowRow("winget submission", data.wingetWorkflow) : '') +
+        '<div class="workflow-row"><span>Latest remote tag</span><strong>' +
+        linkedValue(
+          data.latestRemoteTag || "Not found",
+          data.latestRemoteTag ? repositoryUrl("/tree/" + encodeURIComponent(data.latestRemoteTag)) : null
+        ) + '</strong></div>' +
         '<div class="workflow-row"><span>Latest GitHub release</span><strong>' +
-        escapeHtml(data.latestRelease?.tagName || "Not found") + '</strong></div>' +
+        linkedValue(
+          data.latestRelease?.tagName || "Not found",
+          data.latestRelease ? repositoryUrl("/releases/tag/" + encodeURIComponent(data.latestRelease.tagName)) : null
+        ) + '</strong></div>' +
         (platform === "windows"
           ? '<div class="workflow-row"><span>Published on winget</span><span><strong>' +
-            escapeHtml(data.wingetPublished?.version || "Not found") + '</strong> ' +
+            linkedValue(data.wingetPublished?.version || "Not found", data.wingetPublished?.url) + '</strong> ' +
             wingetVersionStatus(data.wingetPublished) + '</span></div>'
           : '') +
         renderWorkflowHistory(data) +
