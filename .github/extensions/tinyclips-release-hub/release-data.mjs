@@ -269,10 +269,14 @@ export async function generateReleaseNotes(platform, version) {
 
 export async function getReleaseSnapshot() {
     const root = await getRepoRoot();
-    const [branch, status, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
+    const [branch, status, head, originMain, aheadOfMain, behindMain, macTags, windowsTags, remoteMacTags, remoteWindowsTags, macVersion, releases, macWorkflow, windowsWorkflow, wingetWorkflow, wingetPublished] =
         await Promise.all([
             run("git", ["branch", "--show-current"]),
             run("git", ["status", "--porcelain"]),
+            run("git", ["rev-parse", "HEAD"]),
+            run("git", ["rev-parse", "origin/main"]),
+            run("git", ["rev-list", "--count", "origin/main..HEAD"]),
+            run("git", ["rev-list", "--count", "HEAD..origin/main"]),
             getTags("mac"),
             getTags("windows"),
             getRemoteTags("mac"),
@@ -332,8 +336,11 @@ export async function getReleaseSnapshot() {
             branch,
             clean: status.length === 0,
             changeCount: status ? status.split(/\r?\n/).length : 0,
-            canPrepareRelease: branch === "main" && status.length === 0,
-            canPushRelease: branch === "main",
+            atMainTip: head === originMain,
+            aheadOfMain: Number(aheadOfMain),
+            behindMain: Number(behindMain),
+            canPrepareRelease: status.length === 0 && head === originMain,
+            canPushRelease: status.length === 0 && Number(behindMain) === 0 && Number(aheadOfMain) <= 1,
         },
         githubAvailable: releases.available,
         githubError: releases.error ?? null,
@@ -360,9 +367,17 @@ export async function performReleaseAction(action, input) {
     if (action === "prepare_release") {
         assertTag(input.platform, input.version);
         assertConfirmation(input.confirmation, `PREPARE ${input.version}`);
-        const branch = await run("git", ["branch", "--show-current"]);
-        if (branch !== "main") {
-            throw new Error(`Release preparation is only allowed from main; current branch is ${branch}.`);
+        await run("git", ["fetch", "--quiet", "origin", "main"]);
+        const [head, originMain, status] = await Promise.all([
+            run("git", ["rev-parse", "HEAD"]),
+            run("git", ["rev-parse", "origin/main"]),
+            run("git", ["status", "--porcelain"]),
+        ]);
+        if (status) {
+            throw new Error("Release preparation requires a clean working tree.");
+        }
+        if (head !== originMain) {
+            throw new Error("Release preparation requires a session based exactly on the latest origin/main.");
         }
         const root = await getRepoRoot();
         if (process.platform === "win32") {
@@ -384,11 +399,29 @@ export async function performReleaseAction(action, input) {
         const platform = input.tag.endsWith("-mac") ? "mac" : "windows";
         assertTag(platform, input.tag);
         assertConfirmation(input.confirmation, `PUSH ${input.tag}`);
-        const branch = await run("git", ["branch", "--show-current"]);
-        if (branch !== "main") {
-            throw new Error(`Release pushes are only allowed from main; current branch is ${branch}.`);
+        await run("git", ["fetch", "--quiet", "origin", "main"]);
+        const [head, originMain, status, aheadOfMain, behindMain, tagCommit] = await Promise.all([
+            run("git", ["rev-parse", "HEAD"]),
+            run("git", ["rev-parse", "origin/main"]),
+            run("git", ["status", "--porcelain"]),
+            run("git", ["rev-list", "--count", "origin/main..HEAD"]),
+            run("git", ["rev-list", "--count", "HEAD..origin/main"]),
+            run("git", ["rev-list", "-n", "1", input.tag]),
+        ]);
+        if (status) {
+            throw new Error("Release push requires a clean working tree.");
         }
-        await run("git", ["push", "origin", "main"]);
+        if (tagCommit !== head) {
+            throw new Error(`Tag ${input.tag} does not point at the current release commit.`);
+        }
+        if (Number(behindMain) !== 0 || Number(aheadOfMain) > 1) {
+            throw new Error("Release push requires at most one release commit ahead of the latest origin/main.");
+        }
+        if (Number(aheadOfMain) === 1) {
+            await run("git", ["push", "origin", "HEAD:refs/heads/main"]);
+        } else if (head !== originMain) {
+            throw new Error("Current release commit does not match origin/main.");
+        }
         const output = await run("git", ["push", "origin", input.tag]);
         return { action, tag: input.tag, output: output || `Pushed ${input.tag}.` };
     }

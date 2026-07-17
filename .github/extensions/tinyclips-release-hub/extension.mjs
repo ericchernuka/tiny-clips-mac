@@ -140,7 +140,7 @@ await joinSession({
                 },
                 {
                     name: "push_release",
-                    description: "Push the main branch and release tag to origin after exact typed confirmation.",
+                    description: "Fast-forward main with the prepared release commit and push its tag after exact typed confirmation.",
                     inputSchema: {
                         type: "object",
                         properties: {

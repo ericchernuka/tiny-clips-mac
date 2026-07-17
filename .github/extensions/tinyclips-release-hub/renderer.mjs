@@ -373,24 +373,23 @@ export function renderHtml({ instanceId, token }) {
       const preparedLocally = data.pendingTag === version;
       const tagPushed = data.remoteTags?.includes(version);
       const releasePublished = data.latestRelease?.tagName === version;
-      const onMain = snapshot.git.branch === "main";
       const readinessBadge = preparedLocally
         ? '<span class="badge good">Prepared locally</span>'
-        : (!onMain
-          ? '<span class="badge warn">Main branch required</span>'
+        : (!snapshot.git.atMainTip
+          ? '<span class="badge warn">Latest main required</span>'
           : (snapshot.git.clean
             ? '<span class="badge good">Ready to prepare</span>'
             : '<span class="badge warn">Commit changes first</span>'));
       const prepareDetail = preparedLocally
         ? "The changelog commit and annotated tag are ready locally."
-        : (!onMain
-          ? "Merge this dashboard work, then prepare the release from main."
+        : (!snapshot.git.atMainTip
+          ? "Start from the latest origin/main with no additional commits."
           : "Moves Unreleased notes into a dated section, commits, and creates an annotated tag.");
-      const pushDetail = !onMain
-        ? "Release tags cannot be pushed from a feature branch."
-        : (tagPushed ? "This tag is already on origin." : (preparedLocally
-          ? "Pushes main and the prepared tag; the tag push starts the release workflow."
-          : "Prepare the release tag first."));
+      const pushDetail = tagPushed
+        ? "This tag is already on origin."
+        : (preparedLocally
+          ? "Fast-forwards main with the release commit, then pushes the tag to start the workflow."
+          : "Prepare the release tag first.");
       const workflowDetail = tagPushed
         ? "The tag push starts this automatically; use this only to recover or re-run it."
         : "Push the prepared tag before manually dispatching this workflow.";
@@ -406,7 +405,7 @@ export function renderHtml({ instanceId, token }) {
         '<label for="version">Release tag</label><div class="version-row"><input id="version" value="' +
         escapeHtml(version) + '" spellcheck="false" /><button class="action" data-action="generate_notes" type="button">Generate notes</button></div>' +
         '<div class="steps">' +
-        step(1, "Prepare release", prepareDetail, "prepare_release", preparedLocally ? "Prepared" : "Prepare", preparedLocally || !snapshot.git.canPrepareRelease, "primary") +
+        step(1, "Prepare release", prepareDetail, "prepare_release", tagPushed ? "Released" : (preparedLocally ? "Prepared" : "Prepare"), preparedLocally || tagPushed || !snapshot.git.canPrepareRelease, "primary") +
         step(2, "Push release tag", pushDetail, "push_release", tagPushed ? "Pushed" : "Push", !snapshot.git.canPushRelease || !preparedLocally || tagPushed) +
         step(3, "Run release workflow", workflowDetail, "run_release_workflow", "Re-run workflow", !tagPushed) +
         wingetStep + '</div>' +
@@ -520,7 +519,7 @@ export function renderHtml({ instanceId, token }) {
           "This creates a changelog commit and annotated tag locally.");
       } else if (action === "push_release") {
         openConfirmation(action, { tag }, "PUSH " + tag,
-          "This pushes main and the tag to origin, which starts the release workflow.");
+          "This fast-forwards main with the prepared release commit, then pushes the tag to start the release workflow.");
       } else if (action === "run_release_workflow") {
         openConfirmation(action, { platform, tag }, "RUN " + tag,
           "This manually dispatches the platform release workflow.");
