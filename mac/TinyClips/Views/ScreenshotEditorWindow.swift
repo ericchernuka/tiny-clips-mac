@@ -2158,6 +2158,7 @@ private class EditorViewModel: ObservableObject {
                     ann.points = [updated.start, updated.end]
                     ann.rect = directedRect(from: updated)
                     annotations[idx] = ann
+                    markDirty()
                 } else if isDraggingAnnotation {
                     moveAnnotation(at: idx, dx: dx, dy: dy)
                 }
@@ -2166,6 +2167,7 @@ private class EditorViewModel: ObservableObject {
         case .crop:
             let rect = makeRect(from: start, to: current)
             cropRect = rect
+            markDirty()
 
         case .pencil:
             pencilPoints.append(current)
@@ -2269,6 +2271,7 @@ private class EditorViewModel: ObservableObject {
             )
         }
         annotations[index] = ann
+        markDirty()
     }
 
     func undo() {

@@ -167,25 +167,11 @@ public sealed partial class ScreenshotEditorWindow : Window
 
     private async void OnSave(object sender, RoutedEventArgs e)
     {
-        if (_controller.Bitmap is null)
-        {
-            return;
-        }
-
-        var saved = await EncodeToFileAsync(_activeSavePath);
-        if (saved)
-        {
-            App.ShowSaveNotification(_activeSavePath);
-        }
+        await SaveToPathAsync(_activeSavePath, updateActiveSavePath: true);
     }
 
     private async void OnSaveCopy(object sender, RoutedEventArgs e)
     {
-        if (_controller.Bitmap is null)
-        {
-            return;
-        }
-
         var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
         picker.FileTypeChoices.Add("PNG image", new[] { ".png" });
         picker.FileTypeChoices.Add("JPEG image", new[] { ".jpg" });
@@ -197,13 +183,29 @@ public sealed partial class ScreenshotEditorWindow : Window
         var file = await picker.PickSaveFileAsync();
         if (file is not null)
         {
-            _activeSavePath = file.Path;
-            var saved = await EncodeToFileAsync(_activeSavePath);
-            if (saved)
-            {
-                App.ShowSaveNotification(_activeSavePath);
-            }
+            await SaveToPathAsync(file.Path, updateActiveSavePath: true);
         }
+    }
+
+    private async Task<bool> SaveToPathAsync(string path, bool updateActiveSavePath)
+    {
+        if (_controller.Bitmap is null)
+        {
+            return false;
+        }
+
+        var saved = await EncodeToFileAsync(path);
+        if (saved)
+        {
+            if (updateActiveSavePath)
+            {
+                _activeSavePath = path;
+            }
+
+            App.ShowSaveNotification(path);
+        }
+
+        return saved;
     }
 
     private void OnOpenSaveFolder(object sender, RoutedEventArgs e)
