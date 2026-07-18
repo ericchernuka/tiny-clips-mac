@@ -2644,17 +2644,29 @@ private class EditorViewModel: ObservableObject {
 
         case .arrow:
             let line = linePoints(for: annotation)
-            let start = CGPoint(
+            let startTopLeft = CGPoint(
                 x: (line.start.x * fullSize.width) - cropOrigin.x + contentOffset.x,
-                y: imageOutputHeight - ((line.start.y * fullSize.height) - cropOrigin.y) + contentOffset.y
+                y: (line.start.y * fullSize.height) - cropOrigin.y + contentOffset.y
+            )
+            let endTopLeft = CGPoint(
+                x: (line.end.x * fullSize.width) - cropOrigin.x + contentOffset.x,
+                y: (line.end.y * fullSize.height) - cropOrigin.y + contentOffset.y
+            )
+            let controlTopLeft = arrowControlPoint(start: startTopLeft, end: endTopLeft, style: annotation.arrowStyle)
+            let start = CGPoint(
+                x: startTopLeft.x,
+                y: outputSize.height - startTopLeft.y
             )
             let end = CGPoint(
-                x: (line.end.x * fullSize.width) - cropOrigin.x + contentOffset.x,
-                y: imageOutputHeight - ((line.end.y * fullSize.height) - cropOrigin.y) + contentOffset.y
+                x: endTopLeft.x,
+                y: outputSize.height - endTopLeft.y
+            )
+            let control = CGPoint(
+                x: controlTopLeft.x,
+                y: outputSize.height - controlTopLeft.y
             )
             let headLength = max(26, strokeWidth * 5.0)
             let headAngle: CGFloat = .pi / 6
-            let control = arrowControlPoint(start: start, end: end, style: annotation.arrowStyle)
             let tipAngle: CGFloat
             switch annotation.arrowStyle {
             case .straight:
