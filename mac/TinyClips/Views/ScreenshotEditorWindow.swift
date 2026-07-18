@@ -392,11 +392,15 @@ private struct ScreenshotEditorView: View {
     @State private var activePopover: EditorPopover?
     @State private var isBackgroundSectionExpanded = false
     @State private var showExitConfirmation = false
+    @State private var currentSaveURL: URL
+    @State private var lastSavedURL: URL?
 
     init(imageURL: URL, onDone: @escaping (URL?) -> Void) {
         self.imageURL = imageURL
         self.onDone = onDone
         _viewModel = StateObject(wrappedValue: EditorViewModel(url: imageURL))
+        _currentSaveURL = State(initialValue: imageURL)
+        _lastSavedURL = State(initialValue: nil)
     }
 
     private var inspectorTool: EditTool {
@@ -591,18 +595,46 @@ private struct ScreenshotEditorView: View {
                 .help("Copy the edited image to the clipboard.")
 
                 Button {
-                    activePopover = .saveOptions
+                    saveCurrentImage()
                 } label: {
                     Label("Save", systemImage: "square.and.arrow.down")
                 }
-                .keyboardShortcut(.defaultAction)
-                .help("Choose export options and save.")
+                .keyboardShortcut("s", modifiers: .command)
+                .help("Save the edited image to the current location.")
+
+                Button {
+                    saveAsImage()
+                } label: {
+                    Label("Save As", systemImage: "square.and.arrow.down")
+                }
+                .help("Save the edited image to a new file.")
+
+                Button {
+                    openSaveFolder()
+                } label: {
+                    Label("Open Folder", systemImage: "folder")
+                }
+                .help("Open the folder for the current save location.")
+
+                Button {
+                    activePopover = .saveOptions
+                } label: {
+                    Label("Options", systemImage: "slider.horizontal.3")
+                }
+                .help("Adjust export format and quality.")
                 .popover(item: $activePopover) { item in
                     switch item {
                     case .saveOptions:
                         saveOptionsPopover
                     }
                 }
+
+                Button {
+                    requestClose()
+                } label: {
+                    Label("Close", systemImage: "xmark")
+                }
+                .help("Close the editor.")
             }
         }
         .disabled(isSaving)
@@ -850,7 +882,7 @@ private struct ScreenshotEditorView: View {
 
             Spacer()
 
-            Button("Discard") { onDone(nil) }
+            Button("Close") { requestClose() }
         }
     }
 
@@ -896,7 +928,7 @@ private struct ScreenshotEditorView: View {
             HStack {
                 Spacer()
                 Button("Cancel") { activePopover = nil }
-                Button("Save") { saveImage() }
+                Button("Save") { saveCurrentImage() }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -904,16 +936,82 @@ private struct ScreenshotEditorView: View {
         .padding(14)
     }
 
-    private func saveImage() {
+    private func saveCurrentImage() {
         guard !isSaving else { return }
         isSaving = true
 
         DispatchQueue.main.async {
-            if let url = viewModel.save() {
-                onDone(url)
+            if let url = viewModel.save(to: currentSaveURL) {
+                currentSaveURL = url
+                lastSavedURL = url
+                viewModel.markSaved()
+                SaveService.shared.handleSavedFile(url: url, type: .screenshot)
+                activePopover = nil
             } else {
-                isSaving = false
+                SaveService.shared.showError("Could not save the edited image.")
             }
+            isSaving = false
+        }
+    }
+
+    private func saveAsImage() {
+        guard !isSaving else { return }
+
+        guard let targetURL = chooseSaveLocation() else { return }
+
+        isSaving = true
+        DispatchQueue.main.async {
+            if let url = viewModel.save(to: targetURL) {
+                currentSaveURL = url
+                lastSavedURL = url
+                viewModel.markSaved()
+                SaveService.shared.handleSavedFile(url: url, type: .screenshot)
+                activePopover = nil
+            } else {
+                SaveService.shared.showError("Could not save the edited image.")
+            }
+            isSaving = false
+        }
+    }
+
+    private func chooseSaveLocation() -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "Save edited screenshot"
+        panel.message = "Choose where to save the edited screenshot."
+        panel.nameFieldLabel = "Name"
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [viewModel.saveFormat.utType]
+        panel.nameFieldStringValue = suggestedSaveName
+        panel.directoryURL = currentSaveURL.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            return nil
+        }
+
+        if selectedURL.pathExtension.isEmpty {
+            return selectedURL.appendingPathExtension(viewModel.saveFormat.rawValue)
+        }
+
+        return selectedURL
+    }
+
+    private var suggestedSaveName: String {
+        let baseName = currentSaveURL.deletingPathExtension().lastPathComponent
+        let stem = baseName.isEmpty ? imageURL.deletingPathExtension().lastPathComponent : baseName
+        return "\(stem).\(viewModel.saveFormat.rawValue)"
+    }
+
+    private func openSaveFolder() {
+        let targetURL = lastSavedURL ?? currentSaveURL
+        let directoryURL = targetURL.deletingLastPathComponent()
+        NSWorkspace.shared.open(directoryURL)
+    }
+
+    private func requestClose() {
+        if viewModel.hasUnsavedChanges {
+            showExitConfirmation = true
+        } else {
+            onDone(lastSavedURL)
         }
     }
 
@@ -923,11 +1021,7 @@ private struct ScreenshotEditorView: View {
             return
         }
 
-        if viewModel.hasUnsavedChanges {
-            showExitConfirmation = true
-        } else {
-            onDone(nil)
-        }
+        requestClose()
     }
 }
 private struct TextStyleToggleButton: View {
@@ -1638,14 +1732,15 @@ private class EditorViewModel: ObservableObject {
     private var isDraggingEndpoint = false // true = dragging arrowhead/line end
     private var isDraggingStartpoint = false // true = dragging arrow tail/line start
 
-    private let initialBackgroundStyle: ExportBackgroundStyle
-    private let initialBackgroundColor: Color
-    private let initialBackgroundSecondaryColor: Color
-    private let initialSelectedBackgroundPresetID: String
-    private let initialWallpaperPresent: Bool
-    private let initialCanvasPadding: CGFloat
-    private let initialCanvasCornerRadius: CGFloat
-    private let initialCanvasShadowRadius: CGFloat
+    private var initialBackgroundStyle: ExportBackgroundStyle
+    private var initialBackgroundColor: Color
+    private var initialBackgroundSecondaryColor: Color
+    private var initialSelectedBackgroundPresetID: String
+    private var initialWallpaperPresent: Bool
+    private var initialCanvasPadding: CGFloat
+    private var initialCanvasCornerRadius: CGFloat
+    private var initialCanvasShadowRadius: CGFloat
+    private var hasPendingChanges = false
 
     init(url: URL) {
         self.sourceURL = url
@@ -1837,16 +1932,19 @@ private class EditorViewModel: ObservableObject {
         if let secondary = preset.secondary {
             backgroundSecondaryColor = secondary
         }
+        markDirty()
     }
 
     func applyCustomSolidBackground() {
         selectedBackgroundPresetID = "custom-solid"
         backgroundStyle = .solid
+        markDirty()
     }
 
     func applyCustomGradientBackground() {
         selectedBackgroundPresetID = "custom-gradient"
         backgroundStyle = .gradient
+        markDirty()
     }
 
     func chooseWallpaperBackground() {
@@ -1862,6 +1960,7 @@ private class EditorViewModel: ObservableObject {
             wallpaperImage = image
             selectedBackgroundPresetID = "wallpaper"
             backgroundStyle = .wallpaper
+            markDirty()
         }
     }
 
@@ -1869,6 +1968,7 @@ private class EditorViewModel: ObservableObject {
         wallpaperImage = nil
         selectedBackgroundPresetID = "transparent"
         backgroundStyle = .transparent
+        markDirty()
     }
 
     var canUndo: Bool {
@@ -1876,7 +1976,7 @@ private class EditorViewModel: ObservableObject {
     }
 
     var hasUnsavedChanges: Bool {
-        if canUndo {
+        if hasPendingChanges {
             return true
         }
 
@@ -1950,6 +2050,7 @@ private class EditorViewModel: ObservableObject {
     func updateSelectedTextFontFamily(_ family: String) -> Bool {
         guard selectedAnnotationIsText, let index = selectedAnnotationIndex else { return false }
         annotations[index].fontFamily = family
+        markDirty()
         return true
     }
 
@@ -1957,6 +2058,7 @@ private class EditorViewModel: ObservableObject {
     func updateSelectedTextBold(_ isBold: Bool) -> Bool {
         guard selectedAnnotationIsText, let index = selectedAnnotationIndex else { return false }
         annotations[index].isBold = isBold
+        markDirty()
         return true
     }
 
@@ -1964,6 +2066,7 @@ private class EditorViewModel: ObservableObject {
     func updateSelectedTextItalic(_ isItalic: Bool) -> Bool {
         guard selectedAnnotationIsText, let index = selectedAnnotationIndex else { return false }
         annotations[index].isItalic = isItalic
+        markDirty()
         return true
     }
 
@@ -1971,6 +2074,7 @@ private class EditorViewModel: ObservableObject {
     func updateSelectedTextUnderline(_ isUnderlined: Bool) -> Bool {
         guard selectedAnnotationIsText, let index = selectedAnnotationIndex else { return false }
         annotations[index].isUnderlined = isUnderlined
+        markDirty()
         return true
     }
 
@@ -1987,6 +2091,7 @@ private class EditorViewModel: ObservableObject {
             return false
         }
         annotations[index].arrowStyle = style
+        markDirty()
         return true
     }
 
@@ -2053,6 +2158,7 @@ private class EditorViewModel: ObservableObject {
                     ann.points = [updated.start, updated.end]
                     ann.rect = directedRect(from: updated)
                     annotations[idx] = ann
+                    markDirty()
                 } else if isDraggingAnnotation {
                     moveAnnotation(at: idx, dx: dx, dy: dy)
                 }
@@ -2061,6 +2167,7 @@ private class EditorViewModel: ObservableObject {
         case .crop:
             let rect = makeRect(from: start, to: current)
             cropRect = rect
+            markDirty()
 
         case .pencil:
             pencilPoints.append(current)
@@ -2137,6 +2244,7 @@ private class EditorViewModel: ObservableObject {
                     redactionBlurPreset: redactionBlurPreset,
                     arrowStyle: selectedArrowStylePreset
                 ))
+                markDirty()
             }
             currentAnnotation = nil
         }
@@ -2163,6 +2271,7 @@ private class EditorViewModel: ObservableObject {
             )
         }
         annotations[index] = ann
+        markDirty()
     }
 
     func undo() {
@@ -2172,9 +2281,11 @@ private class EditorViewModel: ObservableObject {
             if last?.tool == .number {
                 nextNumberLabel = max(1, nextNumberLabel - 1)
             }
+            markDirty()
         }
         if cropRect != nil {
             cropRect = nil
+            markDirty()
         }
     }
 
@@ -2186,17 +2297,34 @@ private class EditorViewModel: ObservableObject {
         pasteboard.writeObjects([output.image])
     }
 
-    func save() -> URL? {
+    func save(to destinationURL: URL? = nil) -> URL? {
         guard let output = buildOutputImage() else { return nil }
 
-        // Build output URL with the chosen format extension
-        let saveURL = SaveService.shared.generateURL(for: .screenshot, fileExtension: saveFormat.rawValue)
+        let saveURL = destinationURL ?? SaveService.shared.generateURL(for: .screenshot, fileExtension: saveFormat.rawValue)
         do {
-            try output.data.write(to: saveURL)
+            let directoryURL = saveURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try output.data.write(to: saveURL, options: [.atomic])
             return saveURL
         } catch {
             return nil
         }
+    }
+
+    func markDirty() {
+        hasPendingChanges = true
+    }
+
+    func markSaved() {
+        hasPendingChanges = false
+        initialBackgroundStyle = backgroundStyle
+        initialBackgroundColor = backgroundColor
+        initialBackgroundSecondaryColor = backgroundSecondaryColor
+        initialSelectedBackgroundPresetID = selectedBackgroundPresetID
+        initialWallpaperPresent = wallpaperImage != nil
+        initialCanvasPadding = canvasPadding
+        initialCanvasCornerRadius = canvasCornerRadius
+        initialCanvasShadowRadius = canvasShadowRadius
     }
 
     var outputResolutionText: String? {
@@ -2363,6 +2491,7 @@ private class EditorViewModel: ObservableObject {
             redactionBlurPreset: redactionBlurPreset,
             arrowStyle: selectedArrowStylePreset
         ))
+        markDirty()
         textEditPosition = nil
         textEditValue = ""
         isEditingText = false
@@ -2396,6 +2525,7 @@ private class EditorViewModel: ObservableObject {
             redactionBlurPreset: redactionBlurPreset,
             arrowStyle: selectedArrowStylePreset
         ))
+        markDirty()
         nextNumberLabel += 1
     }
 
@@ -2453,6 +2583,7 @@ private class EditorViewModel: ObservableObject {
         }
 
         annotations[index].color = color
+        markDirty()
         return true
     }
 
@@ -2463,6 +2594,7 @@ private class EditorViewModel: ObservableObject {
         }
 
         annotations[index].textColor = color
+        markDirty()
         return true
     }
 
@@ -2473,6 +2605,7 @@ private class EditorViewModel: ObservableObject {
         }
 
         annotations[index].redactionBlurPreset = preset
+        markDirty()
         return true
     }
 
