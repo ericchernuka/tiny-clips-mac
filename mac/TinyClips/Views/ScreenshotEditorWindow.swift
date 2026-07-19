@@ -4,6 +4,77 @@ import UniformTypeIdentifiers
 
 private let textSystemFontFamily = "System"
 
+private struct ScreenshotEditorCommandActions {
+    let save: () -> Void
+    let saveAs: () -> Void
+    let revealInFinder: () -> Void
+    let undo: () -> Void
+    let copy: () -> Void
+    let clearAnnotations: () -> Void
+    let canUndo: Bool
+    let hasAnnotations: Bool
+}
+
+private struct ScreenshotEditorCommandActionsKey: FocusedValueKey {
+    typealias Value = ScreenshotEditorCommandActions
+}
+
+private extension FocusedValues {
+    var screenshotEditorCommandActions: ScreenshotEditorCommandActions? {
+        get { self[ScreenshotEditorCommandActionsKey.self] }
+        set { self[ScreenshotEditorCommandActionsKey.self] = newValue }
+    }
+}
+
+private struct ScreenshotEditorMenuCommands: Commands {
+    @FocusedValue(\.screenshotEditorCommandActions) private var editor
+
+    var body: some Commands {
+        CommandGroup(replacing: .saveItem) {
+            Button("Save") {
+                editor?.save()
+            }
+            .disabled(editor == nil)
+            .keyboardShortcut("s", modifiers: .command)
+
+            Button("Save As…") {
+                editor?.saveAs()
+            }
+            .disabled(editor == nil)
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Reveal in Finder") {
+                editor?.revealInFinder()
+            }
+            .disabled(editor == nil)
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+        }
+
+        CommandMenu("Markup") {
+            Button("Undo") {
+                editor?.undo()
+            }
+            .disabled(editor?.canUndo != true)
+            .keyboardShortcut("z", modifiers: .command)
+
+            Button("Copy") {
+                editor?.copy()
+            }
+            .disabled(editor == nil)
+            .keyboardShortcut("c", modifiers: .command)
+
+            Divider()
+
+            Button("Clear Annotations…") {
+                editor?.clearAnnotations()
+            }
+            .disabled(editor?.hasAnnotations != true)
+        }
+    }
+}
+
 // MARK: - Scene
 
 struct ScreenshotEditorScene: Scene {
@@ -12,6 +83,9 @@ struct ScreenshotEditorScene: Scene {
             ScreenshotEditorSceneRoot(sessionID: sessionID)
         }
         .defaultSize(width: 1040, height: 720)
+        .commands {
+            ScreenshotEditorMenuCommands()
+        }
     }
 }
 
@@ -566,6 +640,19 @@ private struct ScreenshotEditorView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .focusedSceneValue(
+            \.screenshotEditorCommandActions,
+            ScreenshotEditorCommandActions(
+                save: saveCurrentImage,
+                saveAs: beginSaveAs,
+                revealInFinder: openSaveFolder,
+                undo: viewModel.undo,
+                copy: viewModel.copyToClipboard,
+                clearAnnotations: { showClearAnnotationsConfirmation = true },
+                canUndo: viewModel.canUndo,
+                hasAnnotations: viewModel.hasAnnotations
+            )
+        )
         .onExitCommand {
             handleEscape()
         }
@@ -961,6 +1048,11 @@ private struct ScreenshotEditorView: View {
         }
     }
 
+    private func beginSaveAs() {
+        guard !isSaving else { return }
+        activePopover = .saveOptions
+    }
+
     private func saveAsImage() {
         guard !isSaving else { return }
 
@@ -989,7 +1081,7 @@ private struct ScreenshotEditorView: View {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [viewModel.saveFormat.utType]
         panel.nameFieldStringValue = suggestedSaveName
-        panel.directoryURL = currentSaveURL.deletingLastPathComponent()
+        panel.directoryURL = SaveService.shared.outputDirectoryURL(for: .screenshot)
 
         guard panel.runModal() == .OK, let selectedURL = panel.url else {
             return nil
@@ -1009,8 +1101,7 @@ private struct ScreenshotEditorView: View {
     }
 
     private func openSaveFolder() {
-        let targetURL = lastSavedURL ?? currentSaveURL
-        let directoryURL = targetURL.deletingLastPathComponent()
+        let directoryURL = SaveService.shared.outputDirectoryURL(for: .screenshot)
         NSWorkspace.shared.open(directoryURL)
     }
 
