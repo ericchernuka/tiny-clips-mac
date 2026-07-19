@@ -600,41 +600,20 @@ private struct ScreenshotEditorView: View {
                     Label("Save", systemImage: "square.and.arrow.down")
                 }
                 .keyboardShortcut("s", modifiers: .command)
-                .help("Save the edited image to the current location.")
-
-                Button {
-                    saveAsImage()
-                } label: {
-                    Label("Save As", systemImage: "square.and.arrow.down")
-                }
-                .help("Save the edited image to a new file.")
-
-                Button {
-                    openSaveFolder()
-                } label: {
-                    Label("Open Folder", systemImage: "folder")
-                }
-                .help("Open the folder for the current save location.")
+                .help("Save the edited image to the current file.")
 
                 Button {
                     activePopover = .saveOptions
                 } label: {
-                    Label("Options", systemImage: "slider.horizontal.3")
+                    Label("Save As", systemImage: "square.and.arrow.down")
                 }
-                .help("Adjust export format and quality.")
+                .help("Choose export options and save the edited image to a new file.")
                 .popover(item: $activePopover) { item in
                     switch item {
                     case .saveOptions:
                         saveOptionsPopover
                     }
                 }
-
-                Button {
-                    requestClose()
-                } label: {
-                    Label("Close", systemImage: "xmark")
-                }
-                .help("Close the editor.")
             }
         }
         .disabled(isSaving)
@@ -882,7 +861,12 @@ private struct ScreenshotEditorView: View {
 
             Spacer()
 
-            Button("Close") { requestClose() }
+            Button {
+                openSaveFolder()
+            } label: {
+                Label("Open Folder", systemImage: "folder")
+            }
+            .help("Open the folder for the current save location.")
         }
     }
 
@@ -928,8 +912,13 @@ private struct ScreenshotEditorView: View {
             HStack {
                 Spacer()
                 Button("Cancel") { activePopover = nil }
-                Button("Save") { saveCurrentImage() }
-                    .keyboardShortcut(.defaultAction)
+                Button("Continue…") {
+                    activePopover = nil
+                    DispatchQueue.main.async {
+                        saveAsImage()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .frame(width: 260)
@@ -946,7 +935,6 @@ private struct ScreenshotEditorView: View {
                 lastSavedURL = url
                 viewModel.markSaved()
                 SaveService.shared.handleSavedFile(url: url, type: .screenshot)
-                activePopover = nil
             } else {
                 SaveService.shared.showError("Could not save the edited image.")
             }
