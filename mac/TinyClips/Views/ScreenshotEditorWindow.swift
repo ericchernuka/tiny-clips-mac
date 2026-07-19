@@ -390,8 +390,9 @@ private struct ScreenshotEditorView: View {
     @State private var isSaving = false
     @State private var splitVisibility: NavigationSplitViewVisibility = .automatic
     @State private var activePopover: EditorPopover?
-    @State private var isBackgroundSectionExpanded = false
+    @State private var isBackgroundSectionExpanded = true
     @State private var showExitConfirmation = false
+    @State private var showClearAnnotationsConfirmation = false
     @State private var currentSaveURL: URL
     @State private var lastSavedURL: URL?
 
@@ -576,6 +577,14 @@ private struct ScreenshotEditorView: View {
         } message: {
             Text("You have unsaved changes. Are you sure you want to exit?")
         }
+        .confirmationDialog("Clear all annotations?", isPresented: $showClearAnnotationsConfirmation, titleVisibility: .visible) {
+            Button("Clear Annotations", role: .destructive) {
+                viewModel.clearAnnotations()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all annotations from the screenshot.")
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -588,6 +597,14 @@ private struct ScreenshotEditorView: View {
                 .help("Undo the last edit.")
 
                 Button {
+                    showClearAnnotationsConfirmation = true
+                } label: {
+                    Label("Clear Annotations", systemImage: "eraser")
+                }
+                .disabled(!viewModel.hasAnnotations)
+                .help("Clear all annotations.")
+
+                Button {
                     viewModel.copyToClipboard()
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
@@ -597,7 +614,8 @@ private struct ScreenshotEditorView: View {
                 Button {
                     saveCurrentImage()
                 } label: {
-                    Label("Save", systemImage: "square.and.arrow.down")
+                    Label("Save", systemImage: "internaldrive")
+                        .labelStyle(.titleAndIcon)
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Save the edited image to the current file.")
@@ -605,7 +623,8 @@ private struct ScreenshotEditorView: View {
                 Button {
                     activePopover = .saveOptions
                 } label: {
-                    Label("Save As", systemImage: "square.and.arrow.down")
+                    Label("Save As", systemImage: "square.and.arrow.down.on.square")
+                        .labelStyle(.titleAndIcon)
                 }
                 .help("Choose export options and save the edited image to a new file.")
                 .popover(item: $activePopover) { item in
@@ -1963,6 +1982,10 @@ private class EditorViewModel: ObservableObject {
         !annotations.isEmpty || cropRect != nil
     }
 
+    var hasAnnotations: Bool {
+        !annotations.isEmpty
+    }
+
     var hasUnsavedChanges: Bool {
         if hasPendingChanges {
             return true
@@ -2275,6 +2298,17 @@ private class EditorViewModel: ObservableObject {
             cropRect = nil
             markDirty()
         }
+    }
+
+    func clearAnnotations() {
+        guard !annotations.isEmpty else { return }
+
+        annotations.removeAll()
+        selectedAnnotationIndex = nil
+        currentAnnotation = nil
+        pencilPoints = []
+        nextNumberLabel = 1
+        markDirty()
     }
 
     func copyToClipboard() {
